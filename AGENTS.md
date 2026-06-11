@@ -1,5 +1,7 @@
 # supper helper Coding Agent Rules
 
+**与用户交互的语言与文档全部要用中文交互**
+
 **用途：这是仓库开发规范。**
 
 后续 Codex、AI coding agent、人工开发者在修改本仓库代码时，走这个文件。
