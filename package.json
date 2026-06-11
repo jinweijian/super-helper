@@ -1,0 +1,35 @@
+{
+  "name": "supper-helper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A chat-first helper agent that mediates between users, workspaces, MCP tools, and Claude Code workers.",
+  "bin": {
+    "supper-helper": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src/agents",
+    "docs",
+    "AGENT.md",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "pnpm build && node dist/cli.js dev",
+    "start": "node dist/cli.js dev",
+    "doctor": "pnpm build && node dist/cli.js doctor",
+    "typecheck": "tsc --noEmit",
+    "lint": "node scripts/verify-docs.mjs",
+    "test": "pnpm lint && pnpm typecheck && pnpm build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3"
+  }
+}

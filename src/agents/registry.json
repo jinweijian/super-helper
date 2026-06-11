@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "main",
+      "role": "main-coordinator",
+      "stage": "main",
+      "configPath": "main.md",
+      "required": true,
+      "mayProduceUserFacingText": true,
+      "summary": "主 Agent，负责用户回合编排、子 Agent 配对、证据边界和最终回复责任。"
+    },
+    {
+      "id": "input-review",
+      "role": "input-review-and-preflight",
+      "stage": "input_review",
+      "configPath": "input-review.md",
+      "required": true,
+      "mayProduceUserFacingText": true,
+      "summary": "输入审核 Agent，负责判断用户问题是否足够诊断，并为 Preflight Gate 提供追问或派发决策。"
+    },
+    {
+      "id": "input-review",
+      "role": "input-review-and-preflight",
+      "stage": "preflight",
+      "configPath": "input-review.md",
+      "required": true,
+      "mayProduceUserFacingText": true,
+      "summary": "Preflight 阶段复用输入审核 Agent 配置。"
+    },
+    {
+      "id": "experience",
+      "role": "prior-session-experience-review",
+      "stage": "experience",
+      "configPath": "experience.md",
+      "required": true,
+      "mayProduceUserFacingText": false,
+      "summary": "经验 Agent，负责查找历史会话中的可复用答案，并以 history evidence 交给输出审核。"
+    },
+    {
+      "id": "output-review",
+      "role": "evidence-and-output-review",
+      "stage": "output_review",
+      "configPath": "output-review.md",
+      "required": true,
+      "mayProduceUserFacingText": true,
+      "summary": "输出审核 Agent，负责审核证据、阻止无证据结论，并决定追问、继续、最终回答或升级。"
+    },
+    {
+      "id": "presentation",
+      "role": "persona-aware-presentation",
+      "stage": "presentation",
+      "configPath": "presentation.md",
+      "required": true,
+      "mayProduceUserFacingText": true,
+      "summary": "美化输出 Agent，负责把审核后的判断转成符合用户视角的中文回复，不新增事实。"
+    }
+  ]
+}

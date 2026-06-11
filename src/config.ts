@@ -1,0 +1,218 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import type { UserPersona } from './domain.js';
+
+export interface ModelProviderConfig {
+  type: 'openai-compatible';
+  baseUrl: string;
+  api?: 'openai-completions' | 'openai-chat-completions';
+  apiKey?: string;
+  apiKeyEnv?: string;
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  contextWindowTokens?: number;
+  timeoutMs?: number;
+}
+
+export interface SupperHelperConfig {
+  version: 1;
+  server: {
+    host: string;
+    port: number;
+  };
+  storage: {
+    rootDir: string;
+    isolateByWorkspace: boolean;
+  };
+  agent: {
+    name: string;
+    language: 'zh-CN' | 'en-US';
+    tone: 'calm_professional' | 'concise' | 'technical';
+    modelProvider?: string;
+    useModelForPreflight: boolean;
+    defaultUserPersona: UserPersona;
+    contextWindowTokens: number;
+  };
+  models: {
+    providers: Record<string, ModelProviderConfig>;
+  };
+  claude: {
+    enabled: boolean;
+    command: string;
+    commandWhitelist: string[];
+    permissionMode: 'plan' | 'dontAsk' | 'default';
+    tools: string[];
+    allowedTools: string[];
+    disallowedTools: string[];
+    timeoutMs: number;
+    maxBudgetUsd: number;
+    sessionBusyMaxRetries: number;
+    sessionBusyRetryDelayMs: number;
+  };
+  workspaces: Array<{
+    id: string;
+    name: string;
+    rootPath: string;
+    mcpToolIds: string[];
+  }>;
+  mcpTools: Array<{
+    id: string;
+    name: string;
+    protocol: 'stdio' | 'http' | 'sse';
+    permission: 'read_only' | 'read_write';
+    enabled: boolean;
+    config?: unknown;
+  }>;
+}
+
+const DEFAULT_HOME = join(homedir(), '.supper-helper');
+
+export function defaultConfig(): SupperHelperConfig {
+  const cwd = process.cwd();
+
+  return {
+    version: 1,
+    server: {
+      host: '127.0.0.1',
+      port: 4317,
+    },
+    storage: {
+      rootDir: DEFAULT_HOME,
+      isolateByWorkspace: true,
+    },
+    agent: {
+      name: 'supper helper',
+      language: 'zh-CN',
+      tone: 'calm_professional',
+      useModelForPreflight: false,
+      defaultUserPersona: 'operations',
+      contextWindowTokens: 200_000,
+    },
+    models: {
+      providers: {},
+    },
+    claude: {
+      enabled: true,
+      command: 'claude',
+      commandWhitelist: ['claude'],
+      permissionMode: 'dontAsk',
+      tools: ['Read', 'Glob', 'Grep'],
+      allowedTools: ['Read', 'Glob', 'Grep'],
+      disallowedTools: [
+        'Bash',
+        'Edit',
+        'Write',
+        'MultiEdit',
+        'NotebookEdit',
+        'WebFetch',
+        'WebSearch',
+      ],
+      timeoutMs: 1_200_000,
+      maxBudgetUsd: 0.2,
+      sessionBusyMaxRetries: 10,
+      sessionBusyRetryDelayMs: 10_000,
+    },
+    workspaces: [
+      {
+        id: 'current',
+        name: 'Current Project',
+        rootPath: cwd,
+        mcpToolIds: [],
+      },
+    ],
+    mcpTools: [],
+  };
+}
+
+export function configPath(homeDir = DEFAULT_HOME): string {
+  return join(homeDir, 'config.json');
+}
+
+export function ensureConfig(homeDir = DEFAULT_HOME): SupperHelperConfig {
+  const path = configPath(homeDir);
+  if (!existsSync(path)) {
+    mkdirSync(dirname(path), { recursive: true });
+    const config = defaultConfig();
+    config.storage.rootDir = homeDir;
+    writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    return config;
+  }
+
+  const config = loadConfig(path);
+  saveConfig(config);
+  return config;
+}
+
+export function loadConfig(path = configPath()): SupperHelperConfig {
+  const raw = readFileSync(path, 'utf8');
+  const parsed = JSON.parse(raw) as SupperHelperConfig;
+  const defaults = defaultConfig();
+  const merged: SupperHelperConfig = {
+    ...defaults,
+    ...parsed,
+    server: { ...defaults.server, ...parsed.server },
+    storage: { ...defaults.storage, ...parsed.storage },
+    agent: { ...defaults.agent, ...parsed.agent },
+    models: { ...defaults.models, ...parsed.models },
+    claude: { ...defaults.claude, ...parsed.claude },
+    workspaces: parsed.workspaces?.length ? parsed.workspaces : defaults.workspaces,
+    mcpTools: parsed.mcpTools ?? defaults.mcpTools,
+  };
+  merged.storage.rootDir = resolve(merged.storage.rootDir || DEFAULT_HOME);
+  return merged;
+}
+
+export function saveConfig(config: SupperHelperConfig, path = configPath(config.storage.rootDir)): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+}
+
+export function getModelProvider(config: SupperHelperConfig): ModelProviderConfig | undefined {
+  if (!config.agent.modelProvider) {
+    return undefined;
+  }
+
+  return config.models.providers[config.agent.modelProvider];
+}
+
+export function resolveContextWindowTokens(config: SupperHelperConfig): number {
+  const provider = getModelProvider(config);
+  return (
+    positiveInteger(provider?.contextWindowTokens) ??
+    inferModelContextWindowTokens(provider?.model) ??
+    positiveInteger(config.agent.contextWindowTokens) ??
+    1
+  );
+}
+
+export function inferModelContextWindowTokens(model?: string): number | undefined {
+  const normalized = model?.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalized === 'minimaxm3') {
+    return 1_000_000;
+  }
+
+  return undefined;
+}
+
+function positiveInteger(value?: number): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? Math.floor(numberValue) : undefined;
+}
+
+export function resolveSecret(value?: string, envName?: string): string | undefined {
+  if (value) {
+    return value;
+  }
+
+  if (envName) {
+    return process.env[envName];
+  }
+
+  return undefined;
+}

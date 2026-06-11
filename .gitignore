@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.turbo/
+.supper-helper/
+.DS_Store
+*.log
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Editor and local agent state
+.idea/
+.claude/settings.local.json
+.codex/config.toml
