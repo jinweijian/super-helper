@@ -68,6 +68,12 @@ function labelForPhase(phase: string): string {
   if (/persona/.test(phase)) return '用户视角';
   if (/input_review|preflight_result|model_preflight|local_preflight/.test(phase)) return '输入审核';
   if (/preflight/.test(phase)) return '预检';
+  if (/knowledge_router/.test(phase)) return '知识路由';
+  if (/knowledge_search/.test(phase)) return '知识检索';
+  if (/evidence_judge/.test(phase)) return '证据判断';
+  if (/knowledge_answer/.test(phase)) return '知识直答';
+  if (/code_escalation/.test(phase)) return '升级代码';
+  if (/case_curator|resolution/.test(phase)) return 'Case 沉淀';
   if (/diagnostic|command|raw_output|follow_up/.test(phase)) return '调用 CC';
   if (/evidence_review|model_review|output_review/.test(phase)) return '输出审核';
   if (/presentation/.test(phase)) return '美观输出';

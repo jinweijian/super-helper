@@ -1,0 +1,14 @@
+# Supported user intents for knowledge routing.
+intents:
+  - id: troubleshooting
+    name: 问题排查
+  - id: how_to
+    name: 操作流程
+  - id: product_rule
+    name: 产品规则
+  - id: implementation_detail
+    name: 实现细节
+  - id: term_explanation
+    name: 术语解释
+  - id: module_explanation
+    name: 模块说明

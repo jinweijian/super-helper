@@ -1,0 +1,6 @@
+# User-facing aliases mapped to canonical modules or terms.
+aliases:
+  - alias: 帮助中心
+    module: general
+  - alias: FAQ
+    module: general

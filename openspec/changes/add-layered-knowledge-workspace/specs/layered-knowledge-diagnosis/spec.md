@@ -105,6 +105,14 @@ The system SHALL judge whether knowledge evidence is sufficient to answer withou
 - **WHEN** a matched document is past its review cycle or has stale status
 - **THEN** Evidence Judge lowers confidence and requires code escalation if the answer depends on current implementation
 
+#### Scenario: Answer score threshold
+- **WHEN** knowledge evidence is scored for answerability
+- **THEN** Evidence Judge computes an `answer_score` from relevance, coverage, source authority, freshness, version match, agreement, actionability, conflicts, ambiguity, and risk
+
+#### Scenario: High-risk score cannot bypass escalation
+- **WHEN** a high-risk domain has knowledge evidence but unresolved risk or uncertainty
+- **THEN** Evidence Judge requires code or human escalation even if keyword relevance is high
+
 ### Requirement: Code escalation rules
 The system SHALL escalate to Claude Code / CC worker when the user question requires current implementation evidence or knowledge evidence is insufficient, stale, risky, or conflicting.
 
@@ -119,6 +127,40 @@ The system SHALL escalate to Claude Code / CC worker when the user question requ
 #### Scenario: Existing worker preserved
 - **WHEN** code escalation is selected
 - **THEN** the existing Claude Code worker remains a read-only diagnostic tool and does not directly generate the user-facing reply
+
+### Requirement: Deep query planner and query correction
+The system SHALL convert insufficient knowledge evidence into a clue-led static investigation request and SHALL support deterministic query correction before asking the user or escalating to a human.
+
+#### Scenario: Clue-led code escalation
+- **WHEN** Evidence Judge selects code escalation
+- **THEN** runtime attaches knowledge evidence gaps, artifact targets, anchor terms, likely path patterns, and avoid-assumption guidance to `DiagnosticRequest.context`
+
+#### Scenario: Scheduler clue pivots safely
+- **WHEN** a user suspects a scheduled task but knowledge or code evidence does not support scheduler as the root path
+- **THEN** Query Correction broadens toward queue, callback, state machine, or state update artifacts rather than repeating the same scheduler-only search
+
+#### Scenario: No-hit broadening
+- **WHEN** knowledge search has no hit
+- **THEN** Query Correction expands aliases, neighboring modules, and source types before deciding the final escalation route
+
+#### Scenario: Static-only worker guardrail
+- **WHEN** a deep query is dispatched to Claude Code
+- **THEN** the request preserves read-only constraints and asks for static Read/Glob/Grep investigation only
+
+### Requirement: Source ingest from whitepaper files
+The system SHALL initialize and ingest source whitepaper files into structured Markdown parent slices and derived chunks.
+
+#### Scenario: DOCX source imported
+- **WHEN** `knowledge init` is run with a source directory containing `.docx` whitepaper files
+- **THEN** the original DOCX files are copied under `knowledge/_sources/whitepapers/`, source metadata is written, parent slice Markdown is generated under `knowledge/whitepapers/`, derived chunks are generated, and `knowledge/indexes/ingest-report.json` records the import outcome
+
+#### Scenario: Default local source directory
+- **WHEN** no source directory is provided and `/Users/king/Documents/knowledge/` exists
+- **THEN** `knowledge init` uses that directory as the default source input without requiring code changes
+
+#### Scenario: Ingested knowledge is searchable
+- **WHEN** the user asks a question whose answer exists in an ingested whitepaper slice
+- **THEN** knowledge search returns evidence with source document metadata and a parent slice excerpt
 
 ### Requirement: Knowledge-first final answer
 The system SHALL allow direct final answers from knowledge evidence only after Evidence Judge and Output Review accept the evidence.

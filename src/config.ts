@@ -161,6 +161,7 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
     mcpTools: parsed.mcpTools ?? defaults.mcpTools,
   };
   merged.storage.rootDir = resolve(merged.storage.rootDir || DEFAULT_HOME);
+  merged.agent.modelProvider = selectActiveModelProvider(merged);
   return merged;
 }
 
@@ -175,6 +176,15 @@ export function getModelProvider(config: SuperHelperConfig): ModelProviderConfig
   }
 
   return config.models.providers[config.agent.modelProvider];
+}
+
+function selectActiveModelProvider(config: SuperHelperConfig): string | undefined {
+  if (config.agent.modelProvider && config.models.providers[config.agent.modelProvider]) {
+    return config.agent.modelProvider;
+  }
+
+  const providerIds = Object.keys(config.models.providers);
+  return providerIds.length === 1 ? providerIds[0] : config.agent.modelProvider;
 }
 
 export function resolveContextWindowTokens(config: SuperHelperConfig): number {

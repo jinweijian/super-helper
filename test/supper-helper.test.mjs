@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
 import { SuperHelperAgent } from '../dist/agent.js';
 import { ClaudeCodeWorker } from '../dist/claude-worker.js';
+import { loadConfig } from '../dist/config.js';
 import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
 import { startServer } from '../dist/server.js';
+import { initKnowledgeWorkspace, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
 import { buildDiagnosticRequestContext } from '../dist/sessions/context-builder.js';
@@ -23,6 +25,9 @@ import {
 } from '../dist/runtime/review-gate.js';
 import { formatPreflightQuestion, personaGuide, personaName, ruleBasedReviewAndFormat } from '../dist/runtime/presenter.js';
 import { listPublicAgentConfigs, loadAgentRegistry, resolveAgentConfig } from '../dist/runtime/agent-configs.js';
+import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
+import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
+import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
 
 function baseConfig(rootDir) {
   return {
@@ -835,6 +840,532 @@ test('model client includes fetch cause codes in connection errors', async () =>
     );
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('config activates the only configured model provider for local agent runs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const configPath = join(dir, 'config.json');
+  try {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.models.providers = {
+      minimax: {
+        type: 'openai-compatible',
+        baseUrl: 'https://api.example.test/v1',
+        apiKey: 'test-key',
+        model: 'MiniMax-M3',
+      },
+    };
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+    const loaded = loadConfig(configPath);
+
+    assert.equal(loaded.agent.modelProvider, 'minimax');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runtime answers directly from knowledge evidence before calling the worker', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: 'worker should not be called for answerable knowledge',
+          missingInfo: [],
+          evidence: [{ id: 'ev_worker', kind: 'workspace', source: 'worker', summary: 'worker called', confidence: 'low' }],
+          claims: [{ type: 'fact', text: 'worker called', evidenceIds: ['ev_worker'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeKnowledgeFaq(workspace, {
+      module: 'ai-study',
+      intent: 'how_to',
+      title: 'AI伴学助手如何制定学习计划',
+      body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。学习计划生成后包含任务数、学习总时长、学习起止时间、每周学习日和每日学习时长。',
+      terms: ['AI伴学助手', '制定学习计划', '学习计划'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const store = new FileMemoryStore(dir);
+    const agent = new SuperHelperAgent(config, store, worker);
+
+    const response = await agent.handleUserMessage({
+      message: 'AI伴学助手怎么制定学习计划？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 0);
+    assert.equal(response.decision, 'final');
+    assert.equal(response.caseSession.runs.length, 1);
+    assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
+    assert.match(response.assistantMessage, /AI伴学助手如何制定学习计划/);
+    assert.match(response.assistantMessage, /支撑证据/);
+    assert.match(response.assistantMessage, /来源：knowledge\/faq\/ai-study/);
+    assert.equal(response.caseSession.logs.some((event) => event.phase === 'knowledge_search_result'), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime broadens source type filters so whitepaper evidence can answer natural how-to questions', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      throw new Error('worker should not be called for whitepaper-backed knowledge answer');
+    },
+  };
+
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeKnowledgeWhitepaper(workspace, {
+      module: 'ai-study',
+      title: '学习日晚上8点',
+      body: '学习日晚上8点未完成当日学习任务时向以对话框消息和APP通知的形式向学员发送学习提醒。',
+      terms: ['AI伴学助手', '督学提醒', '学习日晚上8点'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const store = new FileMemoryStore(dir);
+    const agent = new SuperHelperAgent(config, store, worker);
+
+    const response = await agent.handleUserMessage({
+      message: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 0);
+    assert.equal(response.decision, 'final');
+    assert.match(response.assistantMessage, /学习日晚上8点/);
+    assert.match(response.assistantMessage, /APP通知/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime escalates no-hit or implementation-detail knowledge questions with deep query context', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已升级并检查当前接口实现',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code_partial', kind: 'workspace', source: 'Grep:/api/orders', summary: '需要进一步静态调查', confidence: 'low' }],
+          claims: [{ type: 'unknown', text: '知识库没有命中，需要代码证据', evidenceIds: ['ev_code_partial'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeKnowledgeFaq(workspace, {
+      module: 'ai-study',
+      intent: 'how_to',
+      title: 'AI伴学助手如何制定学习计划',
+      body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
+      terms: ['AI伴学助手', '制定学习计划'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const store = new FileMemoryStore(dir);
+    const agent = new SuperHelperAgent(config, store, worker);
+
+    await agent.handleUserMessage({
+      message: '接口 /api/orders 返回 500，帮我看当前实现为什么失败',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.judge.need_code_escalation, true);
+    assert.equal(workerRequests[0].context.deepQuery.permission, 'read_only');
+    assert.equal(workerRequests[0].context.deepQuery.artifactTargets.includes('route'), true);
+    assert.match(workerRequests[0].constraints.join('\n'), /知识库证据不足/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime does not expose restricted knowledge directly to customer persona', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: 'restricted knowledge was not shown directly',
+          missingInfo: [],
+          evidence: [{ id: 'ev_worker', kind: 'workspace', source: 'worker', summary: 'worker fallback used', confidence: 'low' }],
+          claims: [{ type: 'unknown', text: 'restricted knowledge requires controlled handling', evidenceIds: ['ev_worker'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeKnowledgeFaq(workspace, {
+      module: 'course',
+      intent: 'how_to',
+      title: '课程隐藏规则内部排查',
+      body: '内部排查步骤：检查隐藏规则和权限策略。',
+      terms: ['课程', '隐藏规则', '权限策略'],
+      visibility: 'restricted',
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const store = new FileMemoryStore(dir);
+    const agent = new SuperHelperAgent(config, store, worker);
+
+    const response = await agent.handleUserMessage({
+      message: '课程隐藏规则怎么处理？',
+      workspaceId: 'current',
+      persona: 'customer',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.doesNotMatch(response.assistantMessage, /内部排查步骤/);
+    assert.match(workerRequests[0].context.knowledge.judge.reason, /restricted|受限|权限|知识库/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('evidence judge handles direct answers, stale or conflicting evidence, high risk, and query correction pivots', () => {
+  const route = {
+    normalizedQuestion: '课程发布后为什么学员看不到',
+    moduleCandidates: ['course'],
+    intentCandidates: ['how_to'],
+    keywords: ['课程', '发布', '学员', '看不到'],
+    sourceTypes: ['faq'],
+    codeEscalationSignals: [],
+    risks: [],
+  };
+  const activeFaq = knowledgeEvidence({
+    id: 'ev_faq_active',
+    status: 'active',
+    sourceType: 'faq',
+    matchedTerms: ['课程', '发布', '学员', '看不到'],
+    verifiedAt: '2999-01-01',
+  });
+
+  const direct = judgeKnowledgeEvidence({
+    route,
+    evidencePack: knowledgePack([activeFaq]),
+    question: route.normalizedQuestion,
+  });
+  assert.equal(direct.answerable, true);
+  assert.equal(direct.need_code_escalation, false);
+  assert.equal(direct.recommended_next_action, 'final_answer');
+
+  const directRunbook = judgeKnowledgeEvidence({
+    route,
+    evidencePack: knowledgePack([
+      knowledgeEvidence({
+        id: 'ev_runbook_active',
+        status: 'active',
+        sourceType: 'runbook',
+        matchedTerms: ['课程', '发布', '学员', '看不到'],
+        verifiedAt: '2999-01-01',
+      }),
+    ]),
+    question: route.normalizedQuestion,
+  });
+  assert.equal(directRunbook.answerable, true);
+  assert.equal(directRunbook.need_code_escalation, false);
+
+  const conflict = judgeKnowledgeEvidence({
+    route,
+    evidencePack: knowledgePack([
+      activeFaq,
+      knowledgeEvidence({
+        id: 'ev_faq_deprecated',
+        status: 'deprecated',
+        sourceType: 'faq',
+        matchedTerms: ['课程', '发布'],
+        verifiedAt: '2999-01-01',
+      }),
+    ]),
+    question: route.normalizedQuestion,
+  });
+  assert.equal(conflict.answerable, false);
+  assert.equal(conflict.need_code_escalation, true);
+  assert.deepEqual(conflict.conflicts, ['course:how_to']);
+
+  const stale = judgeKnowledgeEvidence({
+    route,
+    evidencePack: knowledgePack([
+      knowledgeEvidence({
+        id: 'ev_review_required',
+        status: 'review_required',
+        sourceType: 'runbook',
+        matchedTerms: ['课程', '发布', '学员'],
+        verifiedAt: '2999-01-01',
+      }),
+    ]),
+    question: route.normalizedQuestion,
+  });
+  assert.equal(stale.answerable, false);
+  assert.equal(stale.risks.includes('stale_knowledge'), true);
+
+  const highRisk = judgeKnowledgeEvidence({
+    route: { ...route, risks: ['payment'] },
+    evidencePack: knowledgePack([activeFaq]),
+    question: '支付退款配置怎么修复',
+  });
+  assert.equal(highRisk.answerable, false);
+  assert.equal(highRisk.recommended_next_action, 'escalate_to_human');
+
+  const implementationJudge = judgeKnowledgeEvidence({
+    route: { ...route, codeEscalationSignals: ['/api/orders', '500'] },
+    evidencePack: knowledgePack([]),
+    question: '定时任务调用 /api/orders 返回 500',
+  });
+  const deepQuery = planDeepQuery({
+    question: '定时任务调用 /api/orders 返回 500',
+    route: { ...route, codeEscalationSignals: ['/api/orders', '500'] },
+    evidencePack: knowledgePack([]),
+    judge: implementationJudge,
+  });
+  assert.equal(deepQuery.permission, 'read_only');
+  assert.equal(deepQuery.correctionActions.includes('expand_aliases'), true);
+  assert.equal(deepQuery.correctionActions.includes('pivot_scheduler_to_queue_callback_state'), true);
+  assert.equal(deepQuery.correctionActions.includes('pivot_route_to_controller_service_config'), true);
+
+  const draft = judgeKnowledgeEvidence({
+    route,
+    evidencePack: knowledgePack([
+      knowledgeEvidence({
+        id: 'ev_draft',
+        status: 'draft',
+        sourceType: 'faq',
+        matchedTerms: ['课程', '发布', '学员', '看不到'],
+        verifiedAt: '2999-01-01',
+      }),
+    ]),
+    question: route.normalizedQuestion,
+  });
+  assert.equal(draft.answerable, false);
+  assert.equal(draft.need_code_escalation, true);
+});
+
+test('runtime curates a review-required solved case after user confirms resolution', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const worker = {
+    async diagnose() {
+      throw new Error('worker should not be called for solved-case curation');
+    },
+  };
+
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeKnowledgeFaq(workspace, {
+      module: 'ai-study',
+      intent: 'how_to',
+      title: 'AI伴学助手如何制定学习计划',
+      body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
+      terms: ['AI伴学助手', '制定学习计划'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const store = new FileMemoryStore(dir);
+    const agent = new SuperHelperAgent(config, store, worker);
+    const first = await agent.handleUserMessage({
+      message: 'AI伴学助手怎么制定学习计划？',
+      workspaceId: 'current',
+    });
+
+    const confirmed = await agent.handleUserMessage({
+      caseId: first.caseSession.id,
+      message: '已解决，这个方案有效',
+      workspaceId: 'current',
+    });
+
+    const solvedDir = join(workspace, 'knowledge', 'tickets', 'solved-cases', 'ai-study');
+    const files = readdirSync(solvedDir).filter((file) => file.endsWith('.md'));
+    const content = readFileSync(join(solvedDir, files[0]), 'utf8');
+
+    assert.match(confirmed.assistantMessage, /solved case 草稿/);
+    assert.match(content, /status: review_required/);
+    assert.match(content, /confidence: medium/);
+    assert.match(content, /## 用户最终确认/);
+    assert.equal(existsSync(join(workspace, 'knowledge', 'indexes', 'dirty.flag')), true);
+    assert.equal(confirmed.caseSession.logs.some((event) => event.phase === 'case_curator_result'), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('case curator keeps high-risk drafts restricted and refuses unsupported facts', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const store = new FileMemoryStore(dir);
+    const caseSession = store.createCase({
+      tenantId: 'local',
+      userId: 'local-user',
+      workspaceId: 'current',
+      title: '支付退款配置怎么修复',
+    });
+    caseSession.userPersona = 'developer';
+    store.addMessage(caseSession, { role: 'user', body: '支付退款配置怎么修复？' });
+
+    assert.equal(isResolutionConfirmation('还没解决，这个方案无效'), false);
+    assert.equal(isResolutionConfirmation('已解决，这个方案有效'), true);
+    assert.equal(hasCuratableDiagnosticResult(caseSession), false);
+
+    store.addRun(caseSession, {
+      id: 'run_01',
+      caseId: caseSession.id,
+      status: 'concluded',
+      request: {
+        caseId: caseSession.id,
+        runId: 'run_01',
+        workspaceId: 'current',
+        claudeSessionId: caseSession.claudeSessionId,
+        userGoal: '支付退款配置怎么修复？',
+        knownFacts: ['支付退款配置怎么修复？'],
+        unknowns: [],
+        constraints: [],
+        allowedMcpToolIds: [],
+        userPersona: 'developer',
+      },
+      result: {
+        status: 'concluded',
+        summary: '退款配置需要管理员确认支付渠道状态后再调整。',
+        missingInfo: ['当前支付渠道状态'],
+        evidence: [{ id: 'ev_pay', kind: 'knowledge', source: 'knowledge/faq/payment/refund.md', summary: '退款配置 runbook', confidence: 'medium' }],
+        claims: [
+          { type: 'fact', text: '有证据的事实可沉淀', evidenceIds: ['ev_pay'] },
+          { type: 'fact', text: '无证据根因不应沉淀', evidenceIds: [] },
+          { type: 'unknown', text: '当前支付渠道状态未知', evidenceIds: [] },
+        ],
+        recommendedNextAction: 'final_answer',
+      },
+    });
+
+    const draft = curateSolvedCase({
+      workspaceRoot: workspace,
+      caseSession,
+      confirmationMessage: '已解决，这个方案有效',
+    });
+    const content = readFileSync(draft.path, 'utf8');
+
+    assert.match(content, /visibility: restricted/);
+    assert.match(content, /有证据的事实可沉淀/);
+    assert.doesNotMatch(content, /无证据根因不应沉淀/);
+    assert.match(content, /当前支付渠道状态未知/);
+    assert.equal(existsSync(join(workspace, 'knowledge', 'indexes', 'dirty.flag')), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('case curator refuses partial or unsupported diagnostic results', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const caseSession = store.createCase({
+      tenantId: 'local',
+      userId: 'local-user',
+      workspaceId: 'current',
+      title: '证据不足的问题',
+    });
+    store.addRun(caseSession, {
+      id: 'run_partial',
+      caseId: caseSession.id,
+      status: 'partial',
+      result: {
+        status: 'partial',
+        summary: '还没有足够证据。',
+        missingInfo: ['当前实现证据'],
+        evidence: [],
+        claims: [{ type: 'fact', text: '无证据事实不能沉淀', evidenceIds: [] }],
+        recommendedNextAction: 'ask_user',
+      },
+    });
+
+    assert.equal(hasCuratableDiagnosticResult(caseSession), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -2191,3 +2722,118 @@ test('agents API and settings UI expose configured multi-agent settings', async 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+function writeKnowledgeFaq(workspace, input) {
+  const faqDir = join(workspace, 'knowledge', 'faq', input.module);
+  mkdirSync(faqDir, { recursive: true });
+  writeFileSync(
+    join(faqDir, `${input.module}-${input.intent}.md`),
+    `---
+id: kb_faq_${input.module}_${input.intent}
+title: ${input.title}
+type: faq
+module: ${input.module}
+intent: ${input.intent}
+source_type: faq
+confidence: high
+status: active
+visibility: ${input.visibility ?? 'internal'}
+product_versions: []
+related_terms:
+${input.terms.map((term) => `  - ${term}`).join('\n')}
+related_repos: []
+last_verified_at: 2026-06-13
+owner: support
+---
+
+# ${input.title}
+
+## 答案
+
+${input.body}
+`,
+    'utf8',
+  );
+}
+
+function writeKnowledgeWhitepaper(workspace, input) {
+  const whitepaperDir = join(workspace, 'knowledge', 'whitepapers', input.module);
+  mkdirSync(whitepaperDir, { recursive: true });
+  writeFileSync(
+    join(whitepaperDir, `${input.module}-whitepaper.md`),
+    `---
+id: kb_whitepaper_${input.module}_reminder
+title: ${input.title}
+type: whitepaper_slice
+module: ${input.module}
+intent: product_rule
+source_type: whitepaper
+confidence: medium
+status: active
+visibility: internal
+product_versions: []
+related_terms:
+${input.terms.map((term) => `  - ${term}`).join('\n')}
+related_repos: []
+last_verified_at: 2026-06-13
+owner: product
+source_document: knowledge/_sources/whitepapers/test.docx
+source_document_id: src_test_whitepaper
+source_pages: []
+section_path:
+  - 督学提醒
+  - ${input.title}
+chunking_strategy: semantic-section-v1
+---
+
+# ${input.title}
+
+## 核心内容
+
+${input.body}
+`,
+    'utf8',
+  );
+}
+
+function knowledgePack(results) {
+  return {
+    query: {
+      normalized_question: '课程发布后为什么学员看不到',
+      module_candidates: ['course'],
+      intent_candidates: ['how_to'],
+      keywords: ['课程', '发布', '学员', '看不到'],
+    },
+    results,
+    coverage: {
+      searched_files: results.length,
+      matched_files: results.length,
+      filtered_out: [],
+    },
+  };
+}
+
+function knowledgeEvidence(input) {
+  return {
+    evidence_id: input.id,
+    document_id: input.id.replace(/^ev_/, 'kb_'),
+    parent_id: input.id.replace(/^ev_/, 'kb_'),
+    source: `knowledge/faq/course/${input.id}.md`,
+    source_document: undefined,
+    source_document_id: undefined,
+    source_pages: [],
+    title: '课程可见性规则',
+    type: input.sourceType === 'runbook' ? 'runbook' : 'faq',
+    module: 'course',
+    intent: 'how_to',
+    source_type: input.sourceType,
+    confidence: 'high',
+    status: input.status,
+    visibility: 'internal',
+    last_verified_at: input.verifiedAt,
+    matched_terms: input.matchedTerms,
+    summary: '课程可见性规则命中',
+    excerpt: '课程发布后需要满足可见范围、权限和上架时间条件。',
+    score: input.matchedTerms.length * 10,
+  };
+}

@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { configPath, ensureConfig, saveConfig } from './config.js';
 import { startServer } from './server.js';
-import { initKnowledgeWorkspace, searchKnowledge, updateKnowledgeIndex } from './knowledge/index.js';
+import { defaultSourceDirectory, initKnowledgeWorkspace, searchKnowledge, updateKnowledgeIndex } from './knowledge/index.js';
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'dev';
@@ -149,15 +149,23 @@ async function handleKnowledgeCommand(): Promise<void> {
   const workspaceRoot = resolveWorkspaceRoot();
 
   if (subcommand === 'init') {
+    const sourceDir = readArg('--source-dir') ?? readArg('--source') ?? defaultSourceDirectory();
     const result = initKnowledgeWorkspace({
       workspaceRoot,
+      sourceDir,
       force: process.argv.includes('--force'),
     });
     console.log('knowledge workspace ready');
     console.log(`workspace: ${workspaceRoot}`);
     console.log(`knowledge: ${result.knowledgeRoot}`);
+    if (sourceDir) {
+      console.log(`source dir: ${sourceDir}`);
+    }
     console.log(`directories created: ${result.directories.length}`);
     console.log(`files written: ${result.files.length}`);
+    if (result.ingestReportPath) {
+      console.log(`ingest report: ${result.ingestReportPath}`);
+    }
     console.log('next: super-helper knowledge update --workspace <workspace>');
     return;
   }

@@ -1,0 +1,2579 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-13T08:37:29.835Z",
+  "document_count": 257,
+  "chunk_count": 257,
+  "source_document_count": 3,
+  "documents": [
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_001",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/001-caae6b4e0380.md",
+      "title": "产品简介",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_002",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/002-caae6b4e0380.md",
+      "title": "产品简介",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_003",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/003-50ca3da9fb9c.md",
+      "title": "产品特色",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_004",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/004-a13cbd4543c4.md",
+      "title": "前台篇",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_005",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/005-681f7e87e3b0.md",
+      "title": "制定学习计划",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_006",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/006-ad889b24bfd4.md",
+      "title": "课程学习页-制定学习计划提醒",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_007",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/007-681f7e87e3b0.md",
+      "title": "制定学习计划",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_008",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/008-681f7e87e3b0.md",
+      "title": "制定学习计划",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_009",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/009-574266b1f581.md",
+      "title": "督学提醒",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_010",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/010-9.md",
+      "title": "学习日早上9点",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_011",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/011-8.md",
+      "title": "学习日晚上8点",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_012",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/012-a061ac2f2ec6.md",
+      "title": "学习日完成当日学习任务",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_013",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/013-10bf25508442.md",
+      "title": "题目答疑",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_014",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/014-c7aa370c09dd.md",
+      "title": "答题时",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_015",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/015-0686d7050c9b.md",
+      "title": "按薄弱知识点推送学习任务",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_016",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/016-626899197130.md",
+      "title": "学习问答",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_017",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/017-9e0c5c83a002.md",
+      "title": "资讯推送",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_018",
+      "path": "knowledge/whitepapers/ai-companion/caae6b4e0380/018-a326dbde72f7.md",
+      "title": "满意度评价",
+      "type": "whitepaper_slice",
+      "module": "ai-companion",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_001",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/001-caae6b4e0380.md",
+      "title": "产品简介",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_002",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/002-caae6b4e0380.md",
+      "title": "产品简介",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_003",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/003-50ca3da9fb9c.md",
+      "title": "产品特色",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_004",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/004-a13cbd4543c4.md",
+      "title": "前台篇",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_005",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/005-c190bff57785.md",
+      "title": "注册登录",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_006",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/006-c190bff57785.md",
+      "title": "注册登录",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_007",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/007-2b6ef8367821.md",
+      "title": "手机验证",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_008",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/008-25a7dbc56278.md",
+      "title": "邮箱验证",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_009",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/009-1c9c42a901ac.md",
+      "title": "首页介绍",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_010",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/010-98537baf653d.md",
+      "title": "网校名称",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_011",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/011-3b2b1d9d5eaa.md",
+      "title": "导航栏",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_012",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/012-42bb273980e7.md",
+      "title": "搜索栏",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_013",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/013-9fe9377a6459.md",
+      "title": "信息栏",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_014",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/014-08c93d01a14e.md",
+      "title": "侧边栏",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_015",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/015-53370a724ea9.md",
+      "title": "轮播图",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_016",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/016-350bf7822d20.md",
+      "title": "网校课程",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_017",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/017-b7bbbf602a03.md",
+      "title": "推荐班级",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_018",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/018-e93b8e37a798.md",
+      "title": "底部链接",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_019",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/019-e7c81ebabdc9.md",
+      "title": "版权信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_020",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/020-1d23b8a4bd99.md",
+      "title": "个人中心",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_021",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/021-d04c1f47483e.md",
+      "title": "个人主页",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_022",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/022-eff7665554f7.md",
+      "title": "个人介绍",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_023",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/023-f9358d9da5c8.md",
+      "title": "在学课程",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_024",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/024-bdeea15898fa.md",
+      "title": "在学班级",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_025",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/025-0af117635831.md",
+      "title": "在学题库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_026",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/026-313e019598b6.md",
+      "title": "收藏课程",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_027",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/027-ed49a56353dc.md",
+      "title": "加入小组",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_028",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/028-6f831a8630fc.md",
+      "title": "关注/粉丝",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_029",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/029-60590b3188c6.md",
+      "title": "账户中心",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_030",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/030-4fe2c5164664.md",
+      "title": "我的订单",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_031",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/031-2c1524bfc6e5.md",
+      "title": "充值卡账户",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_032",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/032-a8e3e28d45c0.md",
+      "title": "邀请码",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_033",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/033-7dcd48762382.md",
+      "title": "优惠券（网校已安装优惠码插件）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_034",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/034-3f8a6a5a4c38.md",
+      "title": "会员记录（网校已安装会员专区插件）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_035",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/035-862022e5d7c9.md",
+      "title": "学习卡（网校已安装学习卡插件）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_036",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/036-cb735ad425c7.md",
+      "title": "我的积分（网校已安装积分插件）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_037",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/037-02a96771611b.md",
+      "title": "我的发票（网校已安装发票申请插件）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_038",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/038-185a6d5233d1.md",
+      "title": "兑换卡券（网校已安装兑换码插件）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_039",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/039-f787ab516dbb.md",
+      "title": "个人设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_040",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/040-c241ef1b935c.md",
+      "title": "个人信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_041",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/041-2ad59de38e40.md",
+      "title": "实名认证",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_042",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/042-6b60fbe4dc14.md",
+      "title": "教师资质",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_043",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/043-8bf435e8a8b5.md",
+      "title": "安全设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_044",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/044-754e86a34a40.md",
+      "title": "第三方登录",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_045",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/045-675641d14def.md",
+      "title": "教师-课程/班级创建",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_046",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/046-33ce57c17c33.md",
+      "title": "创建课程-普通课程",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_047",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/047-7dbb35339fa7.md",
+      "title": "课程信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_048",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/048-ee7dbd75faf6.md",
+      "title": "默认计划",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_049",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/049-591342d58bdb.md",
+      "title": "全部计划",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_050",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/050-69c01897d116.md",
+      "title": "课程文件",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_051",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/051-ba00f27fd4c2.md",
+      "title": "课程试卷",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_052",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/052-c09f34f488dd.md",
+      "title": "课程题库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_053",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/053-1c1767d6072f.md",
+      "title": "普通课程-多个计划",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_054",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/054-de7d0cb19725.md",
+      "title": "创建课程-直播课程",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_055",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/055-b57a3af59c41.md",
+      "title": "课程设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_056",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/056-69c01897d116.md",
+      "title": "课程文件",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_057",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/057-ba00f27fd4c2.md",
+      "title": "课程试卷",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_058",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/058-c09f34f488dd.md",
+      "title": "课程题库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_059",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/059-06f362e69afa.md",
+      "title": "创建课程-录播公开课",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_060",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/060-7dbb35339fa7.md",
+      "title": "课程信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_061",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/061-d59f14aec05e.md",
+      "title": "课时管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_062",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/062-1029b1b1178e.md",
+      "title": "推荐设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_063",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/063-00b58772e8f6.md",
+      "title": "教师管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_064",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/064-fe8737fac6d4.md",
+      "title": "学员管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_065",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/065-3f2244c98fe3.md",
+      "title": "文件管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_066",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/066-0a76e8b8782e.md",
+      "title": "创建课程-直播公开课",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_067",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/067-b57a3af59c41.md",
+      "title": "课程设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_068",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/068-9cda6166390d.md",
+      "title": "录播管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_069",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/069-1029b1b1178e.md",
+      "title": "推荐设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_070",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/070-00b58772e8f6.md",
+      "title": "教师管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_071",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/071-fe8737fac6d4.md",
+      "title": "学员管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_072",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/072-034e9f610cfd.md",
+      "title": "创建班级",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_073",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/073-3ce16390a19c.md",
+      "title": "管理首页",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_074",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/074-2ea4813b33ad.md",
+      "title": "班级设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_075",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/075-4169195c8ac4.md",
+      "title": "班级管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_076",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/076-fd3b92a51212.md",
+      "title": "创建题库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_077",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/077-f2f2c2effb59.md",
+      "title": "题库信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_078",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/078-330272343efd.md",
+      "title": "题目分类管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_079",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/079-d865d2d077ec.md",
+      "title": "题目管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_080",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/080-cdb36e7f3223.md",
+      "title": "试卷管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_081",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/081-6546902f51ff.md",
+      "title": "创建题库练习",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_082",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/082-35ff7705979b.md",
+      "title": "基础设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_083",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/083-5c06d347bb41.md",
+      "title": "营销设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_084",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/084-fe8737fac6d4.md",
+      "title": "学员管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_085",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/085-e8e8d619f0b7.md",
+      "title": "章节练习",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_086",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/086-2c7adeef5b37.md",
+      "title": "试卷练习",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_087",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/087-9310a820edc9.md",
+      "title": "教师-教学管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_088",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/088-7b005bb90bb6.md",
+      "title": "教学课表",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_089",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/089-8d328d2dc6ba.md",
+      "title": "在教课程",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_090",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/090-3e829ed4e19a.md",
+      "title": "在教班级",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_091",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/091-a03e203f6aae.md",
+      "title": "公开课",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_092",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/092-7916e253deb2.md",
+      "title": "学员问答",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_093",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/093-fbbed19a2267.md",
+      "title": "学员话题",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_094",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/094-fb61d4435571.md",
+      "title": "在线批阅",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_095",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/095-285fa0be57f9.md",
+      "title": "教学资料库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_096",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/096-ed9f790dc7b2.md",
+      "title": "题库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_097",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/097-98140e7d45f2.md",
+      "title": "学员-学习管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_098",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/098-99fa6c14352c.md",
+      "title": "课程/班级购买",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_099",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/099-266ee8d55073.md",
+      "title": "学习中心",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_100",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/100-5553bb2177ff.md",
+      "title": "课程学习",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_101",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/101-39f6bf12c02b.md",
+      "title": "后台篇",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_102",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/102-aa5d438e0694.md",
+      "title": "教学",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_103",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/103-47d4cf518ea4.md",
+      "title": "课程管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+      "title": "课程管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_105",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/105-4169195c8ac4.md",
+      "title": "班级管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_106",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/106-491fed6a9386.md",
+      "title": "直播管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_107",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/107-fce230836a1d.md",
+      "title": "题库练习管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_108",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/108-0effee892c58.md",
+      "title": "分类标签",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_109",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/109-742d56b116bd.md",
+      "title": "助学管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_110",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/110-1d38f882e274.md",
+      "title": "笔记管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_111",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/111-45a506b71df0.md",
+      "title": "问答管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_112",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/112-4af62c0e0d9c.md",
+      "title": "话题管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_113",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/113-b1dee6e37240.md",
+      "title": "评价管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_114",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/114-18a71d941ec5.md",
+      "title": "资源管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_115",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/115-ec46c2e812b1.md",
+      "title": "云资源",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_116",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/116-eed75a094b46.md",
+      "title": "题库管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_117",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/117-aa59e051af4b.md",
+      "title": "营销",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_118",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/118-a03e203f6aae.md",
+      "title": "公开课",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_119",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/119-ca890c1c5761.md",
+      "title": "常规公开课",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_120",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/120-92236e1fc251.md",
+      "title": "大型公开课",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_121",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/121-1526429b2a9f.md",
+      "title": "营销管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_122",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/122-ef0564459a0e.md",
+      "title": "邀请管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_123",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/123-7ebc000c81c6.md",
+      "title": "兑换码",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_124",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/124-30f810e77bd1.md",
+      "title": "优惠券",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_125",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/125-e1c61861bfc4.md",
+      "title": "会员管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_126",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/126-10ecfbeaff9d.md",
+      "title": "微营销",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_127",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/127-crm.md",
+      "title": "CRM（暂无内容需要维护）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_128",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/128-c671a8bf2bb5.md",
+      "title": "用户信息采集",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_129",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/129-16a5b1260e39.md",
+      "title": "积分管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_130",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/130-8911c986174e.md",
+      "title": "打折活动",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_131",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/131-d03c1b4eb24e.md",
+      "title": "学习卡",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_132",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/132-756aec1a57ac.md",
+      "title": "渠道管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_133",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/133-c93f9efd299f.md",
+      "title": "分销",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_134",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/134-c93f9efd299f.md",
+      "title": "分销",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_135",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/135-97fd065e994b.md",
+      "title": "运营",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_136",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/136-29b84e19ad8b.md",
+      "title": "网校装修",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_137",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/137-e366fe3b85de.md",
+      "title": "微网校装修",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_138",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/138-ce1e75d27797.md",
+      "title": "小程序装修",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_139",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/139-app.md",
+      "title": "APP装修",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_140",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/140-web.md",
+      "title": "web装修",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_141",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/141-e830d2265c13.md",
+      "title": "零主题",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_142",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/142-23e82689bb8a.md",
+      "title": "站点配置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_143",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/143-9633ccc496ab.md",
+      "title": "商品页管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_144",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/144-515cdecd2d6e.md",
+      "title": "内容运营",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_145",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/145-5585f59b0fee.md",
+      "title": "发证管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_146",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/146-043af342b035.md",
+      "title": "用户内容审核",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_147",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/147-3777a1a02984.md",
+      "title": "举报内容复核",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_148",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/148-a952069728e6.md",
+      "title": "全站站内通知",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_149",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/149-fcf0437ac1ff.md",
+      "title": "网站公告管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_150",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/150-37d87d343d21.md",
+      "title": "资讯管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_151",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/151-59be9c19b096.md",
+      "title": "小组管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_152",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/152-c8d451600f04.md",
+      "title": "微信通知",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_153",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/153-50d2e096914d.md",
+      "title": "私信管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_154",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/154-a826073c07be.md",
+      "title": "用户（有修改）",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_155",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/155-fe8737fac6d4.md",
+      "title": "学员管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_156",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/156-fe8737fac6d4.md",
+      "title": "学员管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_157",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/157-2ebdad09b5a3.md",
+      "title": "在线用户",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_158",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/158-65d9bca14f52.md",
+      "title": "用户数据统计",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_159",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/159-4280d0dc871c.md",
+      "title": "登录日志",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_160",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/160-13715b1c6648.md",
+      "title": "员工管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_161",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/161-13715b1c6648.md",
+      "title": "员工管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_162",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/162-4280d0dc871c.md",
+      "title": "登录日志",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_163",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/163-2ad59de38e40.md",
+      "title": "实名认证",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_164",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/164-00b58772e8f6.md",
+      "title": "教师管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_165",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/165-0a69142e0eb8.md",
+      "title": "注销管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_166",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/166-6ac95171a503.md",
+      "title": "帐号注销",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_167",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/167-d0359d3fd2ea.md",
+      "title": "注销申请",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_168",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/168-710cce856ffb.md",
+      "title": "注销记录",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_169",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/169-dfe799947fc5.md",
+      "title": "交易",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_170",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/170-26d8e2fa2315.md",
+      "title": "订单管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_171",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/171-d29622e18c71.md",
+      "title": "商品订单",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_172",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/172-3468caa4d184.md",
+      "title": "退款订单",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_173",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/173-e550ec31de00.md",
+      "title": "资产管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_174",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/174-16c006fd5c11.md",
+      "title": "网校账单",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_175",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/175-5171764163e2.md",
+      "title": "虚拟币管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_176",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/176-50bd8cd38f1d.md",
+      "title": "发票管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_177",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/177-50721cf2b713.md",
+      "title": "发票设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_178",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/178-77f1394d1593.md",
+      "title": "申请管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_179",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/179-54b8a90b3ce6.md",
+      "title": "数据",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_180",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/180-354077c7646a.md",
+      "title": "数据概览",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_181",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/181-c9f05cc6f481.md",
+      "title": "数据统计",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_182",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/182-1a1f6dff7826.md",
+      "title": "系统",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_183",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/183-ec39a38da5ca.md",
+      "title": "通用管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_184",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/184-46b154858978.md",
+      "title": "网校信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_185",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/185-900ef2a6b1f5.md",
+      "title": "用户设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_186",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/186-385be6eadb0d.md",
+      "title": "微信授权信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_187",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/187-b57a3af59c41.md",
+      "title": "课程设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_188",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/188-3814ee111e62.md",
+      "title": "课程迁移",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_189",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/189-cd26a041e2b0.md",
+      "title": "运营设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_190",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/190-2f6684867b6a.md",
+      "title": "人脸识别配置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_191",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/191-37443115702e.md",
+      "title": "合规经营管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_192",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/192-622a07a26619.md",
+      "title": "经营资质",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_193",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/193-6a68769e8282.md",
+      "title": "用户内容设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_194",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/194-1b84626ae9bc.md",
+      "title": "交易设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_195",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/195-15a49717dcda.md",
+      "title": "资产设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_196",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/196-04ca1cb5c789.md",
+      "title": "系统管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_197",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/197-303a83913f54.md",
+      "title": "系统优化",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_198",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/198-3bfd36ae1b12.md",
+      "title": "角色权限",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_199",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/199-ab15f60decad.md",
+      "title": "系统自检",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_200",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/200-096733f9a6b6.md",
+      "title": "系统日志",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_201",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/201-8bf435e8a8b5.md",
+      "title": "安全设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_202",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/202-952d9b66bfda.md",
+      "title": "云市场",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_203",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/203-940cb2a0d3d7.md",
+      "title": "营销云",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_204",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/204-ada5e0ac3064.md",
+      "title": "营销应用",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_205",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/205-30e10f4d05f5.md",
+      "title": "基础云",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_206",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/206-5060421d1574.md",
+      "title": "概览",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_207",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/207-515dde8646dd.md",
+      "title": "云服务",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_208",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/208-454e6e1727b7.md",
+      "title": "即时聊天设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_209",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/209-8f762d5a0965.md",
+      "title": "数据实验室",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_210",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/210-2fde408b8dd4.md",
+      "title": "授权信息",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_211",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/211-c0745f3068c5.md",
+      "title": "商城",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_212",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/212-e66b6caf07a6.md",
+      "title": "开启商城功能",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_213",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/213-b2096fe33967.md",
+      "title": "概况",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_214",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/214-7168c04b3530.md",
+      "title": "短信配置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_215",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/215-37a92083ef42.md",
+      "title": "经营渠道",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_216",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/216-1d3236c6276c.md",
+      "title": "支付配置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_217",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/217-625ad4be43b1.md",
+      "title": "商品上架",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_218",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/218-f49449cfa469.md",
+      "title": "商城装修",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_219",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/219-b6c26c3a9bcb.md",
+      "title": "首页管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_220",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/220-721877ea7fe9.md",
+      "title": "营销玩法",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_221",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/221-4bb38e320657.md",
+      "title": "多人拼团",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_222",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/222-004922066efd.md",
+      "title": "商品",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_223",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/223-4c536ac8fb93.md",
+      "title": "商品管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_224",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/224-dfe799947fc5.md",
+      "title": "交易",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_225",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/225-26d8e2fa2315.md",
+      "title": "订单管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_226",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/226-7debf9cb0372.md",
+      "title": "设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_227",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/227-37a92083ef42.md",
+      "title": "经营渠道",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_228",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/228-9d17e891a06a.md",
+      "title": "商城设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_229",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/229-20e917158b7d.md",
+      "title": "教务",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_230",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/230-c122e1758cb9.md",
+      "title": "总览",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_231",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/231-efd89146ec86.md",
+      "title": "教务仪表盘",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_232",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/232-5dd55a90dd5f.md",
+      "title": "班课管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_233",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/233-262b8a1bf758.md",
+      "title": "班课巡检",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_234",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/234-06797e2f9ad6.md",
+      "title": "班课列表",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_235",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/235-35ff7705979b.md",
+      "title": "基础设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_236",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/236-25acd62ed6f7.md",
+      "title": "产品库",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_237",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/237-00b58772e8f6.md",
+      "title": "教师管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_238",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/238-d2ea8fb20e56.md",
+      "title": "助教管理",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    },
+    {
+      "id": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_239",
+      "path": "knowledge/whitepapers/edusoho-training/caae6b4e0380/239-caa22e6bb7b8.md",
+      "title": "参数设置",
+      "type": "whitepaper_slice",
+      "module": "edusoho-training",
+      "intent": "product_rule",
+      "status": "active",
+      "confidence": "medium"
+    }
+  ]
+}

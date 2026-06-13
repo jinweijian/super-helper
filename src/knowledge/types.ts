@@ -121,6 +121,16 @@ export interface KnowledgeSearchQuery {
   limit?: number;
 }
 
+export interface KnowledgeRoute {
+  normalizedQuestion: string;
+  moduleCandidates: string[];
+  intentCandidates: string[];
+  keywords: string[];
+  sourceTypes: KnowledgeSourceType[];
+  codeEscalationSignals: string[];
+  risks: string[];
+}
+
 export interface KnowledgeEvidencePack {
   query: {
     normalized_question: string;
@@ -159,6 +169,24 @@ export interface KnowledgeInitResult {
   created: boolean;
   directories: string[];
   files: string[];
+  ingestReportPath?: string;
+}
+
+export interface KnowledgeIngestReport {
+  version: 1;
+  sourceDir?: string;
+  parserStrategy: string;
+  sourceDocuments: number;
+  parentSlices: number;
+  chunks: number;
+  skipped: Array<{ path: string; reason: string }>;
+  imported: Array<{
+    sourcePath: string;
+    sourceDocumentId: string;
+    sourceDocumentPath: string;
+    parentSliceIds: string[];
+  }>;
+  generatedAt: string;
 }
 
 export interface KnowledgeUpdateResult {

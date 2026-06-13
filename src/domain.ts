@@ -124,6 +124,46 @@ export interface DiagnosticRequestContext {
     evidence: Evidence[];
     claims: DiagnosticClaim[];
   }>;
+  knowledge?: {
+    route?: {
+      normalizedQuestion: string;
+      moduleCandidates: string[];
+      intentCandidates: string[];
+      keywords: string[];
+      sourceTypes: string[];
+      codeEscalationSignals: string[];
+      risks: string[];
+    };
+    evidence: Array<{
+      id: string;
+      source: string;
+      title: string;
+      summary: string;
+      confidence: 'low' | 'medium' | 'high';
+      status: string;
+      matchedTerms: string[];
+    }>;
+    judge: {
+      answerable: boolean;
+      confidence: 'low' | 'medium' | 'high';
+      need_code_escalation: boolean;
+      reason: string;
+      evidence: string[];
+      risks: string[];
+      missing_info: string[];
+      conflicts: string[];
+      recommended_next_action: string;
+      answer_score: number;
+    };
+  };
+  deepQuery?: {
+    permission: 'read_only';
+    artifactTargets: string[];
+    anchorTerms: string[];
+    likelyPaths: string[];
+    avoidAssumptions: string[];
+    correctionActions: string[];
+  };
 }
 
 export interface DiagnosticRun {

@@ -114,48 +114,1504 @@ export function renderApp(): string {
     }
     @media (max-width: 700px) { main { padding: 12px 12px 0; } .case { display: grid; } .msg { max-width: 100%; } }
     @media (max-width: 520px) { .composer-actions { align-items: stretch; } .persona-control { flex: 1 1 auto; } #sendButton { align-self: flex-end; } }
+
+    /* design refresh 2026-06 */
+    :root {
+      --bg: #f4f7fb;
+      --surface: #fdfefe;
+      --surface-soft: #f8fafd;
+      --surface-strong: #eef3fa;
+      --text: #182230;
+      --muted: #667085;
+      --soft: #8a96a8;
+      --border: #d9e1ec;
+      --border-strong: #bfccdb;
+      --accent: #2d6cdf;
+      --accent-hover: #2159be;
+      --accent-soft: #edf4ff;
+      --accent-line: #b9d4ff;
+      --warn: #b96f10;
+      --warn-soft: #fff7e8;
+      --warn-line: #efca82;
+      --error: #b42318;
+      --error-soft: #fff4f3;
+      --error-line: #f5b5af;
+      --ok: #247a43;
+      --ok-soft: #f1fbf5;
+      --ok-line: #a7d8b8;
+      --shadow-sm: 0 1px 2px rgba(16, 24, 40, .05);
+      --shadow-md: 0 12px 32px rgba(16, 24, 40, .08);
+      --shadow-drawer: -24px 0 60px rgba(16, 24, 40, .18);
+      --radius: 8px;
+      --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101620;
+        --surface: #171e2a;
+        --surface-soft: #1d2634;
+        --surface-strong: #253247;
+        --text: #e8edf5;
+        --muted: #a3adbc;
+        --soft: #7f8ba0;
+        --border: #313c4f;
+        --border-strong: #48576f;
+        --accent: #78adff;
+        --accent-hover: #9ac2ff;
+        --accent-soft: #172b4c;
+        --accent-line: #365d96;
+        --warn: #f4b24c;
+        --warn-soft: #322512;
+        --warn-line: #795d24;
+        --error: #ff8d84;
+        --error-soft: #351a1b;
+        --error-line: #70413e;
+        --ok: #6cc58b;
+        --ok-soft: #13291d;
+        --ok-line: #315f43;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, .28);
+        --shadow-md: 0 16px 36px rgba(0, 0, 0, .28);
+        --shadow-drawer: -24px 0 60px rgba(0, 0, 0, .44);
+      }
+    }
+    html, body { min-height: 100%; }
+    body {
+      font-family: var(--font-sans);
+      font-size: 14px;
+      background: linear-gradient(180deg, var(--surface-soft) 0%, var(--bg) 48%, var(--surface-strong) 100%);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .app { min-height: 100dvh; grid-template-rows: 58px minmax(0, 1fr); }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      gap: 16px;
+      padding: 0 18px 0 14px;
+      background: rgba(253, 254, 255, .88);
+      border-bottom-color: var(--border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    @media (prefers-color-scheme: dark) { header { background: rgba(17, 23, 34, .88); } }
+    .brand, .brand-button { min-width: 0; font-weight: 750; letter-spacing: 0; }
+    .brand-button { height: 38px; padding: 0 8px 0 0; border-radius: var(--radius); cursor: pointer; }
+    .brand-button:hover { background: var(--surface-soft); }
+    .mark {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--accent), #214a96);
+      color: #fdfefe;
+      font-weight: 800;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 6px 16px rgba(45, 108, 223, .18);
+    }
+    .pill {
+      min-width: 0;
+      max-width: min(54vw, 560px);
+      display: inline-flex;
+      align-items: center;
+      border-color: var(--border);
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-weight: 650;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pill.warn { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+    .pill.error { border-color: var(--error-line); background: var(--error-soft); color: var(--error); }
+    .workspace-shell { height: calc(100dvh - 58px); grid-template-columns: 280px minmax(0, 1fr); }
+    .sessions-sidebar {
+      border-right-color: var(--border);
+      background: linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .sessions-head { padding: 16px 12px 12px; border-bottom-color: var(--border); gap: 12px; }
+    .sessions-head h2 { font-size: 13px; line-height: 1.2; font-weight: 800; color: var(--text); }
+    .sessions-head .primary { width: 100%; }
+    .session-list { gap: 8px; padding: 10px 10px 14px; }
+    .session-item {
+      min-height: 66px;
+      border-color: var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+      transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+    .session-item:hover { transform: translateY(-1px); border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+    .session-item.active { border-color: var(--accent-line); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent), var(--shadow-sm); }
+    .session-open { min-height: 64px; align-content: center; gap: 5px; padding: 10px 10px 10px 12px; border-radius: var(--radius); box-shadow: none; }
+    .session-open:hover, .session-open:focus-visible { background: transparent; box-shadow: none; transform: none; }
+    .session-more { width: 30px; height: 30px; border-radius: var(--radius); color: var(--muted); background: var(--surface-soft); }
+    .session-menu-wrap { padding-right: 8px; }
+    .session-menu { right: 8px; top: 44px; z-index: 20; width: 116px; padding: 5px; border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-md); }
+    .session-menu button { box-shadow: none; }
+    .session-menu button:hover { background: var(--accent-soft); transform: none; box-shadow: none; }
+    .session-title { font-size: 13px; font-weight: 760; }
+    .session-meta { color: var(--muted); font-weight: 560; }
+    main { max-width: 1040px; padding: 22px clamp(16px, 3vw, 34px) 0; grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px; }
+    .case {
+      background: rgba(253, 254, 255, .92);
+      border-color: var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 16px;
+      box-shadow: var(--shadow-sm);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    @media (prefers-color-scheme: dark) { .case { background: rgba(23, 30, 42, .92); } }
+    .case > div:first-child { min-width: 0; }
+    .case-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    h1 { font-size: 17px; line-height: 1.32; font-weight: 800; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .muted { color: var(--muted); font-size: 12px; }
+    button {
+      border-color: var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      box-shadow: var(--shadow-sm);
+      transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease, color .16s ease;
+    }
+    button:hover { transform: translateY(-1px); border-color: var(--border-strong); background: var(--surface-soft); }
+    button:active { transform: translateY(0); box-shadow: none; }
+    button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+    button:disabled, textarea:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: .58; }
+    button.primary { border-color: var(--accent); background: var(--accent); color: #fdfefe; box-shadow: 0 10px 22px rgba(45, 108, 223, .18); }
+    button.primary:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+    @media (prefers-color-scheme: dark) { button.primary { color: #0d1828; } }
+    .chat { display: flex; flex-direction: column; gap: 14px; padding: 4px 2px 18px; scroll-behavior: smooth; }
+    .chat:empty::before {
+      content: "选择一个历史会话，或发起新的诊断";
+      width: min(100%, 520px);
+      margin: 12vh auto 0;
+      padding: 18px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius);
+      color: var(--muted);
+      text-align: center;
+      background: rgba(253, 254, 255, .55);
+    }
+    .msg { max-width: min(760px, 82%); border-color: var(--border); border-radius: var(--radius); padding: 12px 14px; line-height: 1.68; background: var(--surface); box-shadow: var(--shadow-sm); }
+    .msg.user { align-self: flex-end; margin-left: 0; background: var(--accent-soft); border-color: var(--accent-line); color: var(--text); }
+    .msg.helper { align-self: flex-start; margin-right: 0; }
+    .msg.error { border-color: var(--error-line); background: var(--error-soft); color: var(--error); }
+    .msg.helper h1, .msg.helper h2, .msg.helper h3 { color: var(--text); white-space: normal; }
+    .msg.helper code { background: var(--surface-strong); border-radius: 6px; font: 12px var(--font-mono); }
+    .msg.helper pre { border-color: #263550; border-radius: var(--radius); background: #101828; font: 12px var(--font-mono); }
+    .msg.helper strong { color: var(--accent); font-weight: 800; }
+    .msg.thinking { color: var(--muted); }
+    .msg.progress { width: min(720px, 90%); max-width: min(720px, 90%); padding: 0; border: 0; background: transparent; box-shadow: none; }
+    .msg.progress.thinking { display: block; }
+    .progress-card { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+    .progress-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .progress-title { display: grid; gap: 3px; min-width: 0; }
+    .progress-title strong { color: var(--text); font-size: 14px; font-weight: 800; }
+    .progress-title span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .progress-percent { flex: 0 0 auto; color: var(--accent); font: 700 12px var(--font-mono); }
+    .progress-track { height: 7px; border-radius: 999px; background: var(--surface-strong); overflow: hidden; }
+    .progress-bar { display: block; height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #72a8ff); transition: width .28s ease; }
+    .progress-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .progress-step { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-soft); color: var(--muted); padding: 6px 7px; font-size: 11px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .progress-step.done { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+    .progress-step.current { border-color: var(--accent); background: var(--surface); color: var(--text); }
+    .progress-note { color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .progress-technical { display: grid; gap: 5px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .progress-technical span { min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+    .progress-technical strong { color: var(--accent); }
+    .thinking-indicator span { background: var(--accent); }
+    .activity-trace { padding-left: 10px; border-left: 2px solid var(--accent-line); }
+    .activity-step { color: var(--muted); line-height: 1.7; }
+    .activity-step strong { color: var(--accent); font-weight: 800; }
+    .composer { background: rgba(253, 254, 255, .94); border-color: var(--border); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -12px 36px rgba(16, 24, 40, .08); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+    @media (prefers-color-scheme: dark) { .composer { background: rgba(23, 30, 42, .94); box-shadow: 0 -12px 36px rgba(0, 0, 0, .32); } }
+    .composer:focus-within { border-color: var(--accent-line); }
+    textarea { min-height: 82px; border: 1px solid transparent; border-radius: var(--radius); padding: 10px 11px; background: var(--surface-soft); color: var(--text); }
+    textarea::placeholder { color: var(--soft); opacity: 1; }
+    textarea:focus { border-color: var(--accent-line); background: var(--surface); }
+    .composer-meta { gap: 7px; }
+    .composer-meta .pill { min-height: 28px; max-width: none; background: var(--surface-soft); }
+    .composer-actions { padding-top: 10px; border-top: 1px solid var(--border); }
+    .persona-control { height: 36px; border-color: var(--border); border-radius: var(--radius); background: var(--surface-soft); }
+    .persona-label { color: var(--muted); font-weight: 750; }
+    .persona-control select { height: 30px; font-weight: 750; color: var(--text); }
+    #sendButton { min-width: 66px; }
+    .context-meter { min-width: min(440px, 100%); gap: 6px; }
+    .context-meter-track { height: 6px; background: var(--surface-strong); }
+    .context-meter-bar { background: var(--accent); }
+    .context-meter.warn .context-meter-bar { background: var(--warn); }
+    .context-meter.error .context-meter-bar { background: var(--error); }
+    .context-meter-text { color: var(--muted); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .drawer { z-index: 30; }
+    .shade { background: rgba(16, 24, 40, .38); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+    .drawer-panel { width: min(620px, 92vw); background: var(--surface); border-left: 1px solid var(--border); grid-template-rows: 58px minmax(0, 1fr); box-shadow: var(--shadow-drawer); }
+    .drawer-head { border-bottom-color: var(--border); padding: 0 16px; background: var(--surface); }
+    .drawer-head strong { font-size: 14px; font-weight: 800; }
+    .logs, .settings-form { background: var(--surface-soft); }
+    .log, .log-block, .status, .agent-card { border-color: var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+    .log-block.ok { border-color: var(--ok-line); background: var(--ok-soft); }
+    .log-block.warn { border-color: var(--warn-line); background: var(--warn-soft); }
+    .log-block.error { border-color: var(--error-line); background: var(--error-soft); }
+    .log-title { font-weight: 800; color: var(--text); }
+    .log-title span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-label { background: rgba(253, 254, 255, .72); border-color: rgba(102, 112, 133, .22); color: var(--muted); }
+    @media (prefers-color-scheme: dark) { .log-label { background: rgba(23, 30, 42, .72); } }
+    .log-meta { color: var(--muted); font-family: var(--font-mono); }
+    .log-command { border-color: #263550; border-radius: var(--radius); background: #101828; font: 11px var(--font-mono); }
+    label { font-size: 12px; font-weight: 760; color: var(--text); }
+    input, select { border-color: var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+    input::placeholder { color: var(--soft); opacity: 1; }
+    .status { color: var(--muted); }
+    .agent-card strong { color: var(--text); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    /* compound workspace refresh */
+    :root {
+      --radius: 12px;
+      --shadow-md: 0 6px 8px rgba(16, 24, 40, .07);
+    }
+    header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+    .topbar-left, .topbar-center, .topbar-actions {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+    }
+    .topbar-center { justify-content: center; }
+    .topbar-actions { justify-content: flex-end; gap: 8px; }
+    .workspace-pill {
+      min-width: 0;
+      max-width: min(54vw, 680px);
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: var(--shadow-sm);
+    }
+    .top-status {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .avatar-button {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border-radius: 999px;
+      border-color: var(--border-strong);
+      background: var(--text);
+      color: var(--surface);
+      display: grid;
+      place-items: center;
+      font-weight: 850;
+      box-shadow: none;
+    }
+    .avatar-button:hover { background: var(--text); color: var(--surface); }
+    @media (prefers-color-scheme: dark) {
+      .avatar-button { background: var(--surface-strong); color: var(--text); }
+      .avatar-button:hover { background: var(--surface-strong); color: var(--text); }
+    }
+    .workspace-shell {
+      grid-template-columns: 264px minmax(0, 1fr) 340px;
+    }
+    main {
+      max-width: none;
+      width: 100%;
+      padding-inline: clamp(14px, 2vw, 22px);
+    }
+    .sessions-head {
+      grid-template-columns: 1fr;
+    }
+    .session-search {
+      width: 100%;
+      height: 34px;
+      background: var(--surface);
+      font-size: 12px;
+    }
+    .session-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .session-filters button {
+      height: 28px;
+      padding: 0 9px;
+      border-radius: 999px;
+      box-shadow: none;
+      color: var(--muted);
+      background: var(--surface);
+    }
+    .session-filters button.active {
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .session-state {
+      display: inline-flex;
+      width: max-content;
+      max-width: 100%;
+      align-items: center;
+      min-height: 20px;
+      padding: 0 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      line-height: 1.2;
+    }
+    .session-state.status-diagnosing,
+    .session-state.status-ready_for_diagnosis {
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .session-state.status-concluded {
+      border-color: var(--ok-line);
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+    .session-state.status-need_input,
+    .session-state.status-partial {
+      border-color: var(--warn-line);
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
+    .case-title-row {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .case-title-row h1 { min-width: 0; }
+    .case-status {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .case-status.status-concluded {
+      border-color: var(--ok-line);
+      background: var(--ok-soft);
+      color: var(--ok);
+    }
+    .case-status.status-diagnosing,
+    .case-status.status-ready_for_diagnosis {
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .case-status.status-need_input,
+    .case-status.status-partial {
+      border-color: var(--warn-line);
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
+    .case-step-rail {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .case-step {
+      min-width: 0;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .case-step.done {
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .case-step.current {
+      border-color: var(--accent);
+      background: var(--surface);
+      color: var(--text);
+    }
+    .chat {
+      padding-inline: 38px;
+    }
+    .msg {
+      position: relative;
+      max-width: min(720px, 82%);
+      border-radius: 14px;
+    }
+    .msg.user {
+      margin-right: 34px;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fdfefe;
+      box-shadow: none;
+    }
+    .msg.user::after,
+    .msg.helper::before,
+    .msg.progress::before {
+      position: absolute;
+      top: 2px;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+      line-height: 1;
+    }
+    .msg.user::after {
+      content: "我";
+      right: -38px;
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .msg.helper,
+    .msg.progress {
+      margin-left: 34px;
+    }
+    .msg.helper::before,
+    .msg.progress::before {
+      content: "H";
+      left: -38px;
+      border-color: var(--border-strong);
+      color: var(--text);
+    }
+    .msg.user code {
+      background: rgba(255, 255, 255, .18);
+      color: #fdfefe;
+    }
+    .msg.progress {
+      width: min(760px, 90%);
+      max-width: min(760px, 90%);
+      background: transparent;
+    }
+    .progress-card {
+      border-radius: 14px;
+    }
+    .progress-steps {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    .progress-skeleton {
+      display: grid;
+      gap: 7px;
+      padding-top: 4px;
+    }
+    .progress-skeleton span {
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--surface-strong), var(--surface-soft), var(--surface-strong));
+      background-size: 220% 100%;
+      animation: skeleton-pan 1.4s ease-in-out infinite;
+    }
+    .progress-skeleton span:nth-child(2) { width: 82%; }
+    .progress-skeleton span:nth-child(3) { width: 58%; }
+    @keyframes skeleton-pan {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0 50%; }
+    }
+    .progress-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 2px;
+    }
+    .composer {
+      border-radius: 16px 16px 0 0;
+    }
+    .composer-meta .pill {
+      border-radius: 999px;
+    }
+    .insight-panel {
+      min-height: 0;
+      border-left: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    }
+    .insight-head {
+      padding: 16px 14px 10px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .insight-head strong {
+      display: block;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 850;
+      line-height: 1.2;
+    }
+    .insight-head span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .insight-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      padding: 0 12px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .insight-tabs button {
+      height: 32px;
+      box-shadow: none;
+    }
+    .insight-tabs button.active {
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .insight-content {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+    .insight-footer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .insight-footer button {
+      width: 100%;
+    }
+    .insight-card,
+    .tree-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      padding: 11px;
+      display: grid;
+      gap: 8px;
+      box-shadow: var(--shadow-sm);
+    }
+    .insight-card strong,
+    .tree-card strong {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 850;
+    }
+    .insight-card p,
+    .tree-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .insight-meta {
+      color: var(--muted);
+      font: 700 11px var(--font-mono);
+      overflow-wrap: anywhere;
+    }
+    .trace-list,
+    .tree-list {
+      display: grid;
+      gap: 7px;
+    }
+    .trace-item,
+    .tree-node {
+      display: grid;
+      gap: 3px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-soft);
+    }
+    .trace-item.active,
+    .tree-node.active {
+      border-color: var(--accent-line);
+      background: var(--accent-soft);
+    }
+    .trace-item strong,
+    .tree-node strong {
+      font-size: 12px;
+    }
+    .trace-item span,
+    .tree-node span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .evidence-row {
+      display: grid;
+      gap: 5px;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-soft);
+    }
+    .evidence-row strong {
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .evidence-row span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .placeholder-note {
+      border-style: dashed;
+      color: var(--muted);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .001ms !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+    }
+    @media (max-width: 1180px) {
+      .workspace-shell { grid-template-columns: 248px minmax(0, 1fr); }
+      .insight-panel { display: none; }
+    }
+    @media (max-width: 980px) {
+      .workspace-shell { grid-template-columns: 248px minmax(0, 1fr); }
+      main { padding-inline: 16px; }
+      .case { grid-template-columns: 1fr; }
+      .case-actions { justify-content: flex-start; }
+    }
+    @media (max-width: 820px) {
+      header { padding-inline: 12px; }
+      .workspace-shell { grid-template-columns: 1fr; grid-template-rows: 154px minmax(0, 1fr); }
+      .sessions-sidebar { border-right: 0; border-bottom-color: var(--border); }
+      .sessions-head .primary { width: auto; }
+      .session-list { grid-auto-columns: minmax(220px, 272px); padding: 8px 10px 10px; }
+      .session-item { min-height: 60px; }
+      .session-open { min-height: 58px; }
+    }
+    @media (max-width: 700px) {
+      main { padding: 12px 12px 0; gap: 10px; }
+      .case { padding: 12px; }
+      .case-actions button { flex: 1 1 auto; }
+      .msg, .msg.progress { max-width: 100%; width: 100%; }
+      .chat { padding-inline: 0; }
+      .msg.user, .msg.helper, .msg.progress { margin-left: 0; margin-right: 0; }
+      .msg.user::after, .msg.helper::before, .msg.progress::before { display: none; }
+      h1, .context-meter-text { white-space: normal; }
+      .progress-steps, .case-step-rail { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 520px) {
+      #workspace { display: none; }
+      .top-status, .topbar-actions > button:not(.avatar-button) { display: none; }
+      .field-row { grid-template-columns: 1fr; }
+      .drawer-panel { width: 100vw; }
+    }
+
+    /* design fidelity pass: follow the confirmed workspace mock more closely */
+    :root {
+      --bg: #eef2f6;
+      --surface: #ffffff;
+      --surface-soft: #f7f9fc;
+      --surface-strong: #edf2f8;
+      --text: #101828;
+      --muted: #667085;
+      --soft: #98a2b3;
+      --border: #d8e0eb;
+      --border-strong: #b8c7da;
+      --accent: #2f6fed;
+      --accent-hover: #245fcf;
+      --accent-soft: #eef5ff;
+      --accent-line: #bad5ff;
+      --ok: #1f7a4d;
+      --ok-soft: #effaf4;
+      --ok-line: #a7d9bd;
+      --warn: #a15c07;
+      --warn-soft: #fff7e8;
+      --warn-line: #efc978;
+      --shadow-sm: 0 1px 2px rgba(16, 24, 40, .04);
+      --shadow-md: 0 10px 24px rgba(16, 24, 40, .06);
+      --radius: 12px;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+    }
+    .app { grid-template-rows: 64px minmax(0, 1fr); }
+    header {
+      height: 64px;
+      padding: 0 18px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: #2f6fed;
+      box-shadow: none;
+    }
+    .brand-button {
+      gap: 10px;
+      height: 40px;
+      color: #152033;
+    }
+    .brand-button:hover { background: #f3f6fa; }
+    .workspace-pill {
+      height: 34px;
+      max-width: min(48vw, 620px);
+      background: #fff;
+      border-color: var(--border);
+      box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+      color: #526274;
+    }
+    .top-status { display: none; }
+    .topbar-actions button:not(.avatar-button) {
+      height: 36px;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+    }
+    .topbar-actions button:not(.avatar-button):hover {
+      background: #f6f9fd;
+      transform: none;
+    }
+    .avatar-button {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      background: #111827;
+      color: #fff;
+      box-shadow: none;
+    }
+    .avatar-button:hover {
+      transform: none;
+      background: #111827;
+      color: #fff;
+    }
+    .workspace-shell {
+      height: calc(100dvh - 64px);
+      grid-template-columns: 252px minmax(0, 1fr) 360px;
+      background: var(--bg);
+    }
+    .sessions-sidebar {
+      background: #fff;
+      border-right: 1px solid var(--border);
+    }
+    .sessions-head {
+      padding: 18px 12px 14px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+    .sessions-head h2 {
+      font-size: 14px;
+      line-height: 1;
+    }
+    .sessions-head .primary {
+      height: 40px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+    .session-search {
+      height: 36px;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .session-filters { gap: 7px; }
+    .session-filters button {
+      height: 30px;
+      border-radius: 999px;
+      background: #fff;
+    }
+    .session-list {
+      padding: 12px;
+      gap: 10px;
+    }
+    .session-item {
+      min-height: 72px;
+      border-radius: 12px;
+      border-color: #dce5f1;
+      box-shadow: none;
+    }
+    .session-item:hover {
+      transform: none;
+      border-color: var(--border-strong);
+      box-shadow: none;
+    }
+    .session-item.active {
+      border-color: #9cc6ff;
+      background: #f2f7ff;
+      box-shadow: inset 0 0 0 1px rgba(47, 111, 237, .08);
+    }
+    .session-open {
+      min-height: 70px;
+      padding: 11px 10px 11px 12px;
+      gap: 6px;
+    }
+    .session-title { font-size: 13px; }
+    .session-state {
+      min-height: 20px;
+      padding-inline: 8px;
+      background: #fff;
+    }
+    main {
+      padding: 22px 24px 0;
+      gap: 16px;
+      background: var(--bg);
+    }
+    .case {
+      padding: 18px 18px 16px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .case-title-row {
+      gap: 10px;
+      align-items: flex-start;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 760;
+      line-height: 1.35;
+    }
+    .case-status {
+      min-height: 24px;
+      padding-inline: 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: #f7f9fc;
+    }
+    .case-actions {
+      gap: 8px;
+      flex: 0 0 auto;
+      position: relative;
+    }
+    .case-actions button {
+      height: 36px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+    .case-actions button:hover { transform: none; }
+    .case-actions .case-log-button {
+      width: 40px;
+      padding-inline: 0;
+    }
+    .case-actions .case-ticket-button {
+      min-width: 76px;
+    }
+    .case-more {
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .case-more summary {
+      width: 40px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #d8e0eb;
+      border-radius: 10px;
+      background: #fff;
+      color: #152033;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .case-more summary::-webkit-details-marker {
+      display: none;
+    }
+    .case-more summary:hover {
+      background: #f6f9fd;
+    }
+    .case-more[open] summary {
+      border-color: #bad5ff;
+      background: #eef5ff;
+      color: #245fcf;
+    }
+    .case-more-menu {
+      position: absolute;
+      right: 0;
+      top: 42px;
+      z-index: 22;
+      width: 132px;
+      display: grid;
+      gap: 4px;
+      padding: 6px;
+      border: 1px solid #d8e0eb;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 14px 30px rgba(16, 24, 40, .12);
+    }
+    .case-more-menu button {
+      width: 100%;
+      height: 34px;
+      justify-content: flex-start;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      padding-inline: 9px;
+    }
+    .case-more-menu button:hover {
+      background: #f3f7fc;
+    }
+    .case-step-rail {
+      display: flex;
+      gap: 8px;
+      margin-top: 13px;
+      overflow: hidden;
+    }
+    .case-step {
+      flex: 0 1 auto;
+      height: 28px;
+      min-width: 76px;
+      padding-inline: 10px;
+      justify-content: center;
+      border-radius: 999px;
+      background: #f8fafc;
+    }
+    .case-step.current {
+      border-color: #1f2937;
+      color: #1f2937;
+    }
+    .context-meter {
+      margin-top: 12px;
+      min-width: 0;
+      width: min(520px, 100%);
+    }
+    .context-meter-track {
+      height: 6px;
+      background: #edf2f8;
+    }
+    .chat {
+      padding: 4px 44px 20px;
+      gap: 16px;
+    }
+    .chat:empty::before {
+      content: none;
+      display: none;
+    }
+    .empty-workspace {
+      width: min(100%, 680px);
+      margin: 8vh auto 0;
+      display: grid;
+      gap: 14px;
+      color: #667085;
+    }
+    .empty-card {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid #d8e0eb;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .72);
+    }
+    .empty-card strong {
+      color: #152033;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.35;
+    }
+    .empty-card p {
+      margin: 0;
+      max-width: 62ch;
+      color: #667085;
+      line-height: 1.65;
+    }
+    .empty-route {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .empty-route span {
+      min-height: 54px;
+      display: grid;
+      align-content: center;
+      gap: 4px;
+      padding: 9px;
+      border: 1px solid #dce5f1;
+      border-radius: 12px;
+      background: #fff;
+      color: #667085;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .empty-route b {
+      color: #152033;
+      font-size: 12px;
+    }
+    .empty-sample {
+      display: grid;
+      gap: 10px;
+      padding-inline: 8px;
+    }
+    .empty-sample span {
+      width: max-content;
+      max-width: min(560px, 84%);
+      padding: 10px 12px;
+      border-radius: 15px;
+      border: 1px solid #dce5f1;
+      background: #fff;
+      color: #667085;
+      line-height: 1.55;
+    }
+    .empty-sample span:last-child {
+      justify-self: end;
+      border-color: #2f6fed;
+      background: #2f6fed;
+      color: #fff;
+    }
+    .msg {
+      max-width: min(760px, 82%);
+      padding: 13px 15px;
+      border-radius: 16px;
+      border-color: #dce5f1;
+      box-shadow: none;
+      font-size: 14px;
+      line-height: 1.72;
+    }
+    .msg.helper,
+    .msg.progress {
+      margin-left: 42px;
+      background: #fff;
+    }
+    .msg.user {
+      margin-right: 42px;
+      background: #2f6fed;
+      border-color: #2f6fed;
+      color: #fff;
+    }
+    .msg.user::after,
+    .msg.helper::before,
+    .msg.progress::before {
+      top: 0;
+      width: 34px;
+      height: 34px;
+      border-color: #d8e0eb;
+      box-shadow: none;
+    }
+    .msg.user::after {
+      right: -44px;
+      background: #111827;
+      color: #fff;
+      border-color: #111827;
+    }
+    .msg.helper::before,
+    .msg.progress::before {
+      left: -44px;
+      background: #fff;
+      color: #152033;
+    }
+    .progress-card {
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: none;
+      border-color: #dce5f1;
+    }
+    .progress-card-head {
+      align-items: center;
+    }
+    .progress-title strong { font-size: 15px; }
+    .progress-track { height: 8px; }
+    .progress-bar { background: #2f6fed; }
+    .progress-steps {
+      gap: 8px;
+    }
+    .progress-step {
+      height: 30px;
+      padding-inline: 9px;
+      border-radius: 999px;
+      background: #f8fafc;
+    }
+    .progress-step.current {
+      border-color: #111827;
+      color: #111827;
+    }
+    .progress-actions button {
+      height: 34px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+    .composer {
+      margin-bottom: 0;
+      padding: 12px;
+      border-radius: 16px 16px 0 0;
+      border-color: #d8e0eb;
+      background: #fff;
+      box-shadow: 0 -12px 38px rgba(16, 24, 40, .08);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    textarea {
+      min-height: 88px;
+      border-radius: 12px;
+      background: #f8fafc;
+      color: #152033;
+    }
+    textarea:focus {
+      background: #fff;
+      border-color: #bad5ff;
+    }
+    .composer-actions {
+      padding-top: 11px;
+      border-top-color: #d8e0eb;
+    }
+    .composer-meta .pill,
+    .persona-control {
+      background: #fff;
+      border-color: #d8e0eb;
+    }
+    #sendButton {
+      height: 38px;
+      min-width: 70px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+    .insight-panel {
+      background: #fff;
+      border-left: 1px solid var(--border);
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    }
+    .insight-head {
+      padding: 18px 16px 12px;
+      border-bottom: 0;
+    }
+    .insight-head strong {
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+    .insight-head span {
+      margin-top: 5px;
+      color: #667085;
+    }
+    .insight-tabs {
+      padding: 0 14px 14px;
+      gap: 8px;
+      border-bottom-color: #d8e0eb;
+    }
+    .insight-tabs button {
+      height: 34px;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: none;
+    }
+    .insight-tabs button.active {
+      border-color: #9cc6ff;
+      background: #eef5ff;
+      color: #245fcf;
+    }
+    .insight-content {
+      padding: 14px;
+      gap: 12px;
+    }
+    .insight-card,
+    .tree-card {
+      border-radius: 14px;
+      border-color: #dce5f1;
+      box-shadow: none;
+      padding: 13px;
+    }
+    .insight-card strong,
+    .tree-card strong {
+      font-size: 13px;
+    }
+    .trace-map,
+    .knowledge-map {
+      position: relative;
+      display: grid;
+      gap: 10px;
+      padding-left: 18px;
+    }
+    .trace-map::before,
+    .knowledge-map::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 9px;
+      bottom: 9px;
+      width: 1px;
+      background: #d8e0eb;
+    }
+    .trace-node,
+    .knowledge-node {
+      position: relative;
+      display: grid;
+      gap: 4px;
+      padding: 10px 11px;
+      border: 1px solid #dce5f1;
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+    .trace-node::before,
+    .knowledge-node::before {
+      content: "";
+      position: absolute;
+      left: -15px;
+      top: 16px;
+      width: 9px;
+      height: 9px;
+      border: 2px solid #c6d3e4;
+      border-radius: 999px;
+      background: #fff;
+    }
+    .trace-node.active,
+    .knowledge-node.active {
+      border-color: #9cc6ff;
+      background: #eef5ff;
+    }
+    .trace-node.active::before,
+    .knowledge-node.active::before {
+      border-color: #2f6fed;
+      background: #2f6fed;
+    }
+    .trace-node strong,
+    .knowledge-node strong {
+      color: #152033;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .trace-node span,
+    .knowledge-node span {
+      color: #667085;
+      font-size: 11px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+    .knowledge-branch {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 6px;
+      padding: 10px;
+      border: 1px solid #dce5f1;
+      border-radius: 12px;
+      background: #fff;
+      color: #667085;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .knowledge-branch strong {
+      color: #152033;
+      font-size: 11px;
+    }
+    .knowledge-branch em {
+      font-style: normal;
+      color: #98a2b3;
+    }
+    .evidence-row {
+      border-radius: 12px;
+      border-color: #dce5f1;
+      background: #f8fafc;
+    }
+    .placeholder-note {
+      border-style: dashed;
+      background: #fbfcfe;
+    }
+    .insight-footer {
+      padding: 12px 14px;
+      border-top-color: #d8e0eb;
+    }
+    .insight-footer button {
+      height: 38px;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    @media (prefers-color-scheme: dark) {
+      header,
+      .sessions-sidebar,
+      .case,
+      .composer,
+      .insight-panel,
+      .msg.helper,
+      .progress-card {
+        background: #fff;
+        color: #101828;
+      }
+      body,
+      .workspace-shell,
+      main {
+        background: #eef2f6;
+        color: #101828;
+      }
+      .avatar-button,
+      .avatar-button:hover,
+      .msg.user::after {
+        background: #111827;
+        color: #fff;
+      }
+      button.primary,
+      button.primary:hover {
+        color: #fff;
+      }
+    }
+    @media (max-width: 1240px) {
+      .workspace-shell { grid-template-columns: 248px minmax(0, 1fr); }
+      .insight-panel { display: none; }
+      .chat { padding-inline: 34px; }
+    }
+    @media (max-width: 820px) {
+      .app { grid-template-rows: 58px minmax(0, 1fr); }
+      header { height: 58px; }
+      .workspace-shell { height: calc(100dvh - 58px); }
+      main { padding: 14px 12px 0; }
+      .chat { padding-inline: 0; }
+      .case-step-rail { flex-wrap: wrap; }
+      .case {
+        grid-template-columns: 1fr;
+      }
+      .case-actions {
+        justify-content: flex-start;
+      }
+      .case-actions button,
+      .case-more {
+        flex: 0 0 auto;
+      }
+      .case-more-menu button {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="app">
     <header>
-      <button class="brand-button" onclick="openSettings()" title="打开配置"><div class="mark">H</div><span>super helper</span></button>
-      <span class="pill" id="workspace">workspace loading...</span>
+      <div class="topbar-left">
+        <button class="brand-button" onclick="openSettings()" title="打开配置"><div class="mark">H</div><span>super helper</span></button>
+      </div>
+      <div class="topbar-center">
+        <span class="workspace-pill" id="workspace">workspace loading...</span>
+      </div>
+      <div class="topbar-actions">
+        <span class="top-status">知识库审计预留</span>
+        <button onclick="openTicketDraft()">升级工单</button>
+        <button class="avatar-button" onclick="openAccountPlaceholder()" title="用户系统预留">访</button>
+      </div>
     </header>
     <div class="workspace-shell">
       <aside class="sessions-sidebar">
         <div class="sessions-head">
           <h2>历史会话</h2>
-          <button class="primary" onclick="newCase()">新对话</button>
+          <button class="primary" onclick="newCase()">新建诊断</button>
+          <label class="sr-only" for="sessionSearch">搜索会话</label>
+          <input id="sessionSearch" class="session-search" placeholder="搜索 case 或结论" />
+          <div class="session-filters" aria-label="会话筛选">
+            <button class="active" id="sessionFilter-all" onclick="setSessionFilter('all')">全部</button>
+            <button id="sessionFilter-active" onclick="setSessionFilter('active')">处理中</button>
+            <button id="sessionFilter-concluded" onclick="setSessionFilter('concluded')">已有结论</button>
+            <button id="sessionFilter-need_input" onclick="setSessionFilter('need_input')">待补充</button>
+          </div>
         </div>
         <div class="session-list" id="sessionList"><div class="muted">正在加载...</div></div>
       </aside>
       <main>
         <section class="case">
           <div>
-            <h1 id="title">新对话</h1>
-            <div class="muted" id="meta">本地 session · helper agent 会先审核上下文，再决定追问或调用 Claude Code</div>
+            <div class="case-title-row">
+              <h1 id="title">新对话</h1>
+              <span class="case-status status-collecting_input" id="caseStatus">新建</span>
+            </div>
+            <div class="muted" id="meta">本地会话，helper agent 会先审核上下文，再决定追问或调用 Claude Code</div>
+            <div class="case-step-rail" id="caseStepRail"></div>
             <div class="context-meter" id="contextMeter">
               <div class="context-meter-track"><div class="context-meter-bar" id="contextMeterBar"></div></div>
               <div class="context-meter-text" id="contextMeterText">上下文窗口：等待会话初始化</div>
             </div>
           </div>
-          <div>
-            <button onclick="openSettings()">配置</button>
-            <button onclick="openLogs()">查看诊断日志</button>
-            <button onclick="newCase()">新对话</button>
+          <div class="case-actions">
+            <button class="case-log-button" onclick="openLogs()" title="查看诊断日志">日志</button>
+            <button class="case-ticket-button" onclick="openTicketDraft()">升级工单</button>
+            <details class="case-more">
+              <summary title="更多操作" aria-label="更多操作">...</summary>
+              <div class="case-more-menu">
+                <button onclick="openSettings()">配置</button>
+                <button onclick="markResolvedPlaceholder()">标记已解决</button>
+                <button onclick="newCase()">新建诊断</button>
+              </div>
+            </details>
           </div>
         </section>
         <section class="chat" id="chat"></section>
         <section class="composer">
+          <label class="sr-only" for="input">输入问题</label>
           <textarea id="input" placeholder="可以问项目问题、描述故障、回答追问，或输入：不清楚"></textarea>
-          <div class="composer-meta status-pills"><span class="pill">Agent 审核</span><span class="pill">Claude 只读</span><span class="pill">session 复用</span></div>
+          <div class="composer-meta status-pills"><span class="pill">Agent 审核</span><span class="pill">session 复用</span><span class="pill">Claude 只读</span></div>
           <div class="composer-actions">
             <div class="persona-control"><span class="persona-label">用户视角</span><select id="personaSelect" aria-label="用户视角"><option value="operations">运营人员</option><option value="support">技术支持</option><option value="customer">客户</option><option value="developer">开发人员</option></select></div>
             <button class="primary" id="sendButton" onclick="send()">发送</button>
           </div>
         </section>
       </main>
+      <aside class="insight-panel" id="insightPanel">
+        <div class="insight-head">
+          <div>
+            <strong>诊断审计</strong>
+            <span id="insightSubhead">知识树与证据路线</span>
+          </div>
+        </div>
+        <div class="insight-tabs" role="tablist" aria-label="诊断审计视图">
+          <button class="active" id="insightTab-progress" onclick="setInsightTab('progress')">进度</button>
+          <button id="insightTab-evidence" onclick="setInsightTab('evidence')">证据</button>
+          <button id="insightTab-tree" onclick="setInsightTab('tree')">知识树</button>
+        </div>
+        <div class="insight-content" id="insightContent"></div>
+        <div class="insight-footer">
+          <button onclick="openTicketDraft()">升级工单</button>
+        </div>
+      </aside>
     </div>
   </div>
   <div class="drawer" id="drawer">
@@ -210,8 +1666,13 @@ export function renderApp(): string {
     const chat = document.getElementById('chat');
     const input = document.getElementById('input');
     const sessionList = document.getElementById('sessionList');
+    const sessionSearch = document.getElementById('sessionSearch');
     const personaSelect = document.getElementById('personaSelect');
     const sendButton = document.getElementById('sendButton');
+    let currentSession = null;
+    let sessionFilter = 'all';
+    let activeInsightTab = 'progress';
+    let ticketDraftNotice = '';
 
     async function loadConfig() {
       const res = await fetch('/api/config');
@@ -254,6 +1715,10 @@ export function renderApp(): string {
     }
 
     function add(role, body, options = {}) {
+      const empty = document.getElementById('emptyChat');
+      if (empty) {
+        empty.remove();
+      }
       const div = document.createElement('div');
       div.className = 'msg ' + role;
       if (role.includes('helper') && !role.includes('thinking') && options.rich !== false) {
@@ -266,27 +1731,44 @@ export function renderApp(): string {
       return div;
     }
 
+    function showEmptyChat() {
+      if (!chat || chat.children.length) {
+        return;
+      }
+      chat.innerHTML = '<div class="empty-workspace" id="emptyChat">'
+        + '<div class="empty-card"><strong>准备开始一次诊断</strong><p>把问题、现象或排查目标发过来。super helper 会先整理上下文，再决定追问、查知识库或调用只读诊断工具。</p><div class="empty-route"><span><b>理解问题</b>提取对象和未知项</span><span><b>知识路由</b>定位模块和意图</span><span><b>检索证据</b>查 FAQ 与 Runbook</span><span><b>证据判断</b>区分事实和推断</span><span><b>生成答复</b>给出下一步</span></div></div>'
+        + '<div class="empty-sample"><span>示例：学员管理统计缺少 6 月数据，定时任务已恢复，怎么补数据？</span><span>发送后展示稳定进度，不再用跳动文案等待。</span></div>'
+        + '</div>';
+    }
+
     function addThinking() {
-      const div = add('helper thinking', '');
-      div.innerHTML = '<span class="thinking-indicator" aria-label="思考中"><span></span><span></span><span></span></span>' + renderAgentActivity([]);
+      const div = add('helper thinking progress', '');
+      div.innerHTML = renderProgressActivity({ status: 'ready_for_diagnosis', userPersona: personaSelect.value, agentActivity: [] });
       return div;
     }
 
     function setCaseHeader(session) {
+      currentSession = session || null;
       const title = document.getElementById('title');
       const meta = document.getElementById('meta');
+      const status = document.getElementById('caseStatus');
       const titleText = session?.title || '新对话';
       const metaText = session?.id
-        ? session.id + ' · ' + session.status + ' · ' + personaLabel(session.userPersona || personaSelect.value) + ' · Claude session ' + session.claudeSessionId
-        : '本地 session · helper agent 会先审核上下文，再决定追问或调用 Claude Code';
+        ? session.id + ' / ' + statusLabel(session.status, session) + ' / ' + personaLabel(session.userPersona || personaSelect.value) + ' / 同案上下文连续'
+        : '本地会话，helper agent 会先审核上下文，再决定追问或调用 Claude Code';
       title.textContent = titleText;
       title.title = titleText;
       meta.textContent = metaText;
       meta.title = metaText;
+      const statusValue = session?.archivedAt ? 'archived' : session?.status || 'collecting_input';
+      status.textContent = statusLabel(statusValue, session);
+      status.className = 'case-status status-' + normalizeStatusClass(statusValue);
       if (session?.userPersona) {
         personaSelect.value = session.userPersona;
       }
+      renderCaseStepRail(session);
       updateContextMeter(session?.contextUsage);
+      updateInsightPanel(session);
       if (session?.archivedAt) {
         input.disabled = true;
         sendButton.disabled = true;
@@ -319,17 +1801,26 @@ export function renderApp(): string {
     async function loadSessions() {
       const res = await fetch('/api/sessions');
       const json = await res.json();
-      const sessions = json.sessions || [];
+      const allSessions = json.sessions || [];
+      const keyword = (sessionSearch?.value || '').trim().toLowerCase();
+      const sessions = allSessions.filter((session) => {
+        const matchesFilter = sessionFilter === 'all'
+          || (sessionFilter === 'active' && ['diagnosing', 'ready_for_diagnosis'].includes(session.status))
+          || session.status === sessionFilter;
+        const text = [session.title, session.lastMessage, session.id, statusLabel(session.status, session)].filter(Boolean).join(' ').toLowerCase();
+        return matchesFilter && (!keyword || text.includes(keyword));
+      });
       sessionList.innerHTML = sessions.length
         ? sessions.map((session) => {
           const title = session.title || '新对话';
-          const state = (session.pinnedAt ? '置顶 · ' : '') + (session.archivedAt ? '已归档' : session.status);
-          const meta = state + ' · ' + (session.lastMessage || '暂无消息');
+          const state = session.archivedAt ? '已归档' : statusLabel(session.status, session);
+          const statePrefix = session.pinnedAt ? '置顶 / ' : '';
+          const meta = statePrefix + state + ' / ' + (session.lastMessage || '暂无消息');
           const pinAction = session.pinnedAt ? 'unpin' : 'pin';
           const pinLabel = session.pinnedAt ? '取消置顶' : '置顶';
-          return '<div class="session-item ' + (session.id === caseId ? 'active' : '') + '" title="' + escapeHtml(title + '\\n' + meta) + '"><button class="session-open" onclick="openSession(\\'' + escapeHtml(session.id) + '\\')"><span class="session-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span><span class="session-meta" title="' + escapeHtml(meta) + '">' + escapeHtml(meta) + '</span></button><div class="session-menu-wrap"><button class="session-more" onclick="toggleSessionMenu(event, \\'' + escapeHtml(session.id) + '\\')" title="更多选项">...</button><div class="session-menu" id="session-menu-' + escapeHtml(session.id) + '"><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'' + pinAction + '\\')">' + pinLabel + '</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'archive\\')">归档</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'delete\\')">删除</button></div></div></div>';
+          return '<div class="session-item ' + (session.id === caseId ? 'active' : '') + '" title="' + escapeHtml(title + '\\n' + meta) + '"><button class="session-open" onclick="openSession(\\'' + escapeHtml(session.id) + '\\')"><span class="session-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span><span class="session-state status-' + escapeHtml(normalizeStatusClass(session.archivedAt ? 'archived' : session.status)) + '">' + escapeHtml(state) + '</span><span class="session-meta" title="' + escapeHtml(meta) + '">' + escapeHtml(meta) + '</span></button><div class="session-menu-wrap"><button class="session-more" onclick="toggleSessionMenu(event, \\'' + escapeHtml(session.id) + '\\')" title="更多选项">...</button><div class="session-menu" id="session-menu-' + escapeHtml(session.id) + '"><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'' + pinAction + '\\')">' + pinLabel + '</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'archive\\')">归档</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'delete\\')">删除</button></div></div></div>';
         }).join('')
-        : '<div class="muted">还没有历史会话。</div>';
+        : '<div class="muted">' + (allSessions.length ? '没有符合筛选的会话。' : '还没有历史会话。') + '</div>';
     }
 
     function toggleSessionMenu(event, id) {
@@ -355,6 +1846,7 @@ export function renderApp(): string {
           localStorage.removeItem('super-helper.caseId');
           chat.innerHTML = '';
           setCaseHeader();
+          showEmptyChat();
         }
       } else {
         await fetch('/api/session', {
@@ -381,6 +1873,9 @@ export function renderApp(): string {
       for (const message of json.session.messages || []) {
         add(message.role === 'user' ? 'user' : 'helper', message.body);
       }
+      if (!(json.session.messages || []).length) {
+        showEmptyChat();
+      }
       setCaseHeader(json.session);
       restorePendingTurn(json.session);
       await loadSessions();
@@ -399,7 +1894,7 @@ export function renderApp(): string {
         if (session.id !== caseId) {
           return;
         }
-        pending.classList.remove('thinking');
+        pending.classList.remove('thinking', 'progress');
         pending.classList.add('error');
         pending.textContent = '请求中断了，我没有继续假装思考。\\n\\n原因：' + errorMessage(error) + '\\n\\n你可以打开“查看诊断日志”看详细链路，或直接重试。';
       });
@@ -438,7 +1933,7 @@ export function renderApp(): string {
         await loadSessions();
         await pollSessionUntilSettled(pending, json.caseId, json.userMessageId);
       } catch (error) {
-        pending.classList.remove('thinking');
+        pending.classList.remove('thinking', 'progress');
         pending.classList.add('error');
         pending.textContent = '请求中断了，我没有继续假装思考。\\n\\n原因：' + errorMessage(error) + '\\n\\n你可以打开“查看诊断日志”看详细链路，或直接重试。';
       }
@@ -456,15 +1951,15 @@ export function renderApp(): string {
         if (pollingCaseId === caseId) {
           setCaseHeader(session);
         }
-        const latestStatus = renderAgentActivity(session.agentActivity || []);
+        const latestStatus = renderProgressActivity(session);
         if (latestStatus && latestStatus !== lastStatusText) {
           lastStatusText = latestStatus;
-          pending.innerHTML = '<span class="thinking-indicator" aria-label="处理中"><span></span><span></span><span></span></span>' + latestStatus;
+          pending.innerHTML = latestStatus;
         }
         const latestHelper = [...(session.messages || [])].reverse().find((message) => message.role === 'helper' && (!userMessageId || message.replyToMessageId === userMessageId));
         const finished = !['diagnosing', 'ready_for_diagnosis'].includes(session.status) && latestHelper;
         if (finished) {
-          pending.classList.remove('thinking');
+          pending.classList.remove('thinking', 'progress');
           pending.textContent = '';
           await typeWriter(pending, latestHelper.body || '本轮没有返回内容，请查看诊断日志。');
           await loadSessions();
@@ -472,6 +1967,89 @@ export function renderApp(): string {
         }
         await new Promise((resolve) => setTimeout(resolve, 1200));
       }
+    }
+
+    function renderProgressActivity(session) {
+      const profile = progressProfile(session?.userPersona || personaSelect.value);
+      const percent = estimateProgressPercent(session || {});
+      const activeIndex = progressStepIndex(profile.steps.length, percent);
+      const steps = profile.steps.map((step, index) => {
+        const state = index < activeIndex ? 'done' : index === activeIndex ? 'current' : 'pending';
+        return '<span class="progress-step ' + state + '">' + escapeHtml(step) + '</span>';
+      }).join('');
+      const detail = profile.mode === 'technical'
+        ? renderTechnicalProgressDetail(session?.agentActivity || [])
+        : renderPlainProgressDetail(profile, activeIndex);
+      return '<div class="progress-card progress-' + escapeHtml(profile.mode) + '" role="status" aria-live="polite" aria-label="' + escapeHtml(profile.title + '，进度 ' + percent + '%') + '">'
+        + '<div class="progress-card-head"><span class="progress-title"><strong>' + escapeHtml(profile.title) + '</strong><span>' + escapeHtml(profile.summary) + '</span></span><span class="progress-percent">' + percent + '%</span></div>'
+        + '<span class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percent + '"><span class="progress-bar" style="width: ' + percent + '%"></span></span>'
+        + '<div class="progress-steps">' + steps + '</div>'
+        + detail
+        + '<div class="progress-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>'
+        + '<div class="progress-actions"><button type="button" onclick="noopWait()">继续等待</button><button type="button" onclick="openTicketDraft()">升级工单</button></div>'
+        + '</div>';
+    }
+
+    function progressProfile(persona) {
+      const profiles = {
+        operations: {
+          mode: 'plain',
+          title: '正在梳理业务处理方案',
+          summary: '我会先核对上下文，再整理可以直接执行的建议。',
+          closing: '完成后会给出操作步骤、补数据口径和注意点。',
+          steps: ['理解问题', '知识路由', '检索证据', '证据判断', '生成答复']
+        },
+        customer: {
+          mode: 'plain',
+          title: '正在确认问题状态',
+          summary: '我会把进展保持在容易理解的步骤里。',
+          closing: '完成后会用清楚的话说明原因和下一步。',
+          steps: ['理解问题', '知识路由', '检索证据', '证据判断', '生成答复']
+        },
+        support: {
+          mode: 'technical',
+          title: '正在推进支持诊断',
+          summary: '同步展示 Agent 阶段和可追踪线索，方便后续接手。',
+          steps: ['理解问题', '知识路由', '检索证据', '证据判断', '生成答复']
+        },
+        developer: {
+          mode: 'technical',
+          title: '正在运行技术诊断',
+          summary: '保留 Preflight、Claude Code 和输出审核阶段。',
+          steps: ['理解问题', '知识路由', '检索证据', '代码排查', '生成答复']
+        }
+      };
+      return profiles[persona] || profiles.operations;
+    }
+
+    function estimateProgressPercent(session) {
+      const activity = session?.agentActivity || [];
+      const status = session?.status || '';
+      const haystack = activity.map((item) => [item.agentName, item.agentId, item.label, item.phase, item.summary].filter(Boolean).join(' ')).join(' ');
+      let percent = activity.length ? 18 + Math.min(activity.length, 5) * 10 : 10;
+      if (status === 'ready_for_diagnosis') percent = Math.max(percent, 22);
+      if (/预检|Preflight/i.test(haystack)) percent = Math.max(percent, 30);
+      if (/经验|上下文|context|knowledge/i.test(haystack)) percent = Math.max(percent, 44);
+      if (/Claude|诊断|Diagnostic|diagnos/i.test(haystack) || status === 'diagnosing') percent = Math.max(percent, 58);
+      if (/审核|输出|review|presentation|answer|答案/i.test(haystack)) percent = Math.max(percent, 76);
+      return Math.min(92, percent);
+    }
+
+    function progressStepIndex(totalSteps, percent) {
+      return Math.min(totalSteps - 1, Math.max(0, Math.floor(percent / (100 / totalSteps))));
+    }
+
+    function renderPlainProgressDetail(profile, activeIndex) {
+      const current = profile.steps[Math.min(profile.steps.length - 1, activeIndex)];
+      return '<span class="progress-note">当前阶段：' + escapeHtml(current) + '。' + escapeHtml(profile.closing) + '</span>';
+    }
+
+    function renderTechnicalProgressDetail(activity) {
+      const steps = (activity || []).slice(0, 5);
+      if (!steps.length) {
+        return '<span class="progress-technical"><span><strong>输入审核</strong> 等待阶段信息返回</span></span>';
+      }
+      return '<span class="progress-technical">' + steps.map((item) => '<span><strong>' + escapeHtml(item.agentName || item.agentId || 'Agent') + '</strong> ' + escapeHtml(item.label || item.phase || '处理中') + '：' + escapeHtml(item.summary || '') + '</span>').join('') + '</span>';
     }
 
     function renderAgentActivity(activity) {
@@ -496,7 +2074,7 @@ export function renderApp(): string {
     }
 
     async function typeWriter(element, text) {
-      element.classList.remove('thinking');
+      element.classList.remove('thinking', 'progress');
       element.classList.add('helper');
       const chars = Array.from(text);
       for (let index = 1; index <= chars.length; index += Math.max(1, Math.ceil(chars.length / 160))) {
@@ -540,8 +2118,8 @@ export function renderApp(): string {
       const command = block.command ? '<div class="log-command"><strong>Claude Code 命令</strong>\\n' + escapeHtml(block.command) + '</div>' : '';
       const tags = (block.tags || []).map((tag) => '<span class="log-label">' + escapeHtml(tag) + '</span>').join('');
       return '<details class="log-block ' + escapeHtml(block.severity || 'info') + '"' + (open ? ' open' : '') + '>'
-        + '<summary><div class="log-title"><span>' + escapeHtml(block.label || '执行过程') + ' · ' + escapeHtml(block.title || block.summary || '') + '</span><span class="log-label">' + escapeHtml(block.severity || 'info') + '</span></div>'
-        + '<div class="log-meta">' + escapeHtml(block.createdAt || '') + ' · ' + escapeHtml(block.agentName || block.actor || '') + ' · ' + escapeHtml(block.phase || '') + '</div>'
+        + '<summary><div class="log-title"><span>' + escapeHtml(block.label || '执行过程') + ' - ' + escapeHtml(block.title || block.summary || '') + '</span><span class="log-label">' + escapeHtml(block.severity || 'info') + '</span></div>'
+        + '<div class="log-meta">' + escapeHtml(block.createdAt || '') + ' / ' + escapeHtml(block.agentName || block.actor || '') + ' / ' + escapeHtml(block.phase || '') + '</div>'
         + '<div>' + tags + '</div></summary>'
         + command
         + '<div class="log-detail">' + escapeHtml(detail || block.summary || '') + '</div></details>';
@@ -623,6 +2201,7 @@ export function renderApp(): string {
       localStorage.setItem('super-helper.caseId', caseId);
       chat.innerHTML = '';
       setCaseHeader(json.session);
+      showEmptyChat();
       await loadSessions();
     }
     function errorMessage(error) {
@@ -630,6 +2209,142 @@ export function renderApp(): string {
     }
     function personaLabel(persona) {
       return ({operations: '运营人员', support: '技术支持', customer: '客户', developer: '开发人员'})[persona] || '运营人员';
+    }
+    function statusLabel(status, session) {
+      if (session?.archivedAt || status === 'archived') return '已归档';
+      return ({
+        collecting_input: '新建',
+        ready_for_diagnosis: '等待诊断',
+        diagnosing: '诊断中',
+        need_input: '待补充',
+        partial: '证据不足',
+        concluded: '已有结论'
+      })[status] || '新建';
+    }
+    function normalizeStatusClass(status) {
+      return String(status || 'collecting_input').replace(/[^a-z0-9_-]/gi, '_');
+    }
+    function statusProgressPercent(session) {
+      const status = session?.status || 'collecting_input';
+      if (status === 'concluded') return 100;
+      if (status === 'partial' || status === 'need_input') return 80;
+      if (status === 'diagnosing' || status === 'ready_for_diagnosis') return estimateProgressPercent(session || {});
+      return 8;
+    }
+    function renderCaseStepRail(session) {
+      const rail = document.getElementById('caseStepRail');
+      const steps = ['理解问题', '知识路由', '检索证据', '证据判断', '生成答复'];
+      const percent = statusProgressPercent(session);
+      const activeIndex = progressStepIndex(steps.length, percent);
+      rail.innerHTML = steps.map((step, index) => {
+        const state = index < activeIndex || percent === 100 ? 'done' : index === activeIndex ? 'current' : 'pending';
+        return '<span class="case-step ' + state + '">' + escapeHtml(step) + '</span>';
+      }).join('');
+    }
+    function setSessionFilter(filter) {
+      sessionFilter = filter;
+      ['all', 'active', 'concluded', 'need_input'].forEach((item) => {
+        const button = document.getElementById('sessionFilter-' + item);
+        if (button) button.classList.toggle('active', item === filter);
+      });
+      loadSessions();
+    }
+    function setInsightTab(tab) {
+      activeInsightTab = tab;
+      ['progress', 'evidence', 'tree'].forEach((item) => {
+        const button = document.getElementById('insightTab-' + item);
+        if (button) button.classList.toggle('active', item === tab);
+      });
+      updateInsightPanel(currentSession);
+    }
+    function updateInsightPanel(session) {
+      const content = document.getElementById('insightContent');
+      const subhead = document.getElementById('insightSubhead');
+      if (!content) return;
+      subhead.textContent = session?.id ? statusLabel(session.status, session) + ' / ' + personaLabel(session.userPersona || personaSelect.value) : '知识树与证据路线';
+      if (activeInsightTab === 'evidence') {
+        content.innerHTML = renderInsightEvidence(session);
+      } else if (activeInsightTab === 'tree') {
+        content.innerHTML = renderInsightTree(session);
+      } else {
+        content.innerHTML = renderInsightProgress(session);
+      }
+    }
+    function renderInsightProgress(session) {
+      const percent = statusProgressPercent(session);
+      const activity = (session?.agentActivity || []).slice(0, 4);
+      const statusText = session?.id ? statusLabel(session.status, session) : '等待输入';
+      const ticket = ticketDraftNotice
+        ? '<div class="insight-card placeholder-note"><strong>占位动作</strong><p>' + escapeHtml(ticketDraftNotice) + '</p></div>'
+        : '';
+      const activityHtml = activity.length
+        ? '<div class="trace-map">' + activity.map((item) => '<div class="trace-node active"><strong>' + escapeHtml(item.agentName || item.agentId || 'Agent') + '</strong><span>' + escapeHtml(item.label || item.phase || '处理中') + '：' + escapeHtml(item.summary || '') + '</span></div>').join('') + '</div>'
+        : '<div class="trace-map"><div class="trace-node"><strong>等待诊断</strong><span>发送问题后，这里会显示输入审核、经验复用、诊断和输出审核。</span></div></div>';
+      return ticket
+        + '<div class="insight-card"><strong>本轮状态</strong><p>' + escapeHtml(statusText) + '</p><span class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percent + '"><span class="progress-bar" style="width: ' + percent + '%"></span></span><span class="insight-meta">' + percent + '%</span></div>'
+        + '<div class="insight-card"><strong>查询路线</strong><div class="trace-map"><div class="trace-node active"><strong>理解问题</strong><span>从对话中提取业务对象、症状和未知项。</span></div><div class="trace-node"><strong>知识路由</strong><span>后续接入 taxonomy 后，会展示模块、意图和别名命中。</span></div><div class="trace-node"><strong>检索证据</strong><span>在 FAQ、Runbook、已解决 Case 和白皮书切片中收集证据。</span></div><div class="trace-node"><strong>证据判断</strong><span>Evidence Judge 会判断是否足够回答，或是否需要代码排查和升级工单。</span></div></div></div>'
+        + '<div class="insight-card"><strong>最近 Agent 活动</strong>' + activityHtml + '</div>';
+    }
+    function renderInsightEvidence(session) {
+      const run = latestRunWithResult(session);
+      const evidence = run?.result?.evidence || [];
+      const missing = run?.result?.missingInfo || [];
+      const rows = evidence.length
+        ? evidence.slice(0, 6).map((item) => '<div class="evidence-row"><strong>' + escapeHtml(item.kind || 'evidence') + ' / ' + escapeHtml(item.confidence || 'unknown') + '</strong><span>' + escapeHtml(item.summary || '') + '</span><span>' + escapeHtml(item.source || '') + '</span></div>').join('')
+        : '<div class="evidence-row placeholder-note"><strong>暂无结构化证据</strong><span>当前后端还没有把知识库 evidence pack 接入主聊天路径。现有证据会优先在诊断日志和最终回答里出现。</span></div>';
+      const missingHtml = missing.length
+        ? '<div class="insight-card"><strong>未知项</strong>' + missing.slice(0, 5).map((item) => '<p>' + escapeHtml(item) + '</p>').join('') + '</div>'
+        : '';
+      return '<div class="insight-card"><strong>证据列表</strong><p>这里展示当前 case 已返回的结构化 evidence。后续知识库接入后，会显示 FAQ、runbook、solved case 和白皮书切片。</p></div>'
+        + rows
+        + missingHtml;
+    }
+    function renderInsightTree(session) {
+      const moduleName = inferKnowledgeModule(session);
+      return '<div class="tree-card"><strong>知识树路径</strong><p>默认只展开本轮相关路径，避免把完整知识库变成噪音。</p></div>'
+        + '<div class="knowledge-map">'
+        + '<div class="knowledge-node active"><strong>知识库</strong><span>企业 Markdown 知识工作区</span></div>'
+        + '<div class="knowledge-node active"><strong>' + escapeHtml(moduleName) + '</strong><span>根据标题、用户问题或 taxonomy 别名推断的业务模块</span></div>'
+        + '<div class="knowledge-node"><strong>FAQ</strong><span>适合直接回答常见规则和操作问题</span></div>'
+        + '<div class="knowledge-node active"><strong>Runbook</strong><span>展示排查步骤、升级条件和风险边界</span></div>'
+        + '<div class="knowledge-node active"><strong>已解决 Case</strong><span>用户确认解决后，Case Curator 会生成待复核草稿</span></div>'
+        + '<div class="knowledge-node"><strong>白皮书切片</strong><span>用于解释背景、模型口径和复杂业务规则</span></div>'
+        + '</div>'
+        + '<div class="knowledge-branch"><strong>source document</strong><em>></em><strong>parent slice</strong><em>></em><strong>evidence chunk</strong></div>'
+        + '<div class="insight-card placeholder-note"><strong>同案上下文</strong><p>原来的 session 复用改为内部能力展示：同一个 case 会持续使用同案上下文，普通用户不需要理解 Claude session id。</p></div>';
+    }
+    function latestRunWithResult(session) {
+      return [...(session?.runs || [])].reverse().find((run) => run.result);
+    }
+    function inferKnowledgeModule(session) {
+      const text = [session?.title, ...(session?.messages || []).slice(-3).map((message) => message.body)].filter(Boolean).join(' ');
+      if (/学员|学习|统计|learn/i.test(text)) return '学员管理';
+      if (/课程|course/i.test(text)) return '课程管理';
+      if (/订单|支付|order|pay/i.test(text)) return '订单支付';
+      if (/权限|安全|permission|security/i.test(text)) return '权限安全';
+      return '当前业务模块';
+    }
+    function openTicketDraft() {
+      ticketDraftNotice = caseId
+        ? '工单系统预留：后续会携带 caseId、当前状态、证据摘要、未知项和用户最后一句话创建工单。'
+        : '工单系统预留：新建诊断后，可从当前 case 直接升级工单。';
+      activeInsightTab = 'progress';
+      setInsightTab('progress');
+    }
+    function markResolvedPlaceholder() {
+      ticketDraftNotice = '已解决确认预留：后续会触发 Case Curator，生成 solved case 草稿并标记 review_required。';
+      activeInsightTab = 'tree';
+      setInsightTab('tree');
+    }
+    function openAccountPlaceholder() {
+      ticketDraftNotice = '用户系统预留：这里未来会放头像、账号、团队、偏好设置和退出登录。';
+      activeInsightTab = 'progress';
+      setInsightTab('progress');
+    }
+    function noopWait() {
+      ticketDraftNotice = '已继续等待，本轮诊断仍在后台推进。';
+      activeInsightTab = 'progress';
+      setInsightTab('progress');
     }
     function renderRichText(text) {
       const preBlocks = [];
@@ -656,15 +2371,23 @@ export function renderApp(): string {
     function escapeHtml(text) {
       return String(text).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     }
-    document.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
       document.querySelectorAll('.session-menu.open').forEach((menu) => menu.classList.remove('open'));
+      if (!event.target.closest?.('.case-more')) {
+        document.querySelectorAll('.case-more[open]').forEach((menu) => menu.removeAttribute('open'));
+      }
     });
+    if (sessionSearch) {
+      sessionSearch.addEventListener('input', () => loadSessions());
+    }
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         send();
       }
     });
+    setCaseHeader();
+    showEmptyChat();
     loadConfig();
     loadSessions().then(() => {
       if (caseId) {
@@ -672,6 +2395,7 @@ export function renderApp(): string {
           localStorage.removeItem('super-helper.caseId');
           caseId = '';
           setCaseHeader();
+          showEmptyChat();
         });
       }
     });

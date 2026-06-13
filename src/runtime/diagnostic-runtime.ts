@@ -1,12 +1,22 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import type { SuperHelperConfig } from '../config.js';
 import { getModelProvider } from '../config.js';
-import type { DiagnosticResult, DiagnosticRun, UserPersona } from '../domain.js';
+import type { DiagnosticRequest, DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
 import type { PreflightDecision } from '../preflight.js';
 import type { AgentModelClient } from '../model.js';
 import { createModelClient } from '../model.js';
 import type { ClaudeWorker } from '../claude-worker.js';
 import type { FileMemoryStore, StoredCase } from '../storage.js';
+import {
+  discoverKnowledgeDocuments,
+  knowledgeRoot,
+  routeKnowledgeQuestion,
+  searchKnowledge,
+  type KnowledgeEvidencePack,
+  type KnowledgeRoute,
+  type KnowledgeVisibility,
+} from '../knowledge/index.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import {
   buildDiagnosticRequest as createDiagnosticRequest,
@@ -28,6 +38,9 @@ import {
 } from './presenter.js';
 import { resolveAgentConfig } from './agent-configs.js';
 import { findExperienceMatch } from './experience-agent.js';
+import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
+import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
+import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from './case-curator.js';
 
 export interface AgentResponse {
   caseSession: StoredCase;
@@ -133,6 +146,11 @@ export class DiagnosticRuntime {
     }
     const replyToMessageId = findPendingUserMessageId(caseSession, userMessage);
 
+    const curationResponse = this.answerFromResolutionConfirmation(caseSession, userMessage, replyToMessageId);
+    if (curationResponse) {
+      return curationResponse;
+    }
+
     const experienceResponse = await this.answerFromExperience(caseSession, userMessage, replyToMessageId);
     if (experienceResponse) {
       return experienceResponse;
@@ -148,6 +166,11 @@ export class DiagnosticRuntime {
       caseSession.status = 'need_input';
       this.store.saveCase(caseSession);
       return { caseSession, assistantMessage: reply, decision: 'ask_user' };
+    }
+
+    const knowledgeResponse = await this.answerFromKnowledge(caseSession, userMessage, replyToMessageId, decision.request);
+    if (knowledgeResponse) {
+      return knowledgeResponse;
     }
 
     caseSession.status = 'diagnosing';
@@ -202,6 +225,44 @@ export class DiagnosticRuntime {
     this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
     this.events.finalReplyCreated(caseSession, reply, review.decision);
     return { caseSession, assistantMessage: reply, decision: review.decision };
+  }
+
+  private answerFromResolutionConfirmation(
+    caseSession: StoredCase,
+    userMessage: string,
+    replyToMessageId?: string,
+  ): AgentResponse | undefined {
+    if (!isResolutionConfirmation(userMessage) || !hasCuratableDiagnosticResult(caseSession)) {
+      return undefined;
+    }
+
+    const workspaceRoot = this.workspaceRootFor(caseSession.workspaceId);
+    if (!workspaceRoot || !existsSync(knowledgeRoot(workspaceRoot))) {
+      return undefined;
+    }
+
+    this.events.caseResolutionConfirmed(caseSession, userMessage);
+    this.events.caseCuratorStarted(caseSession);
+    const draft = curateSolvedCase({
+      workspaceRoot,
+      caseSession,
+      confirmationMessage: userMessage,
+    });
+    this.events.caseCuratorResult(caseSession, draft);
+
+    const reply = [
+      `已生成 solved case 草稿：${draft.path}`,
+      '',
+      `状态：${draft.status}`,
+      `置信度：${draft.confidence}`,
+      '我已把索引标记为 dirty，后续知识库刷新时会重新纳入检索。',
+    ].join('\n');
+
+    caseSession.status = 'concluded';
+    this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
+    this.events.finalReplyCreated(caseSession, reply, 'final');
+    this.store.saveCase(caseSession);
+    return { caseSession, assistantMessage: reply, decision: 'final' };
   }
 
   recordTurnFailure(caseId: string, error: unknown, replyToMessageId?: string): void {
@@ -302,6 +363,92 @@ export class DiagnosticRuntime {
     this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
     this.events.finalReplyCreated(caseSession, reply, review.decision);
     return { caseSession, assistantMessage: reply, decision: review.decision };
+  }
+
+  private async answerFromKnowledge(
+    caseSession: StoredCase,
+    userMessage: string,
+    replyToMessageId: string | undefined,
+    request: DiagnosticRequest,
+  ): Promise<AgentResponse | undefined> {
+    const workspaceRoot = this.workspaceRootFor(caseSession.workspaceId);
+    if (!workspaceRoot || !existsSync(knowledgeRoot(workspaceRoot))) {
+      return undefined;
+    }
+    const docs = discoverKnowledgeDocuments(workspaceRoot);
+    if (docs.length === 0) {
+      return undefined;
+    }
+
+    this.events.knowledgeRouterStarted(caseSession, userMessage);
+    const route = routeKnowledgeQuestion({ workspaceRoot, question: userMessage });
+    this.events.knowledgeRouterResult(caseSession, route);
+    this.events.knowledgeSearchStarted(caseSession, {
+      workspaceRoot,
+      query: userMessage,
+      moduleCandidates: route.moduleCandidates,
+      intentCandidates: route.intentCandidates,
+      sourceTypes: route.sourceTypes,
+    });
+    let evidencePack = searchKnowledge({
+      workspaceRoot,
+      query: userMessage,
+      moduleCandidates: route.moduleCandidates,
+      intentCandidates: route.intentCandidates,
+      sourceTypes: route.sourceTypes,
+      visibility: knowledgeVisibilityForPersona(caseSession.userPersona),
+      limit: 8,
+    });
+    if (evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
+      evidencePack = searchKnowledge({
+        workspaceRoot,
+        query: userMessage,
+        moduleCandidates: route.moduleCandidates,
+        intentCandidates: route.intentCandidates,
+        visibility: knowledgeVisibilityForPersona(caseSession.userPersona),
+        limit: 8,
+      });
+    }
+    this.events.knowledgeSearchResult(caseSession, evidencePack);
+    this.events.evidenceJudgeStarted(caseSession, evidencePack);
+    const judge = judgeKnowledgeEvidence({ route, evidencePack, question: userMessage });
+    this.events.evidenceJudgeResult(caseSession, judge);
+
+    if (!judge.answerable || judge.need_code_escalation) {
+      const deepQuery = planDeepQuery({ question: userMessage, route, evidencePack, judge });
+      attachDeepQueryContext({
+        request,
+        route,
+        evidencePack,
+        judge,
+        deepQuery,
+      });
+      this.events.codeEscalationRequested(caseSession, request);
+      return undefined;
+    }
+
+    const result = diagnosticResultFromKnowledge({ evidencePack, judge, route });
+    const run: DiagnosticRun = {
+      id: request.runId,
+      caseId: caseSession.id,
+      status: result.status,
+      request,
+      result,
+    };
+    this.store.addRun(caseSession, run);
+    caseSession.status = caseStatusFromDiagnosticResult(result);
+    this.store.saveCase(caseSession);
+    this.events.knowledgeAnswerSelected(caseSession, result);
+    const review = await this.reviewAndFormat(caseSession, result, run);
+    const reply = review.reply;
+    this.events.presentationPrepared(caseSession, review.decision);
+    this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
+    this.events.finalReplyCreated(caseSession, reply, review.decision);
+    return { caseSession, assistantMessage: reply, decision: review.decision };
+  }
+
+  private workspaceRootFor(workspaceId: string): string | undefined {
+    return this.config.workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath;
   }
 
   private async modelDrivenPreflight(
@@ -538,4 +685,59 @@ function findPendingUserMessageId(caseSession: StoredCase, userMessage: string):
   );
   const matching = caseSession.messages.filter((message) => message.role === 'user' && message.body === userMessage);
   return matching.find((message) => !answered.has(message.id))?.id ?? matching.at(-1)?.id;
+}
+
+function diagnosticResultFromKnowledge(input: {
+  evidencePack: KnowledgeEvidencePack;
+  judge: EvidenceJudgeResult;
+  route: KnowledgeRoute;
+}): DiagnosticResult {
+  const answerEvidence = input.evidencePack.results.filter((result) => result.status === 'active');
+  const evidence: Evidence[] = answerEvidence.slice(0, 6).map((result) => ({
+    id: result.evidence_id,
+    kind: 'knowledge',
+    source: sourceLabel(result),
+    summary: `${result.title}：${result.excerpt || result.summary}`,
+    confidence: result.confidence,
+  }));
+  const top = answerEvidence[0];
+  const summary = top
+    ? `知识库命中「${top.title}」，可回答：${top.excerpt || top.summary}`
+    : '知识库证据足够回答当前问题。';
+
+  return {
+    status: 'concluded',
+    summary,
+    missingInfo: [],
+    evidence,
+    claims: [
+      {
+        type: 'fact',
+        text: summary,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+      {
+        type: 'inference',
+        text: `Evidence Judge 判定知识证据可直接回答，answer_score=${input.judge.answer_score}，模块候选：${input.route.moduleCandidates.join('、') || '未限定'}`,
+        evidenceIds: evidence.map((item) => item.id),
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+}
+
+function sourceLabel(result: KnowledgeEvidencePack['results'][number]): string {
+  const pages = result.source_pages?.length ? ` pages=${result.source_pages.join(',')}` : '';
+  const sourceDocument = result.source_document ? ` source=${result.source_document}` : '';
+  return `${result.source}${sourceDocument}${pages}`;
+}
+
+function knowledgeVisibilityForPersona(persona: UserPersona): KnowledgeVisibility[] {
+  if (persona === 'customer') {
+    return ['customer_safe'];
+  }
+  if (persona === 'operations') {
+    return ['customer_safe', 'internal'];
+  }
+  return ['customer_safe', 'internal', 'support'];
 }

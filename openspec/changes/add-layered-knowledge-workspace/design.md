@@ -53,6 +53,19 @@ Main Agent 当前工作方式：
 - `claude-policy.ts` 收窄只读工具并校验 host command allowlist。
 - `claude-output-parser.ts` 解析 JSON，失败时转换为 partial/escalate 的结构化结果。
 
+### 附件技术方案补充
+
+用户提供的《super-helper 企业分层诊断系统开发与技术实现方案》进一步明确：当前缺口不是 Claude Code 本身不可用，而是 runtime 主链路尚未把 knowledge-first、deep query、query correction 接入。落地时应优先在现有架构上补齐：
+
+- Knowledge Router runtime stage：读取 taxonomy 与别名，输出 module、intent、keywords、source type、code escalation signals。
+- Evidence Judge runtime stage：用结构化 `answer_score` 和风险/冲突/时效规则判断是否可由知识直接回答。
+- Deep Query Planner：知识不足时把 evidence gaps 和 clue signals 转成带线索的只读 `DiagnosticRequest`，让 Claude Code 使用 Read/Glob/Grep 做静态调查。
+- Query Correction：无命中、模糊命中或深查方向失败时，按别名扩展、邻接模块、source_type 扩展、artifact family pivot 进行回退，最后才追问或人工升级。
+- 多格式 source ingest：普通 docx/Markdown 可由本地轻量解析器入库；复杂 PDF、扫描件、表格文件后续可接 MarkItDown、Docling、Unstructured 或 LlamaParse，但 MVP 不引入这些运行时依赖。
+- `knowledge:init` / `knowledge:update` 应保留现有命令形态，并生成 `ingest-report.json`，让切割质量可审核。
+
+附件还指出配置测试能成功不等于本地会话会调用远程模型：必须确保 `agent.modelProvider` 被激活，否则 Preflight/Output Review 的远程模型不会被调用。
+
 当前 experience / history / evidence / diagnostic request 机制：
 
 - `EvidenceKind` 已包含 `knowledge` 和 `history`，为知识库证据预留了类型。
@@ -97,7 +110,6 @@ Main Agent 当前工作方式：
 
 **Non-Goals:**
 
-- 本 change 不实现运行时代码。
 - MVP 不做复杂 RAG、embedding、数据库索引、GraphRAG 或在线知识图谱。
 - MVP 不依赖 Obsidian；Obsidian 只能作为人工编辑 Markdown 的可选工具。
 - 不让 Claude Code 或 MCP 工具直接生成用户最终回复。
@@ -186,6 +198,11 @@ Stage ownership:
 
 ```text
 workspace/
+  source-assets/
+    whitepapers/
+    tickets/
+    faq/
+    exports/
   knowledge/
     _sources/
       whitepapers/
@@ -232,6 +249,7 @@ workspace/
 Directory purposes:
 
 - `knowledge/`: 企业知识库根目录，运行时只依赖普通文件系统和 Markdown，不依赖 Obsidian。
+- `source-assets/`: 人工投放原始资料的入口层；也允许 CLI 通过 `--source-dir` 指向外部目录，例如 `/Users/king/Documents/knowledge/`。
 - `knowledge/_sources/`: 原始资料归档目录，例如 PDF 白皮书、导入元数据和文件 hash。原始资料用于溯源，不直接作为用户回答材料。
 - `knowledge/_sources/whitepapers/`: 原始白皮书 PDF 和对应 `.meta.json`，记录来源 URL、下载时间、文件 hash、版本、页数、导入工具版本。
 - `knowledge/_taxonomy/`: 模块、别名、意图、source_type 的受控词表。
@@ -833,6 +851,30 @@ MVP constraints:
 - 原始 PDF 只作为溯源来源，不直接塞入回答上下文。
 - 对 `restricted` visibility 的文档，用户回复中只展示脱敏摘要，原文进日志或受控 evidence。
 
+### 8.1 入库流水线与 ingest report
+
+MVP 入库支持：
+
+```text
+source directory / source-assets
+  -> copy original source to knowledge/_sources/<type>/
+  -> compute sha256 and source metadata
+  -> parse docx/markdown text and headings
+  -> generate whitepaper parent slices
+  -> generate retrieval chunks
+  -> update manifest.json / keyword-index.json / chunks.jsonl
+  -> write indexes/ingest-report.json
+```
+
+`knowledge:init` 应能初始化目录并在存在 source directory 时导入 source 文档。默认 source directory 可为用户本机 `/Users/king/Documents/knowledge/`，同时支持显式 `--source-dir <path>` 覆盖。原始文件作为 provenance 保存；回答和 Evidence Judge 使用生成的 Markdown parent slice 与 source metadata。
+
+切割审核标准：
+
+- 每个 source document 都有 `.meta.json`，包含 `id`、`path`、`sha256`、`title`、`source_type`、`page_count` 或段落/切片计数、`owner`、`ingest_tool_version`。
+- 每个 parent slice 都必须包含 `source_document`、`source_document_id`、`source_pages` 或逻辑 section path、`chunking_strategy`。
+- `chunks.jsonl` 中每个 chunk 必须能回溯到 parent slice。
+- `ingest-report.json` 必须记录 source 文件数、生成 slice 数、chunk 数、跳过/失败原因和 parser strategy。
+
 Future retrieval phases:
 
 - Phase A: BM25 / inverted index，提高关键词排序质量。
@@ -874,6 +916,28 @@ Evidence Judge output:
 }
 ```
 
+Answer score:
+
+```text
+answer_score =
+  0.25 * relevance
++ 0.20 * coverage
++ 0.15 * source_authority
++ 0.10 * freshness
++ 0.10 * version_match
++ 0.10 * agreement
++ 0.10 * actionability
+- conflict_penalty
+- ambiguity_penalty
+- risk_penalty
+```
+
+Threshold guidance:
+
+- FAQ/how-to：`>= 0.70` 可直接回答，`0.55 ~ 0.70` 追问或补检，低于 `0.55` 升级。
+- 普通 troubleshooting：`>= 0.78` 可直接回答，`0.60 ~ 0.78` 追问或补检，低于 `0.60` 升级。
+- 支付、权限、安全、数据修复：必须更严格，任何高危不确定都不能直接回答。
+
 Must escalate to code when:
 
 - 用户问的是实现细节、代码路径、调用链、配置读取逻辑或数据结构。
@@ -884,6 +948,20 @@ Must escalate to code when:
 - 问题涉及线上事故、数据修复、支付、权限、安全。
 - 回答必须验证当前代码实现。
 - 高置信文档只覆盖产品规则，但用户问的是“当前系统为什么这样表现”。
+
+Deep Query Planner should add clues:
+
+- `artifact_targets`: scheduler、job、queue、callback、state_machine、permission、payment、config、route、service 等。
+- `anchor_terms`: 从用户问题、knowledge route、evidence gaps、相关术语中抽取。
+- `likely_paths`: 只作为 Grep/Glob 线索，不作为事实。
+- `avoid_assumptions`: 明确禁止把用户假线索直接当根因。
+
+Query Correction should run when:
+
+- knowledge no-hit：扩 aliases、邻接模块、source_type。
+- hit but ambiguous：扩大 parent slice context，加入 glossary 相关词。
+- deep query failed：从当前 artifact family pivot 到相邻 family，例如 scheduler -> queue/callback/state machine。
+- conflict detected：能问一条高价值问题则 ask_user，否则高风险升级人工。
 
 Can answer without code when:
 

@@ -7,9 +7,11 @@ import type {
   UserPersona,
   WorkerTrace,
 } from '../domain.js';
+import type { KnowledgeEvidencePack, KnowledgeRoute } from '../knowledge/index.js';
 import type { PreflightDecision } from '../preflight.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
 import type { StoredCase } from '../storage.js';
+import type { EvidenceJudgeResult } from './evidence-judge.js';
 import type { RuntimeEventRecorder } from './ports.js';
 
 export interface ModelPreflightParsed {
@@ -34,6 +36,9 @@ const agentIdentities = {
   main: { agentId: 'main', agentRole: 'main-coordinator', agentName: '主 Agent' },
   inputReview: { agentId: 'input-review', agentRole: 'input-review-and-preflight', agentName: '输入审核 Agent' },
   experience: { agentId: 'experience', agentRole: 'prior-session-experience-review', agentName: '经验 Agent' },
+  knowledgeRouter: { agentId: 'knowledge-router', agentRole: 'knowledge-router', agentName: '知识路由 Agent' },
+  evidenceJudge: { agentId: 'evidence-judge', agentRole: 'evidence-sufficiency-judge', agentName: '证据充分性 Agent' },
+  caseCurator: { agentId: 'case-curator', agentRole: 'solved-case-curator', agentName: 'Case 沉淀 Agent' },
   outputReview: { agentId: 'output-review', agentRole: 'evidence-and-output-review', agentName: '输出审核 Agent' },
   presentation: { agentId: 'presentation', agentRole: 'persona-aware-presentation', agentName: '美化输出 Agent' },
 } satisfies Record<string, AgentIdentity>;
@@ -348,6 +353,131 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: '经验',
       severity: 'ok',
       summary: '经验 Agent 找到可复用历史答案，将交给输出审核',
+      detail,
+    });
+  }
+
+  knowledgeRouterStarted(caseSession: StoredCase, message: string): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.knowledgeRouter, {
+      actor: 'agent',
+      phase: 'knowledge_router_started',
+      label: '知识路由',
+      severity: 'ok',
+      summary: '知识路由 Agent 开始归一化问题',
+      detail: { message },
+    });
+  }
+
+  knowledgeRouterResult(caseSession: StoredCase, route: KnowledgeRoute): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.knowledgeRouter, {
+      actor: 'agent',
+      phase: 'knowledge_router_result',
+      label: '知识路由',
+      severity: 'ok',
+      summary: '知识路由 Agent 完成模块、意图和关键词识别',
+      detail: route,
+    });
+  }
+
+  knowledgeSearchStarted(caseSession: StoredCase, detail: unknown): DiagnosticLogEvent {
+    return this.record(caseSession, {
+      actor: 'system',
+      phase: 'knowledge_search_started',
+      label: '知识检索',
+      severity: 'ok',
+      summary: '知识搜索服务开始检索企业知识库',
+      detail,
+    });
+  }
+
+  knowledgeSearchResult(caseSession: StoredCase, evidencePack: KnowledgeEvidencePack): DiagnosticLogEvent {
+    return this.record(caseSession, {
+      actor: 'system',
+      phase: 'knowledge_search_result',
+      label: '知识检索',
+      severity: evidencePack.results.length ? 'ok' : 'warn',
+      summary: `知识搜索完成，命中 ${evidencePack.results.length} 条证据`,
+      detail: evidencePack,
+    });
+  }
+
+  evidenceJudgeStarted(caseSession: StoredCase, evidencePack: KnowledgeEvidencePack): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'evidence_judge_started',
+      label: '证据判断',
+      severity: 'ok',
+      summary: '证据充分性 Agent 开始判断知识证据是否足够',
+      detail: {
+        resultCount: evidencePack.results.length,
+      },
+    });
+  }
+
+  evidenceJudgeResult(caseSession: StoredCase, judge: EvidenceJudgeResult): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'evidence_judge_result',
+      label: '证据判断',
+      severity: judge.answerable ? 'ok' : 'warn',
+      summary: judge.answerable ? '知识证据足够，可进入输出审核' : '知识证据不足，需要升级查询',
+      detail: judge,
+    });
+  }
+
+  knowledgeAnswerSelected(caseSession: StoredCase, result: DiagnosticResult): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'knowledge_answer_selected',
+      label: '知识直答',
+      severity: 'ok',
+      summary: 'Evidence Judge 选择使用知识库证据直接回答',
+      detail: result,
+    });
+  }
+
+  codeEscalationRequested(caseSession: StoredCase, request: DiagnosticRequest): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'code_escalation_requested',
+      label: '升级代码',
+      severity: 'warn',
+      summary: '知识证据不足，升级到 Claude Code 只读静态调查',
+      detail: request.context?.deepQuery,
+    });
+  }
+
+  caseResolutionConfirmed(caseSession: StoredCase, message: string): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
+      actor: 'agent',
+      phase: 'resolution_confirmed',
+      label: 'Case 沉淀',
+      severity: 'ok',
+      summary: '用户确认问题已解决，准备沉淀 solved case',
+      detail: { message },
+    });
+  }
+
+  caseCuratorStarted(caseSession: StoredCase): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
+      actor: 'agent',
+      phase: 'case_curator_started',
+      label: 'Case 沉淀',
+      severity: 'ok',
+      summary: 'Case Curator 开始生成 solved case 草稿',
+    });
+  }
+
+  caseCuratorResult(
+    caseSession: StoredCase,
+    detail: { documentId: string; path: string; moduleId: string; status: string; confidence: string },
+  ): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
+      actor: 'agent',
+      phase: 'case_curator_result',
+      label: 'Case 沉淀',
+      severity: 'ok',
+      summary: 'Case Curator 已保存 review_required solved case 草稿并标记索引脏',
       detail,
     });
   }

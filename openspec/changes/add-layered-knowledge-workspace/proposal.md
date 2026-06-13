@@ -13,10 +13,12 @@
 - 定义 PDF / 白皮书从原始文件到结构化知识的切割方案：保留 source document，生成人工可维护的 parent slice，再派生机器检索用 evidence chunk。
 - 明确“切”和“查”必须一起设计：小 chunk 负责召回，父级 slice 负责解释和回答，原 PDF 负责溯源。
 - 分阶段设计检索能力：MVP 仅做 Markdown 读取、frontmatter 解析、模块路由、关键词搜索、metadata 过滤和 evidence pack；后续再引入 BM25、向量检索、hybrid search、reranker、parent-child retrieval 和 GraphRAG。
-- 定义 Evidence Judge 的结构化输出和升级到代码排查的规则。
+- 定义 Evidence Judge 的结构化输出、`answer_score`、阈值、风险降权和升级到代码排查的规则。
+- 定义 Deep Query Planner 与 Query Correction：知识证据不足时生成带线索的只读静态调查请求；深查方向失败时按别名、邻接模块、source_type、artifact family 回退。
+- 定义多格式资料入库策略：原始 Word/PDF/Markdown/CSV/Excel 进入 `source-assets/` 或指定 source 目录，归档到 `knowledge/_sources/`，再生成 parent slice、retrieval chunk、ingest report。
 - 定义用户确认已解决后的 Case Curator 沉淀流程，默认 `status: review_required`、`confidence: medium`，并标记索引需要刷新。
 - 保留现有 Claude Code / CC worker 行为、`DiagnosticRequest` / `DiagnosticResult` / Evidence Review contract、case JSON 兼容性和 HTTP API response shape。
-- 本 change 只规划，不实现运行时代码。
+- 本 change 从规划升级为落地实施：先补全 knowledge-first runtime、source ingest、deep query escalation、query correction、case curation 和验收测试；仍然保持 gateway、runtime、knowledge、worker、sessions、observability 的模块边界。
 
 ## Capabilities
 
@@ -51,4 +53,4 @@
   - `knowledge/glossary/`
   - `knowledge/indexes/`
   - `repos/`
-- MVP 不引入外部检索依赖，不要求运行时依赖 Obsidian，不改变现有 CLI、HTTP API、storage shape 或 Claude Code 安全策略。
+- MVP 不引入外部检索依赖，不要求运行时依赖 Obsidian，不改变现有 HTTP API、storage shape 或 Claude Code 安全策略；CLI 可在本地解析普通 docx/Markdown，并把 source 文件作为 provenance 归档。

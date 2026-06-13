@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   initKnowledgeWorkspace,
   parseMarkdownDocument,
+  routeKnowledgeQuestion,
   searchKnowledge,
   updateKnowledgeIndex,
 } from '../dist/knowledge/index.js';
@@ -171,6 +172,92 @@ test('knowledge CLI initializes and updates a workspace', () => {
   }
 });
 
+test('knowledge init ingests two DOCX whitepapers into searchable parent slices', () => {
+  const workspace = tempWorkspace();
+  const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
+  try {
+    const docxPath = join(sourceDir, 'AI伴学助手用户指南.docx');
+    const trainingDocxPath = join(sourceDir, 'EduSoho教培线用户指南.docx');
+    writeMinimalDocx(docxPath, [
+      { style: '2', text: 'AI伴学助手' },
+      { style: '3', text: '制定学习计划' },
+      { text: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。' },
+      { text: '学习计划生成后包含任务数、学习总时长、学习起止时间、每周学习日和每日学习时长。' },
+      { style: '3', text: '督学提醒' },
+      { text: '学习日上午9点以对话框消息和 APP 通知的形式向学员发送学习提醒。' },
+      { text: '学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。' },
+    ]);
+    writeMinimalDocx(trainingDocxPath, [
+      { style: '2', text: 'EduSoho教培线' },
+      { style: '3', text: '课程搜索' },
+      { text: '课程列表的搜索栏支持按照课程名称、课程编号和课程分类搜索课程。' },
+      { text: '管理员也可以通过课程状态筛选已发布、未发布或已关闭的课程。' },
+      { style: '3', text: '班级学员' },
+      { text: '班级学员列表支持查看学员加入时间、学习进度和作业完成状态。' },
+    ]);
+
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+    const knowledgeRoot = join(workspace, 'knowledge');
+    const report = JSON.parse(readFileSync(join(knowledgeRoot, 'indexes', 'ingest-report.json'), 'utf8'));
+
+    assert.equal(report.sourceDocuments, 2);
+    assert.equal(report.parentSlices >= 2, true);
+    assert.equal(report.chunks >= 2, true);
+    assert.equal(existsSync(join(knowledgeRoot, '_sources', 'whitepapers', 'AI伴学助手用户指南.docx')), true);
+    assert.equal(existsSync(join(knowledgeRoot, '_sources', 'whitepapers', 'EduSoho教培线用户指南.docx')), true);
+
+    const aiResult = searchKnowledge({
+      workspaceRoot: workspace,
+      query: '学习日晚上8点没有完成任务会怎么提醒',
+      limit: 5,
+    });
+
+    assert.equal(aiResult.results.length > 0, true);
+    assert.equal(aiResult.results[0].source_type, 'whitepaper');
+    assert.match(aiResult.results[0].source_document, /AI伴学助手用户指南\.docx|ai-ban-xue-zhu-shou-yong-hu-zhi-nan\.docx/);
+    assert.match(aiResult.results[0].excerpt, /晚上8点未完成当日学习任务/);
+
+    const trainingResult = searchKnowledge({
+      workspaceRoot: workspace,
+      query: '课程搜索栏支持按什么搜索课程',
+      limit: 5,
+    });
+
+    assert.equal(trainingResult.results.length > 0, true);
+    assert.equal(trainingResult.results[0].source_type, 'whitepaper');
+    assert.match(trainingResult.results[0].source_document, /EduSoho教培线用户指南\.docx|edusoho-jiao-pei-xian-yong-hu-zhi-nan\.docx/i);
+    assert.match(trainingResult.results[0].excerpt, /课程名称、课程编号和课程分类/);
+  } finally {
+    cleanup(workspace);
+    cleanup(sourceDir);
+  }
+});
+
+test('knowledge init does not overwrite edited parent slices unless forced', () => {
+  const workspace = tempWorkspace();
+  const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
+  try {
+    const docxPath = join(sourceDir, 'AI伴学助手用户指南.docx');
+    writeMinimalDocx(docxPath, [
+      { style: '2', text: 'AI伴学助手' },
+      { style: '3', text: '制定学习计划' },
+      { text: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。' },
+    ]);
+
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+    const generatedSlice = findFirstGeneratedMarkdown(join(workspace, 'knowledge', 'whitepapers'));
+    const editedContent = `${readFileSync(generatedSlice, 'utf8')}\n\n人工修订保留。\n`;
+    writeFileSync(generatedSlice, editedContent, 'utf8');
+
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+
+    assert.equal(readFileSync(generatedSlice, 'utf8'), editedContent);
+  } finally {
+    cleanup(workspace);
+    cleanup(sourceDir);
+  }
+});
+
 test('knowledge search finds FAQ and runbook documents while filtering deprecated documents', () => {
   const workspace = tempWorkspace();
   try {
@@ -308,6 +395,57 @@ owner: support
   }
 });
 
+test('knowledge router identifies module and intent from taxonomy aliases', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const taxonomyDir = join(workspace, 'knowledge', '_taxonomy');
+    writeFileSync(
+      join(taxonomyDir, 'modules.yaml'),
+      `modules:
+  - id: ai-study
+    name: AI伴学助手
+    keywords:
+      - AI伴学助手
+      - 学习计划
+      - 督学提醒
+`,
+      'utf8',
+    );
+    writeFileSync(
+      join(taxonomyDir, 'aliases.yaml'),
+      `aliases:
+  - term: 伴学
+    module: ai-study
+  - term: AI助教
+    module: ai-study
+`,
+      'utf8',
+    );
+    writeFileSync(
+      join(taxonomyDir, 'intents.yaml'),
+      `intents:
+  - id: how_to
+    keywords:
+      - 怎么
+      - 如何
+`,
+      'utf8',
+    );
+
+    const route = routeKnowledgeQuestion({
+      workspaceRoot: workspace,
+      question: '伴学怎么制定学习计划？',
+    });
+
+    assert.deepEqual(route.moduleCandidates, ['ai-study']);
+    assert.deepEqual(route.intentCandidates, ['how_to']);
+    assert.equal(route.keywords.includes('伴学'), true);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
 test('frontmatter validation reports missing required fields', () => {
   assert.throws(
     () => parseMarkdownDocument('---\nid: kb_invalid\n---\n# Invalid\n', 'invalid.md'),
@@ -323,3 +461,56 @@ test('knowledge agent configs are registered for future runtime wiring', () => {
   assert.equal(stages.includes('case_curator'), true);
   assert.equal(listPublicAgentConfigs().some((agent) => agent.stage === 'evidence_judge' && !agent.mayProduceUserFacingText), true);
 });
+
+function writeMinimalDocx(path, paragraphs) {
+  const dir = mkdtempSync(join(tmpdir(), 'minimal-docx-'));
+  const wordDir = join(dir, 'word');
+  mkdirSync(wordDir, { recursive: true });
+  writeFileSync(
+    join(dir, '[Content_Types].xml'),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`,
+    'utf8',
+  );
+  writeFileSync(
+    join(wordDir, 'styles.xml'),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="1"><w:name w:val="Normal"/></w:style>
+  <w:style w:type="paragraph" w:styleId="2"><w:name w:val="heading 1"/></w:style>
+  <w:style w:type="paragraph" w:styleId="3"><w:name w:val="heading 2"/></w:style>
+</w:styles>`,
+    'utf8',
+  );
+  const body = paragraphs.map((paragraph) => {
+    const style = paragraph.style ? `<w:pPr><w:pStyle w:val="${paragraph.style}"/></w:pPr>` : '';
+    return `<w:p>${style}<w:r><w:t>${escapeXml(paragraph.text)}</w:t></w:r></w:p>`;
+  }).join('');
+  writeFileSync(
+    join(wordDir, 'document.xml'),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
+    'utf8',
+  );
+  execFileSync('zip', ['-qr', path, '[Content_Types].xml', 'word'], { cwd: dir });
+  cleanup(dir);
+}
+
+function escapeXml(value) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function findFirstGeneratedMarkdown(root) {
+  const entries = execFileSync('find', [root, '-type', 'f', '-name', '*.md'], { encoding: 'utf8' })
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .filter((path) => !path.endsWith('/README.md'))
+    .sort();
+  assert.equal(entries.length > 0, true);
+  return entries[0];
+}

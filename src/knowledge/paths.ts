@@ -24,6 +24,10 @@ export function chunksPath(workspaceRoot: string): string {
   return join(indexesDir(workspaceRoot), 'chunks.jsonl');
 }
 
+export function ingestReportPath(workspaceRoot: string): string {
+  return join(indexesDir(workspaceRoot), 'ingest-report.json');
+}
+
 export function dirtyFlagPath(workspaceRoot: string): string {
   return join(indexesDir(workspaceRoot), 'dirty.flag');
 }

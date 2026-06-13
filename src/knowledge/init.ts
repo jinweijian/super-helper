@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chunksPath, dirtyFlagPath, keywordIndexPath, knowledgeRoot, manifestPath } from './paths.js';
+import { ingestSourceDocuments } from './ingest.js';
+import { updateKnowledgeIndex } from './indexer.js';
+import { chunksPath, dirtyFlagPath, ingestReportPath, keywordIndexPath, knowledgeRoot, manifestPath } from './paths.js';
 import {
   documentTemplates,
   evidenceChunkSchemaExample,
@@ -10,7 +12,7 @@ import {
 } from './templates.js';
 import type { KnowledgeInitResult } from './types.js';
 
-export function initKnowledgeWorkspace(input: { workspaceRoot: string; force?: boolean }): KnowledgeInitResult {
+export function initKnowledgeWorkspace(input: { workspaceRoot: string; force?: boolean; sourceDir?: string }): KnowledgeInitResult {
   const root = knowledgeRoot(input.workspaceRoot);
   const createdDirectories: string[] = [];
   const createdFiles: string[] = [];
@@ -40,12 +42,26 @@ export function initKnowledgeWorkspace(input: { workspaceRoot: string; force?: b
   writeIfMissing(keywordIndexPath(input.workspaceRoot), '{}\n', input.force, createdFiles);
   writeIfMissing(chunksPath(input.workspaceRoot), '', input.force, createdFiles);
   writeIfMissing(dirtyFlagPath(input.workspaceRoot), 'Knowledge index needs initial update.\n', input.force, createdFiles);
+  const ingestReport = ingestSourceDocuments({
+    workspaceRoot: input.workspaceRoot,
+    sourceDir: input.sourceDir,
+    force: input.force,
+  });
+  if (ingestReport.sourceDocuments > 0 || ingestReport.skipped.length > 0) {
+    const update = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot });
+    ingestReport.chunks = update.chunkCount;
+    writeFileSync(ingestReportPath(input.workspaceRoot), `${JSON.stringify(ingestReport, null, 2)}\n`, 'utf8');
+    createdFiles.push(ingestReportPath(input.workspaceRoot));
+  }
 
   return {
     knowledgeRoot: root,
     created: !existed,
     directories: createdDirectories,
     files: createdFiles,
+    ingestReportPath: ingestReport.sourceDocuments > 0 || ingestReport.skipped.length > 0
+      ? ingestReportPath(input.workspaceRoot)
+      : undefined,
   };
 }
 
