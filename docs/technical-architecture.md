@@ -17,6 +17,7 @@ The current MVP keeps the public import surface stable while separating product 
 - `src/runtime/diagnostic-runtime.ts` owns one user turn from input receipt through final presentation.
 - `src/runtime/preflight-gate.ts`, `request-builder.ts`, `review-gate.ts`, and `presenter.ts` own runtime decisions and formatting helpers.
 - `src/runtime/event-recorder.ts` owns lifecycle log event creation for Agent, Claude, and system phases.
+- `src/knowledge/` owns the enterprise knowledge workspace skeleton, Markdown/frontmatter parsing, source metadata, local keyword chunk index, and local evidence-pack search.
 - `src/sessions/` owns case repository ports and request context construction.
 - `src/workers/diagnostic-worker.ts` defines the stable worker port.
 - `src/workers/claude/` owns the Claude Code adapter implementation, prompts, policy, CLI execution, and output parsing.
@@ -143,7 +144,7 @@ Session storage is scoped by the active workspace at server startup. `src/sessio
 
 ## Workspace Configuration
 
-A workspace is any project codebase the helper is allowed to inspect.
+A workspace is any project or enterprise knowledge workspace the helper is allowed to inspect.
 
 ```ts
 interface WorkspaceConfig {
@@ -156,6 +157,34 @@ interface WorkspaceConfig {
 ```
 
 If the workspace contains a `CLAUDE.md`, that file guides Claude Code inside that workspace. It does not replace the supper helper Agent configuration.
+
+The first knowledge-base MVP assumes a workspace may contain:
+
+```text
+knowledge/
+  _sources/
+  _taxonomy/
+  faq/
+  runbooks/
+  tickets/
+  whitepapers/
+  glossary/
+  modules/
+  indexes/
+repos/
+```
+
+`knowledge/_sources/` preserves original PDFs or source files for provenance. Structured Markdown parent slices are the editable knowledge source. `knowledge/indexes/` contains derived artifacts such as `chunks.jsonl`, `keyword-index.json`, and `manifest.json`; these can be rebuilt from parent slices.
+
+Current implemented knowledge commands:
+
+```bash
+supper-helper knowledge init --workspace /path/to/workspace
+supper-helper knowledge update --workspace /path/to/workspace
+supper-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
+```
+
+The initial knowledge skeleton does not yet replace the runtime diagnosis path. Runtime integration must happen through `src/runtime/` in a later task so that knowledge evidence still passes Output Review and Presentation before reaching the user.
 
 ## MCP Configuration
 

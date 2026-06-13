@@ -134,6 +134,25 @@ test('app surfaces interrupted requests and exposes session controls', () => {
   assert.match(html, /escapeHtml\(raw\)/);
 });
 
+test('chat messages keep pasted code and long commands inside the viewport', () => {
+  const html = renderApp();
+
+  assert.match(html, /\.chat \{[^}]*min-width: 0;[^}]*\}/);
+  assert.match(html, /\.msg \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;[^}]*\}/);
+  assert.match(html, /\.msg\.helper pre \{[^}]*max-width: 100%;[^}]*overflow: auto;[^}]*\}/);
+  assert.match(html, /textarea \{[^}]*overflow-wrap: anywhere;[^}]*\}/);
+});
+
+test('app restores in-progress polling after reloading an active session', () => {
+  const html = renderApp();
+
+  assert.match(html, /function restorePendingTurn\(session\)/);
+  assert.match(html, /isSessionInProgress\(session\)/);
+  assert.match(html, /latestPendingUserMessage\(session\.messages \|\| \[\]\)/);
+  assert.match(html, /pollSessionUntilSettled\(pending, session\.id, pendingUserMessage\.id\)/);
+  assert.match(html, /restorePendingTurn\(json\.session\)/);
+});
+
 test('truncated visible metadata exposes title tooltips', () => {
   const html = renderApp();
 
@@ -1898,10 +1917,23 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
   const registry = loadAgentRegistry();
   const stages = registry.agents.map((agent) => agent.stage);
 
-  assert.deepEqual(stages, ['main', 'input_review', 'preflight', 'experience', 'output_review', 'presentation']);
+  assert.deepEqual(stages, [
+    'main',
+    'input_review',
+    'preflight',
+    'experience',
+    'knowledge_router',
+    'evidence_judge',
+    'case_curator',
+    'output_review',
+    'presentation',
+  ]);
   assert.match(resolveAgentConfig('main').absolutePath, /src\/agents\/main\.md$/);
   assert.match(resolveAgentConfig('preflight').content, /Input Review Agent/);
   assert.match(resolveAgentConfig('experience').content, /Experience Agent/);
+  assert.match(resolveAgentConfig('knowledge_router').content, /Knowledge Router Agent/);
+  assert.match(resolveAgentConfig('evidence_judge').content, /Evidence Judge Agent/);
+  assert.match(resolveAgentConfig('case_curator').content, /Case Curator Agent/);
   assert.equal(listPublicAgentConfigs().some((agent) => agent.stage === 'presentation' && agent.mayProduceUserFacingText), true);
 });
 

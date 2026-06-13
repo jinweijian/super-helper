@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { configPath, ensureConfig, saveConfig } from './config.js';
 import { startServer } from './server.js';
+import { initKnowledgeWorkspace, searchKnowledge, updateKnowledgeIndex } from './knowledge/index.js';
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'dev';
@@ -23,6 +24,11 @@ async function main(): Promise<void> {
     const claude = spawnSync(config.claude.command, ['--version'], { encoding: 'utf8' });
     console.log(`claude: ${claude.status === 0 ? claude.stdout.trim() : 'not available'}`);
     console.log(`AGENT.md: ${existsSync('AGENT.md') ? 'present' : 'missing'}`);
+    return;
+  }
+
+  if (command === 'knowledge') {
+    await handleKnowledgeCommand();
     return;
   }
 
@@ -134,8 +140,64 @@ async function main(): Promise<void> {
   }
 
   console.error(`Unknown command: ${command}`);
-  console.error('Usage: supper-helper [init|doctor|dev|model set|workspace set|mcp add]');
+  printUsage();
   process.exit(1);
+}
+
+async function handleKnowledgeCommand(): Promise<void> {
+  const subcommand = process.argv[3];
+  const workspaceRoot = resolveWorkspaceRoot();
+
+  if (subcommand === 'init') {
+    const result = initKnowledgeWorkspace({
+      workspaceRoot,
+      force: process.argv.includes('--force'),
+    });
+    console.log('knowledge workspace ready');
+    console.log(`workspace: ${workspaceRoot}`);
+    console.log(`knowledge: ${result.knowledgeRoot}`);
+    console.log(`directories created: ${result.directories.length}`);
+    console.log(`files written: ${result.files.length}`);
+    console.log('next: supper-helper knowledge update --workspace <workspace>');
+    return;
+  }
+
+  if (subcommand === 'update') {
+    const result = updateKnowledgeIndex({ workspaceRoot });
+    console.log('knowledge index updated');
+    console.log(`workspace: ${workspaceRoot}`);
+    console.log(`knowledge: ${result.knowledgeRoot}`);
+    console.log(`documents: ${result.documentCount}`);
+    console.log(`chunks: ${result.chunkCount}`);
+    console.log(`source documents: ${result.sourceDocumentCount}`);
+    console.log(`manifest: ${result.manifestPath}`);
+    console.log(`chunks path: ${result.chunksPath}`);
+    return;
+  }
+
+  if (subcommand === 'search') {
+    const query = readArg('--query') ?? process.argv[4];
+    if (!query) {
+      console.error('Usage: supper-helper knowledge search --query <question> [--workspace <path>] [--limit <n>]');
+      process.exit(1);
+    }
+    const limit = Number(readArg('--limit') ?? '5');
+    const result = searchKnowledge({ workspaceRoot, query, limit: Number.isFinite(limit) ? limit : 5 });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.error('Usage: supper-helper knowledge <init|update|search> [--workspace <path>]');
+  process.exit(1);
+}
+
+function resolveWorkspaceRoot(): string {
+  const explicit = readArg('--workspace') ?? readArg('--path');
+  if (explicit) {
+    return explicit;
+  }
+  const config = ensureConfig();
+  return config.workspaces[0]?.rootPath ?? process.cwd();
 }
 
 function readArg(name: string): string | undefined {
@@ -154,6 +216,10 @@ function readJsonArg(name: string): unknown {
   }
 
   return JSON.parse(value);
+}
+
+function printUsage(): void {
+  console.error('Usage: supper-helper [init|doctor|dev|knowledge init|knowledge update|knowledge search|model set|workspace set|mcp add]');
 }
 
 main().catch((error) => {

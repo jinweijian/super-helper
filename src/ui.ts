@@ -38,8 +38,8 @@ export function renderApp(): string {
     .muted { color: #697b8c; font-size: 13px; line-height: 1.5; }
     button { height: 34px; border: 1px solid #cbd6e2; border-radius: 7px; background: white; padding: 0 12px; color: #263647; font-weight: 600; cursor: pointer; }
     button.primary { border-color: #2f80ed; background: #2f80ed; color: white; }
-    .chat { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 12px; padding: 4px 0 8px; }
-    .msg { max-width: 82%; border: 1px solid #d9e2ec; border-radius: 11px; padding: 11px 13px; white-space: pre-wrap; line-height: 1.6; background: white; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
+    .chat { min-height: 0; min-width: 0; overflow: auto; display: grid; align-content: start; gap: 12px; padding: 4px 0 8px; }
+    .msg { max-width: 82%; min-width: 0; border: 1px solid #d9e2ec; border-radius: 11px; padding: 11px 13px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; background: white; box-shadow: 0 1px 2px rgba(15,23,42,.03); }
     .msg.user { margin-left: auto; background: #eef6ff; border-color: #cfe4ff; }
     .msg.helper { margin-right: auto; }
     .msg.error { border-color: #ffc9c9; background: #fff5f5; color: #9b1c1c; }
@@ -48,8 +48,8 @@ export function renderApp(): string {
     .msg.helper h2 { font-size: 16px; }
     .msg.helper h3 { font-size: 14px; }
     .msg.helper ul, .msg.helper ol { margin: 6px 0; padding-left: 20px; }
-    .msg.helper code { background: #eef2f6; border-radius: 5px; padding: 1px 5px; font-size: 12px; }
-    .msg.helper pre { margin: 8px 0 0; padding: 10px; border: 1px solid #cbd6e2; border-radius: 7px; background: #0f172a; color: #e5edf7; font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; overflow: auto; max-height: 420px; word-break: break-word; }
+    .msg.helper code { background: #eef2f6; border-radius: 5px; padding: 1px 5px; font-size: 12px; overflow-wrap: anywhere; }
+    .msg.helper pre { max-width: 100%; margin: 8px 0 0; padding: 10px; border: 1px solid #cbd6e2; border-radius: 7px; background: #0f172a; color: #e5edf7; font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; overflow: auto; max-height: 420px; word-break: break-word; }
     .msg.helper strong { color: #1b6fd8; }
     .msg.helper mark { background: #fff2b8; color: #4d3800; padding: 0 3px; border-radius: 3px; }
     .msg.thinking { display: flex; align-items: flex-start; gap: 10px; color: #3d4f60; }
@@ -62,7 +62,7 @@ export function renderApp(): string {
     .activity-step { font-size: 12px; color: #536475; }
     .activity-step strong { color: #263647; }
     .composer { position: sticky; bottom: 0; background: white; border: 1px solid #d9e2ec; border-radius: 12px 12px 0 0; padding: 12px; display: grid; gap: 10px; box-shadow: 0 -8px 24px rgba(15,23,42,.06); }
-    textarea { width: 100%; min-height: 78px; max-height: 180px; border: 0; outline: 0; resize: vertical; font: inherit; line-height: 1.5; }
+    textarea { width: 100%; min-height: 78px; max-height: 180px; border: 0; outline: 0; resize: vertical; font: inherit; line-height: 1.5; overflow-wrap: anywhere; }
     .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
     .composer-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
     .composer-meta .pill { display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; }
@@ -382,7 +382,38 @@ export function renderApp(): string {
         add(message.role === 'user' ? 'user' : 'helper', message.body);
       }
       setCaseHeader(json.session);
+      restorePendingTurn(json.session);
       await loadSessions();
+    }
+
+    function restorePendingTurn(session) {
+      if (!isSessionInProgress(session)) {
+        return;
+      }
+      const pendingUserMessage = latestPendingUserMessage(session.messages || []);
+      if (!pendingUserMessage) {
+        return;
+      }
+      const pending = addThinking();
+      pollSessionUntilSettled(pending, session.id, pendingUserMessage.id).catch((error) => {
+        if (session.id !== caseId) {
+          return;
+        }
+        pending.classList.remove('thinking');
+        pending.classList.add('error');
+        pending.textContent = '请求中断了，我没有继续假装思考。\\n\\n原因：' + errorMessage(error) + '\\n\\n你可以打开“查看诊断日志”看详细链路，或直接重试。';
+      });
+    }
+
+    function isSessionInProgress(session) {
+      return ['diagnosing', 'ready_for_diagnosis'].includes(session?.status);
+    }
+
+    function latestPendingUserMessage(messages) {
+      const answered = new Set((messages || [])
+        .filter((message) => message.role === 'helper' && message.replyToMessageId)
+        .map((message) => message.replyToMessageId));
+      return [...(messages || [])].reverse().find((message) => message.role === 'user' && !answered.has(message.id));
     }
 
     async function send() {

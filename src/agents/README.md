@@ -9,6 +9,9 @@
 - `main.md`: 主 Agent，负责完整用户回合和最终回复责任。
 - `input-review.md`: 输入审核与 Preflight Gate Agent。
 - `experience.md`: 历史经验复用 Agent。
+- `knowledge-router.md`: 知识路由 Agent，负责模块、意图、关键词和升级信号识别。
+- `evidence-judge.md`: 证据充分性 Agent，负责判断知识库证据是否足够或是否需要查代码。
+- `case-curator.md`: Case 沉淀 Agent，负责生成待复核 solved case 草稿。
 - `output-review.md`: 证据与输出审核 Agent。
 - `presentation.md`: 美化输出 / persona-aware presentation Agent。
 - `registry.json`: runtime stage 到 Agent 配置的配对表。

@@ -38,6 +38,33 @@
       "summary": "经验 Agent，负责查找历史会话中的可复用答案，并以 history evidence 交给输出审核。"
     },
     {
+      "id": "knowledge-router",
+      "role": "knowledge-router",
+      "stage": "knowledge_router",
+      "configPath": "knowledge-router.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "summary": "知识路由 Agent，负责归一化问题并识别模块、意图、关键词和代码升级信号。"
+    },
+    {
+      "id": "evidence-judge",
+      "role": "evidence-sufficiency-judge",
+      "stage": "evidence_judge",
+      "configPath": "evidence-judge.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "summary": "证据充分性 Agent，负责判断知识库证据是否足够，或是否需要升级到代码排查。"
+    },
+    {
+      "id": "case-curator",
+      "role": "solved-case-curator",
+      "stage": "case_curator",
+      "configPath": "case-curator.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "summary": "Case 沉淀 Agent，负责在用户确认解决后生成 review_required 的 solved case 草稿。"
+    },
+    {
       "id": "output-review",
       "role": "evidence-and-output-review",
       "stage": "output_review",

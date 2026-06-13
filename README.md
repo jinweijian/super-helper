@@ -38,6 +38,7 @@ Main implementation entry points:
 
 - Product Agent configs live under `src/agents/`; stage pairings are in `src/agents/registry.json`.
 - Runtime orchestration lives in `src/runtime/diagnostic-runtime.ts`; `src/agent.ts` is the compatibility facade.
+- Enterprise knowledge workspace helpers live in `src/knowledge/`.
 - HTTP startup and route composition live in `src/gateway/http-server.ts`; `src/server.ts` is the compatibility export.
 - Claude Code worker internals live under `src/workers/claude/`; `src/claude-worker.ts` is the compatibility export.
 - Case repository and diagnostic context helpers live under `src/sessions/`.
@@ -49,6 +50,8 @@ Main implementation entry points:
 pnpm install
 pnpm build
 node dist/cli.js init
+node dist/cli.js knowledge init --workspace /path/to/your/workspace
+node dist/cli.js knowledge update --workspace /path/to/your/workspace
 node dist/cli.js dev --workspace /path/to/your/project
 ```
 
@@ -65,8 +68,50 @@ After publishing, the expected usage is:
 ```bash
 npm install -g supper-helper
 supper-helper init
+supper-helper knowledge init --workspace /path/to/your/workspace
+supper-helper knowledge update --workspace /path/to/your/workspace
 supper-helper dev --workspace /path/to/your/project
 ```
+
+## Enterprise Knowledge Workspace MVP
+
+The first knowledge-base MVP is local and file-based. It does not use vector databases, GraphRAG, RAG pipelines, or Obsidian runtime plugins.
+
+Initialize a workspace skeleton:
+
+```bash
+pnpm knowledge:init -- --workspace /path/to/your/workspace
+```
+
+This creates:
+
+```text
+knowledge/
+  _sources/
+  _taxonomy/
+  faq/
+  runbooks/
+  tickets/
+  whitepapers/
+  glossary/
+  modules/
+  indexes/
+```
+
+Update derived indexes after editing Markdown knowledge:
+
+```bash
+pnpm knowledge:update -- --workspace /path/to/your/workspace
+```
+
+Search the local knowledge index from the CLI:
+
+```bash
+pnpm build
+node dist/cli.js knowledge search --workspace /path/to/your/workspace --query "课程发布后为什么学员端看不到"
+```
+
+Whitepaper PDFs should be preserved under `knowledge/_sources/whitepapers/`. Human-maintained Markdown parent slices live under `knowledge/whitepapers/`, while `knowledge/indexes/chunks.jsonl` is a derived recall index that can be rebuilt.
 
 ## Agent Model Configuration
 

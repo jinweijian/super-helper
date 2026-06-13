@@ -11,6 +11,9 @@ Current configured Agents:
 - `main.md`: 主 Agent，负责用户回合与最终回复责任。
 - `input-review.md`: 输入审核与 Preflight Gate。
 - `experience.md`: 经验 Agent，负责复用历史会话答案。
+- `knowledge-router.md`: 知识路由 Agent，负责识别模块、意图、关键词和代码升级信号。
+- `evidence-judge.md`: 证据充分性 Agent，负责判断知识库证据是否足够或是否需要升级到代码。
+- `case-curator.md`: Case 沉淀 Agent，负责用户确认解决后的 solved case 草稿生成。
 - `output-review.md`: 输出审核 Agent，负责证据审核。
 - `presentation.md`: 美化输出 Agent，负责用户视角表达。
 - `registry.json`: runtime stage 到 Agent 配置的配对表。
@@ -65,6 +68,22 @@ Concrete implementation:
 - `src/runtime/experience-agent.ts` searches prior readable case sessions for the same or substantially same question.
 - Reused answers become `history` evidence and still pass through Output Review and Presentation.
 - If no safe match exists, the runtime continues through Preflight Gate and normal worker diagnosis.
+
+## Knowledge-First Skeleton
+
+The first enterprise knowledge-base skeleton adds local workspace commands and product Agent configs for the later layered workflow.
+
+Implemented local commands:
+
+- `supper-helper knowledge init --workspace <path>` creates the `knowledge/` directory structure, taxonomy examples, Markdown templates, source metadata example, and empty derived indexes.
+- `supper-helper knowledge update --workspace <path>` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from Markdown parent slices.
+- `supper-helper knowledge search --workspace <path> --query <question>` performs local keyword search and expands chunk hits back to parent slice evidence.
+
+Current limitation:
+
+- The runtime chat path still uses the existing Experience -> Preflight -> DiagnosticWorker -> Output Review -> Presentation chain.
+- Knowledge evidence is not yet automatically inserted into `DiagnosticRequest.context`.
+- Knowledge Router, Evidence Judge, and Case Curator are registered configs, but their runtime stages are not wired in this MVP skeleton.
 
 ## Non-Guessing Contract
 

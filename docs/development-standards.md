@@ -37,6 +37,7 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 | `src/gateway/` | HTTP server, routes, DTOs, request parsing, response serialization | Preflight, worker dispatch policy, evidence review, final reply formatting |
 | `src/agents/` | Product Agent configuration documents and `registry.json` stage pairings | Runtime orchestration, HTTP routing, worker execution, persistence |
 | `src/runtime/` | Agent turn orchestration, Preflight Gate, request building, review decisions, presentation, lifecycle event recording | HTTP APIs, route DTOs, raw file persistence details, Claude CLI implementation |
+| `src/knowledge/` | Enterprise knowledge workspace schema, templates, Markdown/frontmatter parsing, source metadata, keyword chunk index, local knowledge search | Runtime orchestration, user-facing final replies, Claude Code execution, HTTP route decisions, vector/RAG infrastructure |
 | `src/sessions/` | Case repository ports, file-backed repository export, diagnostic context building | Worker execution, model calls, user-facing final replies |
 | `src/workers/` | Diagnostic worker port and worker adapters | Case orchestration, user chat responses, route handling |
 | `src/workers/claude/` | Claude prompts, CLI policy, CLI execution, output parsing, Claude adapter | Runtime decisions, user-facing review, HTTP behavior |
@@ -164,6 +165,20 @@ Claude adapter rules:
 - Adapter composition belongs in `claude-code-worker.ts`.
 
 Host commands must remain constrained by `docs/command-whitelist.md`.
+
+## Knowledge Workspace Contract
+
+`src/knowledge/` owns the local enterprise knowledge base skeleton.
+
+Rules:
+
+- Knowledge files live under the active workspace `knowledge/` directory.
+- Original PDFs and source files belong under `knowledge/_sources/`; they are provenance, not direct answer context.
+- Structured Markdown parent slices under `knowledge/faq/`, `knowledge/runbooks/`, `knowledge/whitepapers/`, `knowledge/modules/`, `knowledge/glossary/`, and `knowledge/tickets/` are the canonical editable knowledge.
+- `knowledge/indexes/chunks.jsonl`, `keyword-index.json`, and `manifest.json` are derived artifacts and must be rebuildable from parent slices.
+- MVP knowledge search is local Markdown/frontmatter/keyword search only. Do not add vector databases, GraphRAG, Obsidian runtime dependency, or model-based RAG inside this module.
+- The knowledge module returns structured evidence packs. It must not produce user-facing final replies.
+- Runtime integration must preserve the existing Evidence Review contract before any knowledge evidence reaches the user.
 
 ## Agent Evidence Contract
 

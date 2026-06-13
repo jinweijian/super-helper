@@ -2,7 +2,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type AgentStage = 'main' | 'input_review' | 'preflight' | 'experience' | 'output_review' | 'presentation';
+export type AgentStage =
+  | 'main'
+  | 'input_review'
+  | 'preflight'
+  | 'experience'
+  | 'knowledge_router'
+  | 'evidence_judge'
+  | 'case_curator'
+  | 'output_review'
+  | 'presentation';
 
 export interface AgentRegistryEntry {
   id: string;

@@ -18,8 +18,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "pnpm build && node dist/cli.js dev",
-    "start": "node dist/cli.js dev",
+    "start": "pnpm build && node dist/cli.js dev",
     "doctor": "pnpm build && node dist/cli.js doctor",
+    "knowledge:init": "pnpm build && node dist/cli.js knowledge init",
+    "knowledge:update": "pnpm build && node dist/cli.js knowledge update",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/verify-docs.mjs",
     "test": "pnpm lint && pnpm typecheck && pnpm build && node --test test/*.test.mjs"
