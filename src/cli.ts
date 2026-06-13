@@ -2,9 +2,15 @@
 
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { configPath, ensureConfig, saveConfig } from './config.js';
+import { configPath, defaultConfig, ensureConfig, saveConfig, type SuperHelperConfig } from './config.js';
 import { startServer } from './server.js';
-import { defaultSourceDirectory, initKnowledgeWorkspace, searchKnowledge, updateKnowledgeIndex } from './knowledge/index.js';
+import {
+  defaultSourceDirectory,
+  initKnowledgeWorkspace,
+  resolveKnowledgeWorkspaceRoot,
+  searchKnowledge,
+  updateKnowledgeIndex,
+} from './knowledge/index.js';
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? 'dev';
@@ -21,6 +27,7 @@ async function main(): Promise<void> {
     const config = ensureConfig();
     console.log(`config: ${configPath()}`);
     console.log(`storage: ${config.storage.rootDir}`);
+    console.log(`knowledge: ${config.knowledge.rootDir}`);
     const claude = spawnSync(config.claude.command, ['--version'], { encoding: 'utf8' });
     console.log(`claude: ${claude.status === 0 ? claude.stdout.trim() : 'not available'}`);
     console.log(`AGENT.md: ${existsSync('AGENT.md') ? 'present' : 'missing'}`);
@@ -146,7 +153,9 @@ async function main(): Promise<void> {
 
 async function handleKnowledgeCommand(): Promise<void> {
   const subcommand = process.argv[3];
-  const workspaceRoot = resolveWorkspaceRoot();
+  const context = resolveKnowledgeCommandContext();
+  const projectWorkspaceRoot = context.projectWorkspaceRoot;
+  const workspaceRoot = context.knowledgeWorkspaceRoot;
 
   if (subcommand === 'init') {
     const sourceDir = readArg('--source-dir') ?? readArg('--source') ?? defaultSourceDirectory();
@@ -156,7 +165,8 @@ async function handleKnowledgeCommand(): Promise<void> {
       force: process.argv.includes('--force'),
     });
     console.log('knowledge workspace ready');
-    console.log(`workspace: ${workspaceRoot}`);
+    console.log(`workspace: ${projectWorkspaceRoot}`);
+    console.log(`knowledge workspace: ${workspaceRoot}`);
     console.log(`knowledge: ${result.knowledgeRoot}`);
     if (sourceDir) {
       console.log(`source dir: ${sourceDir}`);
@@ -166,14 +176,15 @@ async function handleKnowledgeCommand(): Promise<void> {
     if (result.ingestReportPath) {
       console.log(`ingest report: ${result.ingestReportPath}`);
     }
-    console.log('next: super-helper knowledge update --workspace <workspace>');
+    console.log('next: super-helper knowledge update --workspace <workspace> [--knowledge-root <path>]');
     return;
   }
 
   if (subcommand === 'update') {
     const result = updateKnowledgeIndex({ workspaceRoot });
     console.log('knowledge index updated');
-    console.log(`workspace: ${workspaceRoot}`);
+    console.log(`workspace: ${projectWorkspaceRoot}`);
+    console.log(`knowledge workspace: ${workspaceRoot}`);
     console.log(`knowledge: ${result.knowledgeRoot}`);
     console.log(`documents: ${result.documentCount}`);
     console.log(`chunks: ${result.chunkCount}`);
@@ -195,17 +206,36 @@ async function handleKnowledgeCommand(): Promise<void> {
     return;
   }
 
-  console.error('Usage: super-helper knowledge <init|update|search> [--workspace <path>]');
+  console.error('Usage: super-helper knowledge <init|update|search> [--workspace <path>] [--knowledge-root <path>]');
   process.exit(1);
 }
 
-function resolveWorkspaceRoot(): string {
+function resolveKnowledgeCommandContext(): {
+  config: SuperHelperConfig;
+  projectWorkspaceRoot: string;
+  knowledgeWorkspaceRoot: string;
+} {
   const explicit = readArg('--workspace') ?? readArg('--path');
+  const explicitKnowledgeRoot = readArg('--knowledge-root');
+  const config = explicit && explicitKnowledgeRoot ? defaultConfig() : ensureConfig();
+
   if (explicit) {
-    return explicit;
+    config.workspaces[0] = {
+      ...config.workspaces[0],
+      id: config.workspaces[0]?.id ?? 'current',
+      name: config.workspaces[0]?.name ?? 'Current Project',
+      rootPath: explicit,
+    };
   }
-  const config = ensureConfig();
-  return config.workspaces[0]?.rootPath ?? process.cwd();
+  if (explicitKnowledgeRoot) {
+    config.knowledge.rootDir = explicitKnowledgeRoot;
+  }
+
+  return {
+    config,
+    projectWorkspaceRoot: config.workspaces[0]?.rootPath ?? process.cwd(),
+    knowledgeWorkspaceRoot: resolveKnowledgeWorkspaceRoot(config, config.workspaces[0]?.id),
+  };
 }
 
 function readArg(name: string): string | undefined {

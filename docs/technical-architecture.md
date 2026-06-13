@@ -142,9 +142,15 @@ Session storage is scoped by the active workspace at server startup. `src/sessio
 
 `src/sessions/context-builder.ts` constructs bounded diagnostic request context from recent messages and prior runs. Claude Code receives this context through `DiagnosticRequest.context`; it does not own long-term conversation state.
 
+## Knowledge Repository Storage
+
+Knowledge storage is scoped separately from the inspected project workspace. `src/knowledge/storage-scope.ts` resolves the effective knowledge workspace root from configured `knowledge.rootDir`, the active workspace id, and the active workspace root path. It uses the same workspace key strategy as session storage so multiple local services can share one super helper config directory while keeping separate knowledge bases.
+
+With the default `knowledge.isolateByWorkspace: true`, `--workspace /path/to/service-a` and `--workspace /path/to/service-b` resolve to different knowledge workspace roots under the configured knowledge base directory. The editable knowledge tree still uses the same internal layout, but it lives under `<resolved-knowledge-workspace>/knowledge/` instead of inside the service code directory.
+
 ## Workspace Configuration
 
-A workspace is any project or enterprise knowledge workspace the helper is allowed to inspect.
+A workspace is any project or service directory the helper is allowed to inspect.
 
 ```ts
 interface WorkspaceConfig {
@@ -158,7 +164,7 @@ interface WorkspaceConfig {
 
 If the workspace contains a `CLAUDE.md`, that file guides Claude Code inside that workspace. It does not replace the super helper Agent configuration.
 
-The first knowledge-base MVP assumes a workspace may contain:
+The knowledge-base MVP assumes the resolved knowledge workspace contains:
 
 ```text
 knowledge/
@@ -171,7 +177,6 @@ knowledge/
   glossary/
   modules/
   indexes/
-repos/
 ```
 
 `knowledge/_sources/` preserves original PDFs or source files for provenance. Structured Markdown parent slices are the editable knowledge source. `knowledge/indexes/` contains derived artifacts such as `chunks.jsonl`, `keyword-index.json`, and `manifest.json`; these can be rebuilt from parent slices.
@@ -180,11 +185,12 @@ Current implemented knowledge commands:
 
 ```bash
 super-helper knowledge init --workspace /path/to/workspace
+super-helper knowledge init --workspace /path/to/workspace --knowledge-root /path/to/knowledge-base
 super-helper knowledge update --workspace /path/to/workspace
 super-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 ```
 
-The initial knowledge skeleton does not yet replace the runtime diagnosis path. Runtime integration must happen through `src/runtime/` in a later task so that knowledge evidence still passes Output Review and Presentation before reaching the user.
+`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime searches the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
 
 ## MCP Configuration
 

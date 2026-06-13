@@ -989,7 +989,7 @@ Flow:
 1. Runtime 识别确认解决意图，记录 `case_resolution_confirmed` 日志。
 2. Case Curator 读取当前 case 的用户原始问题、归一化问题、模块、意图、环境、evidence、runs、claims、最终回复和用户确认。
 3. 生成 solved case Markdown 草稿。
-4. 保存到 `workspace/knowledge/tickets/solved-cases/<module-id>/`。
+4. 保存到 resolved knowledge workspace 下的 `knowledge/tickets/solved-cases/<module-id>/`。
 5. frontmatter 默认 `status: review_required`，不得直接 `active`。
 6. frontmatter 默认 `confidence: medium`，不得直接 `high`。
 7. 写入 `knowledge/indexes/dirty.flag` 或更新 `manifest.json` 标记需要重新索引。

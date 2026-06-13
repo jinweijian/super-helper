@@ -75,15 +75,16 @@ The first enterprise knowledge-base skeleton adds local workspace commands and p
 
 Implemented local commands:
 
-- `super-helper knowledge init --workspace <path>` creates the `knowledge/` directory structure, taxonomy examples, Markdown templates, source metadata example, and empty derived indexes.
-- `super-helper knowledge update --workspace <path>` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from Markdown parent slices.
-- `super-helper knowledge search --workspace <path> --query <question>` performs local keyword search and expands chunk hits back to parent slice evidence.
+- `super-helper knowledge init --workspace <project-path> [--knowledge-root <path>]` creates the isolated knowledge workspace structure, taxonomy examples, Markdown templates, source metadata example, and empty derived indexes.
+- `super-helper knowledge update --workspace <project-path> [--knowledge-root <path>]` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from Markdown parent slices in the resolved knowledge workspace.
+- `super-helper knowledge search --workspace <project-path> --query <question> [--knowledge-root <path>]` performs local keyword search and expands chunk hits back to parent slice evidence.
 
-Current limitation:
+Runtime behavior:
 
-- The runtime chat path still uses the existing Experience -> Preflight -> DiagnosticWorker -> Output Review -> Presentation chain.
-- Knowledge evidence is not yet automatically inserted into `DiagnosticRequest.context`.
-- Knowledge Router, Evidence Judge, and Case Curator are registered configs, but their runtime stages are not wired in this MVP skeleton.
+- `--workspace` and runtime workspace selection point to the project/service directory used for code and MCP inspection.
+- Knowledge files are stored under the configured knowledge root, isolated by the same workspace key strategy used for session storage; they are not created inside the project code directory by default.
+- After an Experience miss, the runtime searches the resolved knowledge workspace before dispatching Claude Code. Answerable knowledge evidence still passes Evidence Judge, Output Review, and Presentation; insufficient evidence is attached to `DiagnosticRequest.context` before code escalation.
+- Knowledge Router, Evidence Judge, and Case Curator are registered configs and wired into the current knowledge-first runtime path.
 
 ## Non-Guessing Contract
 

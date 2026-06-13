@@ -26,6 +26,10 @@ export interface SuperHelperConfig {
     rootDir: string;
     isolateByWorkspace: boolean;
   };
+  knowledge: {
+    rootDir: string;
+    isolateByWorkspace: boolean;
+  };
   agent: {
     name: string;
     language: 'zh-CN' | 'en-US';
@@ -82,6 +86,10 @@ export function defaultConfig(): SuperHelperConfig {
       rootDir: DEFAULT_HOME,
       isolateByWorkspace: true,
     },
+    knowledge: {
+      rootDir: join(DEFAULT_HOME, 'knowledge'),
+      isolateByWorkspace: true,
+    },
     agent: {
       name: 'super helper',
       language: 'zh-CN',
@@ -136,6 +144,7 @@ export function ensureConfig(homeDir = DEFAULT_HOME): SuperHelperConfig {
     mkdirSync(dirname(path), { recursive: true });
     const config = defaultConfig();
     config.storage.rootDir = homeDir;
+    config.knowledge.rootDir = join(homeDir, 'knowledge');
     writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
     return config;
   }
@@ -147,13 +156,14 @@ export function ensureConfig(homeDir = DEFAULT_HOME): SuperHelperConfig {
 
 export function loadConfig(path = configPath()): SuperHelperConfig {
   const raw = readFileSync(path, 'utf8');
-  const parsed = JSON.parse(raw) as SuperHelperConfig;
+  const parsed = JSON.parse(raw) as Partial<SuperHelperConfig>;
   const defaults = defaultConfig();
   const merged: SuperHelperConfig = {
     ...defaults,
     ...parsed,
     server: { ...defaults.server, ...parsed.server },
     storage: { ...defaults.storage, ...parsed.storage },
+    knowledge: { ...defaults.knowledge, ...parsed.knowledge },
     agent: { ...defaults.agent, ...parsed.agent },
     models: { ...defaults.models, ...parsed.models },
     claude: { ...defaults.claude, ...parsed.claude },
@@ -161,6 +171,7 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
     mcpTools: parsed.mcpTools ?? defaults.mcpTools,
   };
   merged.storage.rootDir = resolve(merged.storage.rootDir || DEFAULT_HOME);
+  merged.knowledge.rootDir = resolve(parsed.knowledge?.rootDir || join(merged.storage.rootDir, 'knowledge'));
   merged.agent.modelProvider = selectActiveModelProvider(merged);
   return merged;
 }

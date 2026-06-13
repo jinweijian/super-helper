@@ -141,6 +141,7 @@ Rules:
 - `FileMemoryStore` implements the repository boundary and preserves persisted case JSON shape.
 - Session storage scoping belongs in `src/sessions/storage-scope.ts`; gateway/server startup may use the resolved path but must not invent its own workspace-directory naming logic.
 - Different active workspaces must use isolated session storage by default. If this behavior changes, update the architecture docs and add compatibility tests.
+- Knowledge storage scoping belongs in `src/knowledge/storage-scope.ts` and must use the same workspace-key strategy as session storage. Runtime and CLI code must not invent separate workspace-directory naming logic.
 - New runtime code should depend on repository-style methods, not raw JSON files.
 - `context-builder.ts` is the only place that constructs `DiagnosticRequest.context`.
 - Do not let Claude Code own long-term memory.
@@ -172,7 +173,8 @@ Host commands must remain constrained by `docs/command-whitelist.md`.
 
 Rules:
 
-- Knowledge files live under the active workspace `knowledge/` directory.
+- Knowledge files live under the resolved knowledge workspace root, outside the inspected project workspace by default. The default configured base is `knowledge.rootDir`, scoped by workspace key, with the editable structure under `<resolved-root>/knowledge/`.
+- The active project workspace remains the code/MCP inspection boundary. Do not create or require a `knowledge/` directory inside that project root unless an explicit knowledge root points there.
 - Original PDFs and source files belong under `knowledge/_sources/`; they are provenance, not direct answer context.
 - Structured Markdown parent slices under `knowledge/faq/`, `knowledge/runbooks/`, `knowledge/whitepapers/`, `knowledge/modules/`, `knowledge/glossary/`, and `knowledge/tickets/` are the canonical editable knowledge.
 - `knowledge/indexes/chunks.jsonl`, `keyword-index.json`, and `manifest.json` are derived artifacts and must be rebuildable from parent slices.

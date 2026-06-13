@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   initKnowledgeWorkspace,
   parseMarkdownDocument,
+  resolveKnowledgeWorkspaceRoot,
   routeKnowledgeQuestion,
   searchKnowledge,
   updateKnowledgeIndex,
@@ -41,6 +42,37 @@ test('knowledge init creates the enterprise knowledge workspace skeleton', () =>
     assert.match(readFileSync(join(knowledgeRoot, 'whitepapers', 'README.md'), 'utf8'), /source_pages/);
   } finally {
     cleanup(workspace);
+  }
+});
+
+test('knowledge workspace scope stores knowledge outside project roots and isolates by workspace', () => {
+  const storageRoot = tempWorkspace();
+  const firstProject = tempWorkspace();
+  const secondProject = tempWorkspace();
+  try {
+    const config = {
+      storage: { rootDir: storageRoot, isolateByWorkspace: true },
+      knowledge: { rootDir: join(storageRoot, 'knowledge-store'), isolateByWorkspace: true },
+      workspaces: [
+        { id: 'first', name: 'First Project', rootPath: firstProject, mcpToolIds: [] },
+        { id: 'second', name: 'Second Project', rootPath: secondProject, mcpToolIds: [] },
+      ],
+    };
+
+    const firstKnowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'first');
+    const secondKnowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'second');
+    const result = initKnowledgeWorkspace({ workspaceRoot: firstKnowledgeWorkspace });
+
+    assert.notEqual(firstKnowledgeWorkspace, firstProject);
+    assert.notEqual(firstKnowledgeWorkspace, secondKnowledgeWorkspace);
+    assert.equal(result.knowledgeRoot, join(firstKnowledgeWorkspace, 'knowledge'));
+    assert.equal(existsSync(join(firstProject, 'knowledge')), false);
+    assert.equal(existsSync(join(secondProject, 'knowledge')), false);
+    assert.equal(existsSync(join(firstKnowledgeWorkspace, 'knowledge', 'indexes', 'manifest.json')), true);
+  } finally {
+    cleanup(storageRoot);
+    cleanup(firstProject);
+    cleanup(secondProject);
   }
 });
 
@@ -154,14 +186,33 @@ chunking_strategy: semantic-section-v1
 
 test('knowledge CLI initializes and updates a workspace', () => {
   const workspace = tempWorkspace();
+  const knowledgeBase = tempWorkspace();
   try {
-    const initOutput = execFileSync(process.execPath, ['dist/cli.js', 'knowledge', 'init', '--workspace', workspace], {
+    const initOutput = execFileSync(process.execPath, [
+      'dist/cli.js',
+      'knowledge',
+      'init',
+      '--workspace',
+      workspace,
+      '--knowledge-root',
+      knowledgeBase,
+    ], {
       cwd: process.cwd(),
       encoding: 'utf8',
     });
     assert.match(initOutput, /knowledge workspace ready/);
+    assert.equal(existsSync(join(workspace, 'knowledge')), false);
+    assert.match(initOutput, new RegExp(escapeRegExp(knowledgeBase)));
 
-    const updateOutput = execFileSync(process.execPath, ['dist/cli.js', 'knowledge', 'update', '--workspace', workspace], {
+    const updateOutput = execFileSync(process.execPath, [
+      'dist/cli.js',
+      'knowledge',
+      'update',
+      '--workspace',
+      workspace,
+      '--knowledge-root',
+      knowledgeBase,
+    ], {
       cwd: process.cwd(),
       encoding: 'utf8',
     });
@@ -169,6 +220,7 @@ test('knowledge CLI initializes and updates a workspace', () => {
     assert.match(updateOutput, /chunks:/);
   } finally {
     cleanup(workspace);
+    cleanup(knowledgeBase);
   }
 });
 
@@ -513,4 +565,8 @@ function findFirstGeneratedMarkdown(root) {
     .sort();
   assert.equal(entries.length > 0, true);
   return entries[0];
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

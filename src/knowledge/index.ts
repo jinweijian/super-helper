@@ -2,6 +2,7 @@ export { parseMarkdownDocument, parseSimpleYaml } from './frontmatter.js';
 export { initKnowledgeWorkspace } from './init.js';
 export { defaultSourceDirectory, ingestSourceDocuments } from './ingest.js';
 export { knowledgeRoot } from './paths.js';
+export { resolveKnowledgeWorkspaceRoot, workspaceKnowledgeKey } from './storage-scope.js';
 export {
   discoverKnowledgeDocuments,
   keywordsFromQuery,

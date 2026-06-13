@@ -11,6 +11,7 @@ import type { FileMemoryStore, StoredCase } from '../storage.js';
 import {
   discoverKnowledgeDocuments,
   knowledgeRoot,
+  resolveKnowledgeWorkspaceRoot,
   routeKnowledgeQuestion,
   searchKnowledge,
   type KnowledgeEvidencePack,
@@ -236,8 +237,8 @@ export class DiagnosticRuntime {
       return undefined;
     }
 
-    const workspaceRoot = this.workspaceRootFor(caseSession.workspaceId);
-    if (!workspaceRoot || !existsSync(knowledgeRoot(workspaceRoot))) {
+    const workspaceRoot = this.knowledgeWorkspaceRootFor(caseSession.workspaceId);
+    if (!existsSync(knowledgeRoot(workspaceRoot))) {
       return undefined;
     }
 
@@ -371,8 +372,8 @@ export class DiagnosticRuntime {
     replyToMessageId: string | undefined,
     request: DiagnosticRequest,
   ): Promise<AgentResponse | undefined> {
-    const workspaceRoot = this.workspaceRootFor(caseSession.workspaceId);
-    if (!workspaceRoot || !existsSync(knowledgeRoot(workspaceRoot))) {
+    const workspaceRoot = this.knowledgeWorkspaceRootFor(caseSession.workspaceId);
+    if (!existsSync(knowledgeRoot(workspaceRoot))) {
       return undefined;
     }
     const docs = discoverKnowledgeDocuments(workspaceRoot);
@@ -449,6 +450,10 @@ export class DiagnosticRuntime {
 
   private workspaceRootFor(workspaceId: string): string | undefined {
     return this.config.workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath;
+  }
+
+  private knowledgeWorkspaceRootFor(workspaceId: string): string {
+    return resolveKnowledgeWorkspaceRoot(this.config, workspaceId);
   }
 
   private async modelDrivenPreflight(

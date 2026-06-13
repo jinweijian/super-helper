@@ -1,15 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Knowledge workspace structure
-The system SHALL support an enterprise knowledge workspace layout under the active workspace root without depending on Obsidian at runtime.
+The system SHALL support an enterprise knowledge workspace layout under the resolved knowledge workspace root without depending on Obsidian at runtime.
 
 #### Scenario: Knowledge directory exists
-- **WHEN** the active workspace contains `knowledge/_taxonomy/`, `knowledge/faq/`, `knowledge/runbooks/`, `knowledge/tickets/`, `knowledge/whitepapers/`, `knowledge/glossary/`, and `knowledge/indexes/`
+- **WHEN** the resolved knowledge workspace contains `knowledge/_taxonomy/`, `knowledge/faq/`, `knowledge/runbooks/`, `knowledge/tickets/`, `knowledge/whitepapers/`, `knowledge/glossary/`, and `knowledge/indexes/`
 - **THEN** the runtime can discover the knowledge workspace as ordinary filesystem content
 
-#### Scenario: Repositories remain separate from knowledge documents
-- **WHEN** the active workspace contains both `knowledge/` and `repos/`
-- **THEN** knowledge search reads from `knowledge/` first and does not inspect `repos/` until code escalation is selected
+#### Scenario: Project workspace remains separate from knowledge documents
+- **WHEN** a project workspace is configured for code inspection
+- **THEN** knowledge search reads from the resolved knowledge workspace and does not require or create `knowledge/` inside the project workspace
 
 ### Requirement: Source document provenance
 The system SHALL preserve original PDF or source files separately from structured knowledge slices so answers can be traced back to source document metadata, page ranges, and import provenance.
@@ -152,7 +152,7 @@ The system SHALL initialize and ingest source whitepaper files into structured M
 
 #### Scenario: DOCX source imported
 - **WHEN** `knowledge init` is run with a source directory containing `.docx` whitepaper files
-- **THEN** the original DOCX files are copied under `knowledge/_sources/whitepapers/`, source metadata is written, parent slice Markdown is generated under `knowledge/whitepapers/`, derived chunks are generated, and `knowledge/indexes/ingest-report.json` records the import outcome
+- **THEN** the original DOCX files are copied under the resolved knowledge workspace's `knowledge/_sources/whitepapers/`, source metadata is written, parent slice Markdown is generated under `knowledge/whitepapers/`, derived chunks are generated, and `knowledge/indexes/ingest-report.json` records the import outcome
 
 #### Scenario: Default local source directory
 - **WHEN** no source directory is provided and `/Users/king/Documents/knowledge/` exists
@@ -190,7 +190,7 @@ The system SHALL support solved case curation after the user confirms the issue 
 
 #### Scenario: Solved case saved to knowledge base
 - **WHEN** a solved case draft is generated
-- **THEN** it is saved under `knowledge/tickets/solved-cases/<module-id>/` and includes original question, normalized question, module, intent, environment, evidence, investigation process, root cause, solution, applicability, non-applicability, related code paths, and user confirmation
+- **THEN** it is saved under the resolved knowledge workspace's `knowledge/tickets/solved-cases/<module-id>/` and includes original question, normalized question, module, intent, environment, evidence, investigation process, root cause, solution, applicability, non-applicability, related code paths, and user confirmation
 
 #### Scenario: Index marked dirty
 - **WHEN** a solved case document is saved

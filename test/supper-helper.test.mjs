@@ -11,7 +11,7 @@ import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
 import { startServer } from '../dist/server.js';
-import { initKnowledgeWorkspace, updateKnowledgeIndex } from '../dist/knowledge/index.js';
+import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
 import { buildDiagnosticRequestContext } from '../dist/sessions/context-builder.js';
@@ -33,7 +33,8 @@ function baseConfig(rootDir) {
   return {
     version: 1,
     server: { host: '127.0.0.1', port: 4317 },
-    storage: { rootDir },
+    storage: { rootDir, isolateByWorkspace: true },
+    knowledge: { rootDir: join(rootDir, 'knowledge-store'), isolateByWorkspace: true },
     agent: {
       name: 'super helper',
       language: 'zh-CN',
@@ -867,6 +868,23 @@ test('config activates the only configured model provider for local agent runs',
   }
 });
 
+test('config defaults missing knowledge storage under the configured storage root', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const configPath = join(dir, 'config.json');
+  try {
+    const config = baseConfig(dir);
+    delete config.knowledge;
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+    const loaded = loadConfig(configPath);
+
+    assert.equal(loaded.knowledge.rootDir, join(dir, 'knowledge'));
+    assert.equal(loaded.knowledge.isolateByWorkspace, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('runtime answers directly from knowledge evidence before calling the worker', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
@@ -896,20 +914,21 @@ test('runtime answers directly from knowledge evidence before calling the worker
   };
 
   try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeKnowledgeFaq(workspace, {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
       module: 'ai-study',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。学习计划生成后包含任务数、学习总时长、学习起止时间、每周学习日和每日学习时长。',
       terms: ['AI伴学助手', '制定学习计划', '学习计划'],
     });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
-    const config = baseConfig(dir);
-    delete config.agent.modelProvider;
-    config.agent.useModelForPreflight = false;
-    config.workspaces[0].rootPath = workspace;
     const store = new FileMemoryStore(dir);
     const agent = new SuperHelperAgent(config, store, worker);
 
@@ -919,6 +938,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
     });
 
     assert.equal(workerRequests.length, 0);
+    assert.equal(existsSync(join(workspace, 'knowledge')), false);
     assert.equal(response.decision, 'final');
     assert.equal(response.caseSession.runs.length, 1);
     assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
@@ -944,19 +964,20 @@ test('runtime broadens source type filters so whitepaper evidence can answer nat
   };
 
   try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeKnowledgeWhitepaper(workspace, {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
       module: 'ai-study',
       title: '学习日晚上8点',
       body: '学习日晚上8点未完成当日学习任务时向以对话框消息和APP通知的形式向学员发送学习提醒。',
       terms: ['AI伴学助手', '督学提醒', '学习日晚上8点'],
     });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
-    const config = baseConfig(dir);
-    delete config.agent.modelProvider;
-    config.agent.useModelForPreflight = false;
-    config.workspaces[0].rootPath = workspace;
     const store = new FileMemoryStore(dir);
     const agent = new SuperHelperAgent(config, store, worker);
 
@@ -1004,20 +1025,21 @@ test('runtime escalates no-hit or implementation-detail knowledge questions with
   };
 
   try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeKnowledgeFaq(workspace, {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
       module: 'ai-study',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
       terms: ['AI伴学助手', '制定学习计划'],
     });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
-    const config = baseConfig(dir);
-    delete config.agent.modelProvider;
-    config.agent.useModelForPreflight = false;
-    config.workspaces[0].rootPath = workspace;
     const store = new FileMemoryStore(dir);
     const agent = new SuperHelperAgent(config, store, worker);
 
@@ -1066,8 +1088,13 @@ test('runtime does not expose restricted knowledge directly to customer persona'
   };
 
   try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeKnowledgeFaq(workspace, {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
       module: 'course',
       intent: 'how_to',
       title: '课程隐藏规则内部排查',
@@ -1075,12 +1102,8 @@ test('runtime does not expose restricted knowledge directly to customer persona'
       terms: ['课程', '隐藏规则', '权限策略'],
       visibility: 'restricted',
     });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
-    const config = baseConfig(dir);
-    delete config.agent.modelProvider;
-    config.agent.useModelForPreflight = false;
-    config.workspaces[0].rootPath = workspace;
     const store = new FileMemoryStore(dir);
     const agent = new SuperHelperAgent(config, store, worker);
 
@@ -1227,20 +1250,21 @@ test('runtime curates a review-required solved case after user confirms resoluti
   };
 
   try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeKnowledgeFaq(workspace, {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
       module: 'ai-study',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
       terms: ['AI伴学助手', '制定学习计划'],
     });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
-    const config = baseConfig(dir);
-    delete config.agent.modelProvider;
-    config.agent.useModelForPreflight = false;
-    config.workspaces[0].rootPath = workspace;
     const store = new FileMemoryStore(dir);
     const agent = new SuperHelperAgent(config, store, worker);
     const first = await agent.handleUserMessage({
@@ -1254,7 +1278,7 @@ test('runtime curates a review-required solved case after user confirms resoluti
       workspaceId: 'current',
     });
 
-    const solvedDir = join(workspace, 'knowledge', 'tickets', 'solved-cases', 'ai-study');
+    const solvedDir = join(knowledgeWorkspace, 'knowledge', 'tickets', 'solved-cases', 'ai-study');
     const files = readdirSync(solvedDir).filter((file) => file.endsWith('.md'));
     const content = readFileSync(join(solvedDir, files[0]), 'utf8');
 
@@ -1262,7 +1286,8 @@ test('runtime curates a review-required solved case after user confirms resoluti
     assert.match(content, /status: review_required/);
     assert.match(content, /confidence: medium/);
     assert.match(content, /## 用户最终确认/);
-    assert.equal(existsSync(join(workspace, 'knowledge', 'indexes', 'dirty.flag')), true);
+    assert.equal(existsSync(join(workspace, 'knowledge')), false);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'indexes', 'dirty.flag')), true);
     assert.equal(confirmed.caseSession.logs.some((event) => event.phase === 'case_curator_result'), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
