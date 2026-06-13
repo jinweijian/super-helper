@@ -57,7 +57,7 @@
 
 ## 7. Multi-Agent Architecture Documentation
 
-- [x] 7.1 Update `docs/technical-architecture.md` to model supper helper as one main Agent plus configured input-review, experience, output-review, and presentation sub-agents, separate from workers/tools.
+- [x] 7.1 Update `docs/technical-architecture.md` to model super helper as one main Agent plus configured input-review, experience, output-review, and presentation sub-agents, separate from workers/tools.
 - [x] 7.2 Update `docs/agent-design.md` to reference `src/agents/main.md` as the authoritative main Agent behavior spec and list the current role pairings.
 - [x] 7.3 Update `docs/development-standards.md` to add `src/agents/` and the registry to the module ownership map and anti-patterns.
 - [x] 7.4 Update `README.md` to separate repository development rules from product Agent configuration and point to `src/agents/main.md` plus the `src/agents/` registry.

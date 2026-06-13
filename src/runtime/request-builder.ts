@@ -1,4 +1,4 @@
-import type { SupperHelperConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRequest, DiagnosticResult } from '../domain.js';
 import { buildDiagnosticRequestContext } from '../sessions/context-builder.js';
 import type { StoredCase } from '../storage.js';
@@ -7,7 +7,7 @@ export function buildDiagnosticRequest(input: {
   caseSession: StoredCase;
   userMessage: string;
   unknowns: string[];
-  config: SupperHelperConfig;
+  config: SuperHelperConfig;
 }): DiagnosticRequest {
   const { caseSession, userMessage, unknowns, config } = input;
   const latestRunNumber = caseSession.runs.length + 1;
@@ -30,7 +30,7 @@ export function buildDiagnosticRequest(input: {
     unknowns,
     constraints: [
       'Claude Code is an inspection tool and must not respond directly to the user.',
-      `User-facing persona is ${caseSession.userPersona}; return evidence for supper helper Agent to translate.`,
+      `User-facing persona is ${caseSession.userPersona}; return evidence for super helper Agent to translate.`,
       'Handle both troubleshooting requests and general project questions.',
       'Return structured evidence, assumptions, missing information, and recommended next action.',
       'Do not make final claims without evidence.',

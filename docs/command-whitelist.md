@@ -1,6 +1,6 @@
-# supper helper 命令白名单
+# super helper 命令白名单
 
-`supper helper` 的目标是查询和解释项目，不做内容更改。
+`super helper` 的目标是查询和解释项目，不做内容更改。
 
 ## 宿主进程命令白名单
 
@@ -44,11 +44,11 @@
 
 ## 长任务策略
 
-默认 `claude.timeoutMs` 是 `1200000` 毫秒。设置为 `0` 时表示不由 `supper helper` 主动超时中断。长任务期间前端通过 `/api/session` 和 `/api/logs` 轮询状态，不展示中间答案，只展示处理阶段，直到最终回答写入会话。
+默认 `claude.timeoutMs` 是 `1200000` 毫秒。设置为 `0` 时表示不由 `super helper` 主动超时中断。长任务期间前端通过 `/api/session` 和 `/api/logs` 轮询状态，不展示中间答案，只展示处理阶段，直到最终回答写入会话。
 
 ## Session busy 策略
 
-同一个 `claudeSessionId` 在 `supper helper` 进程内会串行执行。如果 Claude Code 仍返回 `Session ID ... is already in use`，系统会按以下配置等待并重试：
+同一个 `claudeSessionId` 在 `super helper` 进程内会串行执行。如果 Claude Code 仍返回 `Session ID ... is already in use`，系统会按以下配置等待并重试：
 
 - `claude.sessionBusyMaxRetries`
 - `claude.sessionBusyRetryDelayMs`

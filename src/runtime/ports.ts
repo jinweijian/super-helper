@@ -1,4 +1,4 @@
-import type { SupperHelperConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticLogEvent } from '../domain.js';
 import type { AgentModelClient } from '../model.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
@@ -10,7 +10,7 @@ export interface RuntimeEventRecorder {
 }
 
 export interface DiagnosticRuntimePorts {
-  config: SupperHelperConfig;
+  config: SuperHelperConfig;
   cases: CaseRepository;
   model: AgentModelClient;
   worker: DiagnosticWorker;

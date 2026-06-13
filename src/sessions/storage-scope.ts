@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
-import type { SupperHelperConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 
-type WorkspaceStorageInput = SupperHelperConfig['workspaces'][number];
+type WorkspaceStorageInput = SuperHelperConfig['workspaces'][number];
 
-export function resolveSessionStorageRoot(config: SupperHelperConfig, workspaceId = config.workspaces[0]?.id): string {
+export function resolveSessionStorageRoot(config: SuperHelperConfig, workspaceId = config.workspaces[0]?.id): string {
   const baseRoot = resolve(config.storage.rootDir);
   if (config.storage.isolateByWorkspace === false) {
     return baseRoot;

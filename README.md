@@ -1,10 +1,10 @@
-# supper helper
+# super helper
 
-`supper helper` is a chat-first super helper for diagnosing user problems across arbitrary project workspaces and configurable MCP tools.
+`super helper` is a chat-first super helper for diagnosing user problems across arbitrary project workspaces and configurable MCP tools.
 
 The product intentionally separates two responsibilities:
 
-- `supper helper Agent` talks with the user, checks whether information is enough, asks follow-up questions, reviews evidence, and explains conclusions.
+- `super helper Agent` talks with the user, checks whether information is enough, asks follow-up questions, reviews evidence, and explains conclusions.
 - Claude Code is a diagnostic tool used by the Agent. It should not talk directly to the user in the first MVP.
 
 Start with the docs:
@@ -17,7 +17,7 @@ Development rules:
 Product Agent behavior:
 
 - [Product Agents](src/agents/README.md): where the main Agent and sub-agent configs live.
-- [Main Agent Config](src/agents/main.md): how the supper helper user-facing main Agent behaves at runtime.
+- [Main Agent Config](src/agents/main.md): how the super helper user-facing main Agent behaves at runtime.
 - [Product Requirements](docs/product-requirements.md)
 - [Agent Design](docs/agent-design.md)
 - [Technical Architecture](docs/technical-architecture.md)
@@ -57,20 +57,20 @@ node dist/cli.js dev --workspace /path/to/your/project
 
 Then open the printed local URL.
 
-The first run creates `~/.supper-helper/config.json`. Case memory is stored under a workspace-specific subdirectory of `~/.supper-helper/` by default, so starting separate services with different `--workspace` values keeps their sessions isolated.
+The first run creates `~/.super-helper/config.json`. Case memory is stored under a workspace-specific subdirectory of `~/.super-helper/` by default, so starting separate services with different `--workspace` values keeps their sessions isolated.
 
-Click the `supper helper` brand in the upper-left corner to open local settings. The settings panel can save the Agent model provider, run a model connectivity test, and show the read-only multi-Agent configuration loaded from `src/agents/`.
+Click the `super helper` brand in the upper-left corner to open local settings. The settings panel can save the Agent model provider, run a model connectivity test, and show the read-only multi-Agent configuration loaded from `src/agents/`.
 
 ## Future npm Install Shape
 
 After publishing, the expected usage is:
 
 ```bash
-npm install -g supper-helper
-supper-helper init
-supper-helper knowledge init --workspace /path/to/your/workspace
-supper-helper knowledge update --workspace /path/to/your/workspace
-supper-helper dev --workspace /path/to/your/project
+npm install -g super-helper
+super-helper init
+super-helper knowledge init --workspace /path/to/your/workspace
+super-helper knowledge update --workspace /path/to/your/workspace
+super-helper dev --workspace /path/to/your/project
 ```
 
 ## Enterprise Knowledge Workspace MVP
@@ -120,9 +120,9 @@ The Agent can use an OpenAI-compatible chat completions provider for two jobs:
 - preflight: decide whether to ask the user or dispatch Claude Code
 - review: audit Claude Code results and write the final user-facing reply
 
-If no model is configured, supper helper falls back to deterministic local rules.
+If no model is configured, super helper falls back to deterministic local rules.
 
-Example `~/.supper-helper/config.json` fragment:
+Example `~/.super-helper/config.json` fragment:
 
 ```json
 {
@@ -177,14 +177,14 @@ Keep the actual key in the environment:
 export MINIMAX_API_KEY="..."
 ```
 
-If `MINIMAX_API_KEY` is missing in the shell that starts `supper-helper`, the Agent model will fail with `Missing API key for model MiniMax-M3` and fall back to local preflight rules. Use the settings panel's `测试模型` button to confirm the model is reachable before diagnosing real tickets.
+If `MINIMAX_API_KEY` is missing in the shell that starts `super-helper`, the Agent model will fail with `Missing API key for model MiniMax-M3` and fall back to local preflight rules. Use the settings panel's `测试模型` button to confirm the model is reachable before diagnosing real tickets.
 
-The context meter uses the current model provider's `contextWindowTokens`. If the provider omits it, supper helper falls back to built-in known model defaults and then to `agent.contextWindowTokens`.
+The context meter uses the current model provider's `contextWindowTokens`. If the provider omits it, super helper falls back to built-in known model defaults and then to `agent.contextWindowTokens`.
 
 You can also configure the model with the CLI:
 
 ```bash
-supper-helper model set default \
+super-helper model set default \
   --base-url https://api.example.com/v1 \
   --model your-model-id \
   --api-key-env SUPPER_HELPER_API_KEY
@@ -193,6 +193,6 @@ supper-helper model set default \
 ## Workspace and MCP Configuration
 
 ```bash
-supper-helper workspace set --path /path/to/your/project --name "My Project"
-supper-helper mcp add readonly-db --protocol stdio --permission read_only --config-json '{"command":"node","args":["server.js"]}'
+super-helper workspace set --path /path/to/your/project --name "My Project"
+super-helper mcp add readonly-db --protocol stdio --permission read_only --config-json '{"command":"node","args":["server.js"]}'
 ```

@@ -34,7 +34,7 @@ export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): D
   } catch {
     return {
       status: 'partial',
-      summary: 'Claude Code returned output, but supper helper could not parse it as structured JSON.',
+      summary: 'Claude Code returned output, but super helper could not parse it as structured JSON.',
       missingInfo: [],
       evidence: [
         {

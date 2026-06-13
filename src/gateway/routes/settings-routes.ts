@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { SupperHelperConfig } from '../../config.js';
+import type { SuperHelperConfig } from '../../config.js';
 import { saveConfig } from '../../config.js';
 import { createModelClient } from '../../model.js';
 import { listPublicAgentConfigs } from '../../runtime/agent-configs.js';
@@ -10,7 +10,7 @@ export async function handleSettingsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  config: SupperHelperConfig,
+  config: SuperHelperConfig,
 ): Promise<boolean> {
   if (req.method === 'GET' && url.pathname === '/api/config') {
     sendJson(res, 200, {
@@ -64,11 +64,11 @@ export async function handleSettingsRoutes(
       const reply = await createModelClient(provider).complete([
         {
           role: 'system',
-          content: 'You are a connectivity test for supper helper. Reply briefly.',
+          content: 'You are a connectivity test for super helper. Reply briefly.',
         },
         {
           role: 'user',
-          content: 'supper helper model connectivity test. Reply with "ok".',
+          content: 'super helper model connectivity test. Reply with "ok".',
         },
       ]);
       sendJson(res, 200, {

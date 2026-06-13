@@ -1,4 +1,4 @@
-import type { ModelProviderConfig, SupperHelperConfig } from '../config.js';
+import type { ModelProviderConfig, SuperHelperConfig } from '../config.js';
 import { inferModelContextWindowTokens, resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
@@ -55,7 +55,7 @@ export interface AgentActivityItem {
   severity: string;
 }
 
-export function publicSettings(config: SupperHelperConfig): unknown {
+export function publicSettings(config: SuperHelperConfig): unknown {
   return {
     agent: config.agent,
     models: {
@@ -92,7 +92,7 @@ export function publicSettings(config: SupperHelperConfig): unknown {
   };
 }
 
-export function sessionSummary(caseSession: StoredCase, config?: SupperHelperConfig): SessionSummary {
+export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConfig): SessionSummary {
   const lastMessage = caseSession.messages.at(-1);
   return {
     id: caseSession.id,
@@ -113,7 +113,7 @@ export function sessionSummary(caseSession: StoredCase, config?: SupperHelperCon
   };
 }
 
-export function serializeSession(caseSession: StoredCase, config: SupperHelperConfig): SessionSummary & Pick<StoredCase, 'messages' | 'runs'> {
+export function serializeSession(caseSession: StoredCase, config: SuperHelperConfig): SessionSummary & Pick<StoredCase, 'messages' | 'runs'> {
   return {
     ...sessionSummary(caseSession, config),
     messages: caseSession.messages,

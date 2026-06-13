@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
-import { SupperHelperAgent } from '../dist/agent.js';
+import { SuperHelperAgent } from '../dist/agent.js';
 import { ClaudeCodeWorker } from '../dist/claude-worker.js';
 import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
@@ -30,7 +30,7 @@ function baseConfig(rootDir) {
     server: { host: '127.0.0.1', port: 4317 },
     storage: { rootDir },
     agent: {
-      name: 'supper helper',
+      name: 'super helper',
       language: 'zh-CN',
       tone: 'calm_professional',
       modelProvider: 'minimax',
@@ -210,14 +210,14 @@ test('composer keeps status chips out of the action row', () => {
 });
 
 test('settings API sanitizes secrets and can test model connectivity', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   let server;
 
   globalThis.fetch = async (_url, init) => {
     const body = JSON.parse(init.body);
     assert.equal(body.model, 'MiniMax-M3');
-    assert.equal(body.messages.at(-1).content.includes('supper helper model connectivity test'), true);
+    assert.equal(body.messages.at(-1).content.includes('super helper model connectivity test'), true);
     return chatResponse('model ok');
   };
 
@@ -286,7 +286,7 @@ test('model client times out instead of hanging agent review forever', async () 
 });
 
 test('sessions API lists, creates, and loads reusable chat sessions', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
 
   try {
@@ -328,9 +328,9 @@ test('sessions API lists, creates, and loads reusable chat sessions', async () =
 });
 
 test('server scopes session storage by active workspace root', async () => {
-  const storageDir = mkdtempSync(join(tmpdir(), 'supper-helper-shared-storage-'));
-  const workspaceOne = mkdtempSync(join(tmpdir(), 'supper-helper-workspace-one-'));
-  const workspaceTwo = mkdtempSync(join(tmpdir(), 'supper-helper-workspace-two-'));
+  const storageDir = mkdtempSync(join(tmpdir(), 'super-helper-shared-storage-'));
+  const workspaceOne = mkdtempSync(join(tmpdir(), 'super-helper-workspace-one-'));
+  const workspaceTwo = mkdtempSync(join(tmpdir(), 'super-helper-workspace-two-'));
   let firstServer;
   let secondServer;
 
@@ -402,7 +402,7 @@ test('server scopes session storage by active workspace root', async () => {
 });
 
 test('public API routes keep compatible response shapes', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   let server;
 
@@ -493,7 +493,7 @@ test('public API routes keep compatible response shapes', async () => {
 });
 
 test('case store records structured diagnostic log events', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const store = new FileMemoryStore(dir);
     const caseSession = store.createCase({
@@ -521,7 +521,7 @@ test('case store records structured diagnostic log events', () => {
 });
 
 test('Claude Code worker reuses the per-case Claude session instead of disabling persistence', async () => {
-  const config = baseConfig(mkdtempSync(join(tmpdir(), 'supper-helper-test-')));
+  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
   config.claude.command = process.execPath;
   config.claude.timeoutMs = 1000;
   const worker = new ClaudeCodeWorker(config);
@@ -548,7 +548,7 @@ test('Claude Code worker reuses the per-case Claude session instead of disabling
 });
 
 test('Claude Code worker resumes an existing Claude session on follow-up runs', async () => {
-  const config = baseConfig(mkdtempSync(join(tmpdir(), 'supper-helper-test-')));
+  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
   config.claude.command = process.execPath;
   config.claude.timeoutMs = 1000;
   const worker = new ClaudeCodeWorker(config);
@@ -574,7 +574,7 @@ test('Claude Code worker resumes an existing Claude session on follow-up runs', 
 });
 
 test('Claude Code worker separates system prompt from user payload and enforces read-only tools', async () => {
-  const config = baseConfig(mkdtempSync(join(tmpdir(), 'supper-helper-test-')));
+  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
   config.claude.command = process.execPath;
   config.claude.tools = ['Read', 'Glob', 'Grep', 'Bash', 'Edit'];
   config.claude.timeoutMs = 1000;
@@ -613,7 +613,7 @@ test('Claude Code worker separates system prompt from user payload and enforces 
 });
 
 test('Claude Code worker retries when a reused session is temporarily busy', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const counterPath = join(dir, 'counter.txt');
   const workerPath = join(dir, 'fake-claude-worker.mjs');
   writeFileSync(
@@ -669,7 +669,7 @@ console.log(JSON.stringify({ result: JSON.stringify(result) }));
 });
 
 test('Claude Code worker turns Claude result subtypes into partial diagnostics', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workerPath = join(dir, 'fake-budget-worker.mjs');
   writeFileSync(
     workerPath,
@@ -707,7 +707,7 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
 });
 
 test('Claude Code worker surfaces CLI API connection failures in the diagnostic result', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workerPath = join(dir, 'fake-connection-worker.mjs');
   writeFileSync(
     workerPath,
@@ -809,7 +809,7 @@ ${JSON.stringify({ ...structured, summary: 'parsed fenced result with earlier br
   assert.deepEqual(readOnlyTools(['Read', 'Bash', 'Edit']), ['Read']);
   assert.deepEqual(readOnlyTools(['Bash']), ['Read', 'Glob', 'Grep']);
   assert.equal(assertHostCommandAllowed('claude', ['claude']), undefined);
-  assert.match(assertHostCommandAllowed('rm', ['claude']), /not in supper helper command whitelist/);
+  assert.match(assertHostCommandAllowed('rm', ['claude']), /not in super helper command whitelist/);
 });
 
 test('model client includes fetch cause codes in connection errors', async () => {
@@ -839,7 +839,7 @@ test('model client includes fetch cause codes in connection errors', async () =>
 });
 
 test('async chat accepts immediately, stores progress, and exposes context usage', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
 
   try {
@@ -886,7 +886,7 @@ test('async chat accepts immediately, stores progress, and exposes context usage
 });
 
 test('sync and async chat flows use the same runtime pipeline', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -932,7 +932,7 @@ test('sync and async chat flows use the same runtime pipeline', async () => {
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const syncResponse = await agent.handleUserMessage({
       message: '请检查项目的运行时拆分是否可诊断。',
     });
@@ -955,7 +955,7 @@ test('sync and async chat flows use the same runtime pipeline', async () => {
 });
 
 test('context usage limit follows the current model context window', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
 
   try {
@@ -993,7 +993,7 @@ test('context usage limit follows the current model context window', async () =>
 });
 
 test('configured provider context window overrides inferred model defaults', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
 
   try {
@@ -1024,7 +1024,7 @@ test('configured provider context window overrides inferred model defaults', asy
 });
 
 test('logs API returns newest structured blocks with severity and labels', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
 
   try {
@@ -1064,7 +1064,7 @@ test('logs API returns newest structured blocks with severity and labels', async
 });
 
 test('agent model runs before Claude dispatch and after Claude returns', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   const modelCalls = [];
 
@@ -1129,7 +1129,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
       },
     };
 
-    const agent = new SupperHelperAgent(baseConfig(dir), store, worker);
+    const agent = new SuperHelperAgent(baseConfig(dir), store, worker);
     const response = await agent.handleUserMessage({
       message: '课程任务保存失败，接口 /course/1/task/2/update 返回 500，账号是管理员。',
     });
@@ -1147,7 +1147,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
 });
 
 test('agent falls back to a preformatted raw Claude result when presentation model fails', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   const rawClaudeResult = `The \`org.create\` event has no depth check before the fenced result.
 
@@ -1210,7 +1210,7 @@ test('agent falls back to a preformatted raw Claude result when presentation mod
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '请在当前项目里查找部门创建支持多少级，需要引用文件证据。',
     });
@@ -1228,7 +1228,7 @@ test('agent falls back to a preformatted raw Claude result when presentation mod
 });
 
 test('agent directly surfaces worker errors when presentation model fails before a result exists', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async () => {
@@ -1259,7 +1259,7 @@ test('agent directly surfaces worker errors when presentation model fails before
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '请在当前项目里查找部门创建支持多少级，需要引用文件证据。',
     });
@@ -1275,7 +1275,7 @@ test('agent directly surfaces worker errors when presentation model fails before
 });
 
 test('agent asks for required information without dispatching worker when preflight blocks diagnosis', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -1289,7 +1289,7 @@ test('agent asks for required information without dispatching worker when prefli
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '你好',
     });
@@ -1305,7 +1305,7 @@ test('agent asks for required information without dispatching worker when prefli
 });
 
 test('agent dispatches workspace-aware messages as structured diagnostic requests', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -1352,7 +1352,7 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       persona: 'support',
       message: '请查找视频倍速播放设置在哪个页面路由，需要引用代码文件证据。',
@@ -1374,7 +1374,7 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
 });
 
 test('agent blocks unsupported fact-only worker conclusions from final presentation', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -1410,7 +1410,7 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '接口 /course/task/save 返回 500，请定位原因。',
     });
@@ -1425,7 +1425,7 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
 });
 
 test('runtime helper modules expose stable context, request, preflight, review, and presentation contracts', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -1528,7 +1528,7 @@ test('runtime helper modules expose stable context, request, preflight, review, 
 });
 
 test('model preflight cannot block an inspectable workspace question with generic project-name follow-up', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   const workerRequests = [];
 
@@ -1595,7 +1595,7 @@ test('model preflight cannot block an inspectable workspace question with generi
       },
     };
 
-    const agent = new SupperHelperAgent(baseConfig(dir), store, worker);
+    const agent = new SuperHelperAgent(baseConfig(dir), store, worker);
     const response = await agent.handleUserMessage({
       persona: 'operations',
       message: '客户反馈找不到 倍速播放的页面路由，请问这个在哪？\n\n开启了倍数播放会影响微网校的视频播放吗',
@@ -1617,7 +1617,7 @@ test('model preflight cannot block an inspectable workspace question with generi
 });
 
 test('agent can run one follow-up Claude turn when evidence review asks to continue diagnosis', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   const modelCalls = [];
   const workerRequests = [];
@@ -1725,7 +1725,7 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
       },
     };
 
-    const agent = new SupperHelperAgent(baseConfig(dir), store, worker);
+    const agent = new SuperHelperAgent(baseConfig(dir), store, worker);
     const response = await agent.handleUserMessage({
       message: '视频倍速开关在哪里开启？需要页面路由和证据。',
     });
@@ -1742,7 +1742,7 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
 });
 
 test('follow-up diagnostic requests carry prior assistant replies and evidence context', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workerRequests = [];
 
   try {
@@ -1825,7 +1825,7 @@ test('follow-up diagnostic requests carry prior assistant replies and evidence c
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const first = await agent.handleUserMessage({
       message: '客户反馈找不到倍速播放的页面路由，请问这个在哪？',
     });
@@ -1855,7 +1855,7 @@ test('follow-up diagnostic requests carry prior assistant replies and evidence c
 });
 
 test('local preflight can dispatch general project questions, not only diagnostics', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -1901,7 +1901,7 @@ test('local preflight can dispatch general project questions, not only diagnosti
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '请解释这个项目的 package.json 主要做什么，需要引用文件证据。',
     });
@@ -1938,7 +1938,7 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
 });
 
 test('experience agent reuses a prior reviewed answer without dispatching Claude', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -1962,7 +1962,7 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
       },
     };
 
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '课程任务保存失败是什么原因？',
     });
@@ -1978,7 +1978,7 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
 });
 
 test('agent log labels and activity are exposed through sessions and logs API', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
   try {
     const config = baseConfig(dir);
@@ -2015,7 +2015,7 @@ test('agent log labels and activity are exposed through sessions and logs API', 
 });
 
 test('session lifecycle supports title refresh, pin, archive, reject, and delete', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
   try {
     const config = baseConfig(dir);
@@ -2080,7 +2080,7 @@ test('session lifecycle supports title refresh, pin, archive, reject, and delete
 });
 
 test('async same-case turns receive ordered reply-to helper messages', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     config.agent.useModelForPreflight = false;
@@ -2124,7 +2124,7 @@ test('async same-case turns receive ordered reply-to helper messages', async () 
         };
       },
     };
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const caseSession = agent.startUserTurn({ message: '第二个问题：解释 scripts' });
     const secondId = caseSession.messages.at(-1).id;
     agent.startUserTurn({ caseId: caseSession.id, message: '第三个问题：解释 dependencies' });
@@ -2145,7 +2145,7 @@ test('async same-case turns receive ordered reply-to helper messages', async () 
 });
 
 test('async turn failures can reply to the accepted user message', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   try {
     const config = baseConfig(dir);
     const store = new FileMemoryStore(dir);
@@ -2154,7 +2154,7 @@ test('async turn failures can reply to the accepted user message', () => {
         throw new Error('not used');
       },
     };
-    const agent = new SupperHelperAgent(config, store, worker);
+    const agent = new SuperHelperAgent(config, store, worker);
     const caseSession = agent.startUserTurn({ message: '失败路径也要绑定这一条消息' });
     const userMessageId = caseSession.messages.at(-1).id;
 
@@ -2170,7 +2170,7 @@ test('async turn failures can reply to the accepted user message', () => {
 });
 
 test('agents API and settings UI expose configured multi-agent settings', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'supper-helper-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
   try {
     const config = baseConfig(dir);

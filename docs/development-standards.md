@@ -1,6 +1,6 @@
-# supper helper Development Standards
+# super helper Development Standards
 
-This document is the mandatory development contract for `supper helper`.
+This document is the mandatory development contract for `super helper`.
 
 It exists because this project must behave like a real Agent AI system, not a pile of one-file-one-logic scripts. Future AI coding and human development must preserve the architecture created by the runtime refactor.
 
@@ -77,7 +77,7 @@ The runtime pipeline is:
 
 ```text
 Gateway chat route
-  -> SupperHelperAgent facade
+  -> SuperHelperAgent facade
   -> DiagnosticRuntime.startUserTurn
   -> Experience Agent
   -> Preflight Gate

@@ -1,7 +1,7 @@
 node_modules/
 dist/
 .turbo/
-.supper-helper/
+.super-helper/
 .DS_Store
 *.log
 

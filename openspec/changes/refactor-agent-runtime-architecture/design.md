@@ -1,6 +1,6 @@
 ## Context
 
-The project already documents a strong agent model: supper helper owns context, Claude Code is a diagnostic tool, every turn passes through a Preflight Gate, worker output is structured, and the Agent reviews evidence before replying to the user. The implementation does not yet mirror those concepts as stable code boundaries.
+The project already documents a strong agent model: super helper owns context, Claude Code is a diagnostic tool, every turn passes through a Preflight Gate, worker output is structured, and the Agent reviews evidence before replying to the user. The implementation does not yet mirror those concepts as stable code boundaries.
 
 Current pressure points:
 
@@ -8,7 +8,7 @@ Current pressure points:
 - `src/server.ts` owns HTTP routing, settings mutation, model connectivity tests, session serialization, log formatting, and direct agent construction.
 - `src/claude-worker.ts` owns the worker interface, Claude CLI process execution, session locking, prompt generation, tool policy, output parsing, and failure-to-result conversion.
 
-OpenClaw's relevant lesson is not to copy its exact surface area, but to make the runtime architecture explicit: gateway/transport, agent runtime, sessions, model providers, tools/capabilities, and plugins/adapters are separate layers with clear contracts. For supper helper MVP, this should be a bounded refactor that preserves CLI, HTTP API, storage shape, and chat behavior.
+OpenClaw's relevant lesson is not to copy its exact surface area, but to make the runtime architecture explicit: gateway/transport, agent runtime, sessions, model providers, tools/capabilities, and plugins/adapters are separate layers with clear contracts. For super helper MVP, this should be a bounded refactor that preserves CLI, HTTP API, storage shape, and chat behavior.
 
 ## Goals / Non-Goals
 
@@ -75,7 +75,7 @@ src/observability/
   log-blocks.ts
 ```
 
-Alternative considered: keep `SupperHelperAgent` as the main class and only move helper functions into files. That would reduce file length but leave ownership unclear. The runtime-plus-ports model makes dependencies visible and matches the agent architecture the docs already describe.
+Alternative considered: keep `SuperHelperAgent` as the main class and only move helper functions into files. That would reduce file length but leave ownership unclear. The runtime-plus-ports model makes dependencies visible and matches the agent architecture the docs already describe.
 
 Alternative considered: copy OpenClaw's full Gateway/runtime/plugin directory model now. That is too large for this MVP and would mix architecture cleanup with product expansion.
 
@@ -85,7 +85,7 @@ The current local HTTP server should become `gateway/http-server.ts`. It should 
 
 This mirrors the OpenClaw idea that a gateway owns transport and routing while the agent runtime owns the agent turn. For MVP, "gateway" means HTTP routes only; WebSocket and external chat channels remain future work.
 
-### 3. Keep session context owned by supper helper
+### 3. Keep session context owned by super helper
 
 The session layer should expose a repository-style port for cases, messages, runs, and events. The runtime uses that port; worker adapters never become long-term memory owners.
 
@@ -137,7 +137,7 @@ The first implementation pass should be extraction-first, not redesign-first:
 1. Move route DTO/log helpers out of `server.ts`.
 2. Move Claude prompt/parser/policy/process helpers out of `claude-worker.ts`.
 3. Extract preflight/request-builder/context-builder/review/presentation helpers out of `agent.ts`.
-4. Introduce `DiagnosticRuntime` as the orchestrator while keeping `SupperHelperAgent` as a compatibility facade.
+4. Introduce `DiagnosticRuntime` as the orchestrator while keeping `SuperHelperAgent` as a compatibility facade.
 5. Update tests around the new modules.
 6. Only after compatibility tests pass, simplify or remove the old facade.
 
@@ -149,7 +149,7 @@ This order keeps behavior stable and gives rollback points after each module ext
 - [Risk] New abstractions may be too generic for the MVP. -> Mitigation: introduce ports only where there is already a real boundary: storage, worker, model provider, event recording, transport.
 - [Risk] Tests may overfit current strings and block safe extraction. -> Mitigation: add focused behavioral tests for decisions and contracts before moving presentation copy-heavy tests.
 - [Risk] Runtime events could become duplicated or noisy. -> Mitigation: define stable phase names and centralize event recording in one module.
-- [Risk] OpenClaw terminology could make the project feel larger than it is. -> Mitigation: use OpenClaw as a reference model, but keep supper helper names and MVP scope.
+- [Risk] OpenClaw terminology could make the project feel larger than it is. -> Mitigation: use OpenClaw as a reference model, but keep super helper names and MVP scope.
 
 ## Migration Plan
 
@@ -158,7 +158,7 @@ This order keeps behavior stable and gives rollback points after each module ext
 3. Extract pure helpers from `src/claude-worker.ts` into `src/workers/claude/*`.
 4. Extract log block and route DTO helpers from `src/server.ts` into `src/gateway/*` and `src/observability/*`.
 5. Extract request/context/review/presentation helpers from `src/agent.ts` into `src/runtime/*` and `src/sessions/*`.
-6. Introduce `DiagnosticRuntime` and adapt `SupperHelperAgent` to delegate to it.
+6. Introduce `DiagnosticRuntime` and adapt `SuperHelperAgent` to delegate to it.
 7. Run `pnpm test` after each extraction group.
 8. Update `docs/technical-architecture.md` and `docs/agent-design.md` after the code structure exists.
 
@@ -166,7 +166,7 @@ Rollback strategy: each extraction should preserve public exports or keep a comp
 
 ## Open Questions
 
-- Should the compatibility facade remain named `SupperHelperAgent` long-term, or should callers eventually depend directly on `DiagnosticRuntime`?
+- Should the compatibility facade remain named `SuperHelperAgent` long-term, or should callers eventually depend directly on `DiagnosticRuntime`?
 - Should log event phase names become a formal enum in `domain.ts`, or remain string-based to keep migration low-friction?
 - Should settings/model mutation become its own application service in the first implementation pass, or stay in gateway routes until runtime extraction is complete?
 - When MCP support becomes active, should MCP tools be worker adapters, runtime tools, or a separate capability registry injected into the runtime?

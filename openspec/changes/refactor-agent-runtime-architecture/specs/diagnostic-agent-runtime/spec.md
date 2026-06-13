@@ -15,9 +15,9 @@ The system SHALL provide a diagnostic runtime boundary that orchestrates a user 
 - **WHEN** a chat request is handled synchronously or accepted for asynchronous completion
 - **THEN** the same runtime pipeline SHALL be responsible for loading the case, recording the user message, deciding preflight, dispatching a run when needed, reviewing results, and persisting the assistant response
 
-### Requirement: Session context is owned by supper helper
+### Requirement: Session context is owned by super helper
 
-The system SHALL keep case memory, user messages, diagnostic runs, and diagnostic events in a session repository owned by supper helper, not by worker adapters.
+The system SHALL keep case memory, user messages, diagnostic runs, and diagnostic events in a session repository owned by super helper, not by worker adapters.
 
 #### Scenario: Worker receives bounded context
 

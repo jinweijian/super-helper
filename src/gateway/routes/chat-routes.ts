@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { SupperHelperAgent } from '../../agent.js';
-import { resolveContextWindowTokens, type SupperHelperConfig } from '../../config.js';
+import type { SuperHelperAgent } from '../../agent.js';
+import { resolveContextWindowTokens, type SuperHelperConfig } from '../../config.js';
 import { estimateCaseContextUsage } from '../../context-window.js';
 import type { UserPersona } from '../../domain.js';
 import { readJson, sendJson } from '../http-utils.js';
@@ -9,8 +9,8 @@ export async function handleChatRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  config: SupperHelperConfig,
-  agent: SupperHelperAgent,
+  config: SuperHelperConfig,
+  agent: SuperHelperAgent,
 ): Promise<boolean> {
   if (req.method !== 'POST' || url.pathname !== '/api/chat') {
     return false;

@@ -1,6 +1,6 @@
 ## Why
 
-`supper helper` 现在以当前 workspace 代码仓库为主要诊断对象，用户问题通过 Preflight 后通常会升级到 Claude Code / CC worker 做代码检查。产品下一阶段需要把 workspace 升级为企业知识库工作区：先检索 FAQ、白皮书、runbook、历史 case、术语表和模块文档，只有在知识证据不足、冲突、过期或问题依赖当前实现时才升级到代码排查。
+`super helper` 现在以当前 workspace 代码仓库为主要诊断对象，用户问题通过 Preflight 后通常会升级到 Claude Code / CC worker 做代码检查。产品下一阶段需要把 workspace 升级为企业知识库工作区：先检索 FAQ、白皮书、runbook、历史 case、术语表和模块文档，只有在知识证据不足、冲突、过期或问题依赖当前实现时才升级到代码排查。
 
 这个 change 先建立可 review、可分阶段实施的工程规划和行为契约，避免直接把知识库检索逻辑塞进 gateway、worker 或产品 Agent prompt 中，破坏现有 runtime 边界。
 

@@ -16,7 +16,7 @@ export interface ModelProviderConfig {
   timeoutMs?: number;
 }
 
-export interface SupperHelperConfig {
+export interface SuperHelperConfig {
   version: 1;
   server: {
     host: string;
@@ -67,9 +67,9 @@ export interface SupperHelperConfig {
   }>;
 }
 
-const DEFAULT_HOME = join(homedir(), '.supper-helper');
+const DEFAULT_HOME = join(homedir(), '.super-helper');
 
-export function defaultConfig(): SupperHelperConfig {
+export function defaultConfig(): SuperHelperConfig {
   const cwd = process.cwd();
 
   return {
@@ -83,7 +83,7 @@ export function defaultConfig(): SupperHelperConfig {
       isolateByWorkspace: true,
     },
     agent: {
-      name: 'supper helper',
+      name: 'super helper',
       language: 'zh-CN',
       tone: 'calm_professional',
       useModelForPreflight: false,
@@ -130,7 +130,7 @@ export function configPath(homeDir = DEFAULT_HOME): string {
   return join(homeDir, 'config.json');
 }
 
-export function ensureConfig(homeDir = DEFAULT_HOME): SupperHelperConfig {
+export function ensureConfig(homeDir = DEFAULT_HOME): SuperHelperConfig {
   const path = configPath(homeDir);
   if (!existsSync(path)) {
     mkdirSync(dirname(path), { recursive: true });
@@ -145,11 +145,11 @@ export function ensureConfig(homeDir = DEFAULT_HOME): SupperHelperConfig {
   return config;
 }
 
-export function loadConfig(path = configPath()): SupperHelperConfig {
+export function loadConfig(path = configPath()): SuperHelperConfig {
   const raw = readFileSync(path, 'utf8');
-  const parsed = JSON.parse(raw) as SupperHelperConfig;
+  const parsed = JSON.parse(raw) as SuperHelperConfig;
   const defaults = defaultConfig();
-  const merged: SupperHelperConfig = {
+  const merged: SuperHelperConfig = {
     ...defaults,
     ...parsed,
     server: { ...defaults.server, ...parsed.server },
@@ -164,12 +164,12 @@ export function loadConfig(path = configPath()): SupperHelperConfig {
   return merged;
 }
 
-export function saveConfig(config: SupperHelperConfig, path = configPath(config.storage.rootDir)): void {
+export function saveConfig(config: SuperHelperConfig, path = configPath(config.storage.rootDir)): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
-export function getModelProvider(config: SupperHelperConfig): ModelProviderConfig | undefined {
+export function getModelProvider(config: SuperHelperConfig): ModelProviderConfig | undefined {
   if (!config.agent.modelProvider) {
     return undefined;
   }
@@ -177,7 +177,7 @@ export function getModelProvider(config: SupperHelperConfig): ModelProviderConfi
   return config.models.providers[config.agent.modelProvider];
 }
 
-export function resolveContextWindowTokens(config: SupperHelperConfig): number {
+export function resolveContextWindowTokens(config: SuperHelperConfig): number {
   const provider = getModelProvider(config);
   return (
     positiveInteger(provider?.contextWindowTokens) ??

@@ -1,11 +1,11 @@
-import type { SupperHelperConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 import type { HelperAgentConfig } from '../domain.js';
 import { preflight, type PreflightDecision } from '../preflight.js';
 import type { StoredCase } from '../storage.js';
 import { attachCaseContext } from './request-builder.js';
 
 export function buildLocalPreflightDecision(input: {
-  config: SupperHelperConfig;
+  config: SuperHelperConfig;
   caseSession: StoredCase;
   userMessage: string;
 }): PreflightDecision {
@@ -21,7 +21,7 @@ export function buildLocalPreflightDecision(input: {
     localDecision.request.constraints = Array.from(
       new Set([
         ...localDecision.request.constraints,
-        `User-facing persona is ${caseSession.userPersona}; return evidence for supper helper Agent to translate.`,
+        `User-facing persona is ${caseSession.userPersona}; return evidence for super helper Agent to translate.`,
       ]),
     );
     attachCaseContext(caseSession, localDecision.request);
@@ -29,7 +29,7 @@ export function buildLocalPreflightDecision(input: {
   return localDecision;
 }
 
-export function helperAgentConfig(config: SupperHelperConfig): HelperAgentConfig {
+export function helperAgentConfig(config: SuperHelperConfig): HelperAgentConfig {
   return {
     id: 'default-helper-agent',
     name: config.agent.name,

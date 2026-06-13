@@ -170,7 +170,7 @@ The system SHALL record observable lifecycle events for knowledge routing, knowl
 - **THEN** diagnostic logs include the outcome, document path when available, and review-required status
 
 ### Requirement: Existing behavior compatibility
-The system SHALL preserve existing supper helper diagnostic contracts while adding knowledge-first behavior.
+The system SHALL preserve existing super helper diagnostic contracts while adding knowledge-first behavior.
 
 #### Scenario: Knowledge feature disabled or absent
 - **WHEN** the active workspace has no usable `knowledge/` directory or the knowledge feature is disabled

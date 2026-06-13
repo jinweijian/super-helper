@@ -14,7 +14,7 @@ import {
 import { listPublicAgentConfigs, loadAgentRegistry } from '../dist/runtime/agent-configs.js';
 
 function tempWorkspace() {
-  return mkdtempSync(join(tmpdir(), 'supper-helper-knowledge-'));
+  return mkdtempSync(join(tmpdir(), 'super-helper-knowledge-'));
 }
 
 function cleanup(path) {

@@ -193,7 +193,7 @@ export class FileMemoryStore implements CaseRepository {
   appendDailyMemory(line: string): void {
     const existing = existsSync(this.dailyMemoryPath)
       ? readFileSync(this.dailyMemoryPath, 'utf8')
-      : `# supper helper memory ${new Date().toISOString().slice(0, 10)}\n\n`;
+      : `# super helper memory ${new Date().toISOString().slice(0, 10)}\n\n`;
     writeFileSync(this.dailyMemoryPath, `${existing}${line}\n`, 'utf8');
   }
 }

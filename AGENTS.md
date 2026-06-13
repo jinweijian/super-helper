@@ -1,4 +1,4 @@
-# supper helper Coding Agent Rules
+# super helper Coding Agent Rules
 
 **与用户交互的语言与文档全部要用中文交互**
 
@@ -9,7 +9,7 @@
 不要把本文件和产品 Agent 配置混用：
 
 - `AGENTS.md` 约束“怎么开发这个项目”。
-- `src/agents/` 约束“supper helper 产品里的主 Agent 与子 Agent 应该怎么表现”。
+- `src/agents/` 约束“super helper 产品里的主 Agent 与子 Agent 应该怎么表现”。
 
 请用中文与用户沟通。
 

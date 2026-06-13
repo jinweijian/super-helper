@@ -32,7 +32,7 @@ This change creates an implementation-ready architecture plan before refactoring
   - `src/model.ts`
   - `src/storage.ts`
   - `src/domain.ts`
-  - `test/supper-helper.test.mjs`
+  - `test/super-helper.test.mjs`
 - Affected documentation:
   - `docs/agent-design.md`
   - `docs/technical-architecture.md`

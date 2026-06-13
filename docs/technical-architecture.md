@@ -1,8 +1,8 @@
-# supper helper Technical Architecture
+# super helper Technical Architecture
 
 ## Overview
 
-`supper helper` is a TypeScript application with a chat-first UI, a server-side Agent orchestration layer, and isolated diagnostic workers.
+`super helper` is a TypeScript application with a chat-first UI, a server-side Agent orchestration layer, and isolated diagnostic workers.
 
 The system must support arbitrary project `workspace` configuration and arbitrary MCP protocol tools. It should not be hardcoded to one repository or one MCP server.
 
@@ -25,7 +25,7 @@ The current MVP keeps the public import surface stable while separating product 
 
 Compatibility entry points remain thin:
 
-- `src/agent.ts` exports `SupperHelperAgent` as a compatibility facade over `DiagnosticRuntime`.
+- `src/agent.ts` exports `SuperHelperAgent` as a compatibility facade over `DiagnosticRuntime`.
 - `src/server.ts` re-exports `startServer` from the gateway.
 - `src/claude-worker.ts` re-exports the Claude worker adapter and worker port type.
 
@@ -51,7 +51,7 @@ The service owns context.
 
 Claude Code is not the long-term context source. It receives a bounded request for a specific diagnostic run and returns structured output.
 
-Persistent context belongs to supper helper:
+Persistent context belongs to super helper:
 
 - tenant records
 - users
@@ -116,7 +116,7 @@ The runtime pipeline is:
 
 ```text
 Gateway chat route
-  -> SupperHelperAgent facade
+  -> SuperHelperAgent facade
   -> DiagnosticRuntime.startUserTurn
   -> Experience Agent
   -> Preflight Gate
@@ -156,7 +156,7 @@ interface WorkspaceConfig {
 }
 ```
 
-If the workspace contains a `CLAUDE.md`, that file guides Claude Code inside that workspace. It does not replace the supper helper Agent configuration.
+If the workspace contains a `CLAUDE.md`, that file guides Claude Code inside that workspace. It does not replace the super helper Agent configuration.
 
 The first knowledge-base MVP assumes a workspace may contain:
 
@@ -179,9 +179,9 @@ repos/
 Current implemented knowledge commands:
 
 ```bash
-supper-helper knowledge init --workspace /path/to/workspace
-supper-helper knowledge update --workspace /path/to/workspace
-supper-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
+super-helper knowledge init --workspace /path/to/workspace
+super-helper knowledge update --workspace /path/to/workspace
+super-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 ```
 
 The initial knowledge skeleton does not yet replace the runtime diagnosis path. Runtime integration must happen through `src/runtime/` in a later task so that knowledge evidence still passes Output Review and Presentation before reaching the user.

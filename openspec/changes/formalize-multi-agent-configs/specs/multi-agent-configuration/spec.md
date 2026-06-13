@@ -49,7 +49,7 @@ The system MUST keep repository development instructions separate from product A
 
 #### Scenario: Product runtime reads Agent behavior
 
-- **WHEN** the supper helper runtime needs the main Agent behavior specification
+- **WHEN** the super helper runtime needs the main Agent behavior specification
 - **THEN** it SHALL use `src/agents/main.md`, not root `AGENTS.md`
 
 #### Scenario: Root AGENT ambiguity is removed

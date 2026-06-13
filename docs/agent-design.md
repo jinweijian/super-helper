@@ -1,8 +1,8 @@
-# supper helper Agent Design
+# super helper Agent Design
 
 ## Role
 
-`supper helper Agent` is the middle person and reviewer between the user and diagnostic tools.
+`super helper Agent` is the middle person and reviewer between the user and diagnostic tools.
 
 The authoritative product Agent configs live in `src/agents/`, not root `AGENT.md`.
 
@@ -21,7 +21,7 @@ Current configured Agents:
 It is different from `CLAUDE.md`:
 
 - `CLAUDE.md` belongs to a specific workspace and tells Claude Code how to inspect that project.
-- `supper helper Agent` defines how the product talks to users, decides whether to ask questions, controls uncertainty, reviews evidence, and prevents unsupported conclusions.
+- `super helper Agent` defines how the product talks to users, decides whether to ask questions, controls uncertainty, reviews evidence, and prevents unsupported conclusions.
 
 Claude Code is a tool. It must not directly reply to the user in the MVP.
 
@@ -75,9 +75,9 @@ The first enterprise knowledge-base skeleton adds local workspace commands and p
 
 Implemented local commands:
 
-- `supper-helper knowledge init --workspace <path>` creates the `knowledge/` directory structure, taxonomy examples, Markdown templates, source metadata example, and empty derived indexes.
-- `supper-helper knowledge update --workspace <path>` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from Markdown parent slices.
-- `supper-helper knowledge search --workspace <path> --query <question>` performs local keyword search and expands chunk hits back to parent slice evidence.
+- `super-helper knowledge init --workspace <path>` creates the `knowledge/` directory structure, taxonomy examples, Markdown templates, source metadata example, and empty derived indexes.
+- `super-helper knowledge update --workspace <path>` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from Markdown parent slices.
+- `super-helper knowledge search --workspace <path> --query <question>` performs local keyword search and expands chunk hits back to parent slice evidence.
 
 Current limitation:
 
@@ -198,7 +198,7 @@ The first version uses one built-in main Agent with configured sub-agents, not a
 ```yaml
 agent:
   id: default-helper-agent
-  name: supper helper
+  name: super helper
   language: zh-CN
   tone: calm_professional
 

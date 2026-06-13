@@ -40,7 +40,7 @@
 ## 5. Diagnostic Runtime Wiring
 
 - [x] 5.1 Implement `src/runtime/diagnostic-runtime.ts` as the orchestrator for one user turn.
-- [x] 5.2 Preserve `SupperHelperAgent` as a compatibility facade that delegates to `DiagnosticRuntime`.
+- [x] 5.2 Preserve `SuperHelperAgent` as a compatibility facade that delegates to `DiagnosticRuntime`.
 - [x] 5.3 Wire gateway chat routes through the facade or runtime without embedding preflight, worker, review, or presentation decisions in route code.
 - [x] 5.4 Centralize lifecycle event creation through an event recorder while preserving existing log phases and log drawer behavior.
 - [x] 5.5 Verify synchronous and asynchronous chat flows use the same runtime pipeline.

@@ -3,7 +3,7 @@
 The repository currently has:
 
 - root `AGENTS.md`: repository development rules for coding agents and developers
-- root `AGENT.md`: product runtime behavior spec for supper helper's user-facing Agent
+- root `AGENT.md`: product runtime behavior spec for super helper's user-facing Agent
 - runtime code that loads the product Agent spec from root `AGENT.md`
 - architecture docs that describe Agent behavior, but do not model the product as one main Agent plus future sub-agents
 - runtime phases that already imply multiple product Agents: input review/preflight, output review, and presentation polishing

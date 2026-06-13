@@ -22,5 +22,5 @@ export function assertHostCommandAllowed(command: string, whitelist?: string[]):
     return undefined;
   }
 
-  return `Host command "${command}" is not in supper helper command whitelist: ${allowed.join(', ')}`;
+  return `Host command "${command}" is not in super helper command whitelist: ${allowed.join(', ')}`;
 }

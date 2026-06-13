@@ -4,7 +4,7 @@ export function renderApp(): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>supper helper</title>
+  <title>super helper</title>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f4f6f8; color: #1f2933; }
@@ -119,7 +119,7 @@ export function renderApp(): string {
 <body>
   <div class="app">
     <header>
-      <button class="brand-button" onclick="openSettings()" title="打开配置"><div class="mark">H</div><span>supper helper</span></button>
+      <button class="brand-button" onclick="openSettings()" title="打开配置"><div class="mark">H</div><span>super helper</span></button>
       <span class="pill" id="workspace">workspace loading...</span>
     </header>
     <div class="workspace-shell">
@@ -206,7 +206,7 @@ export function renderApp(): string {
     </div>
   </div>
   <script>
-    let caseId = localStorage.getItem('supper-helper.caseId') || '';
+    let caseId = localStorage.getItem('super-helper.caseId') || '';
     const chat = document.getElementById('chat');
     const input = document.getElementById('input');
     const sessionList = document.getElementById('sessionList');
@@ -352,7 +352,7 @@ export function renderApp(): string {
         const res = await fetch('/api/session?caseId=' + encodeURIComponent(id), { method: 'DELETE' });
         if (res.ok && id === caseId) {
           caseId = '';
-          localStorage.removeItem('supper-helper.caseId');
+          localStorage.removeItem('super-helper.caseId');
           chat.innerHTML = '';
           setCaseHeader();
         }
@@ -376,7 +376,7 @@ export function renderApp(): string {
         throw new Error(json.error || 'session load failed');
       }
       caseId = json.session.id;
-      localStorage.setItem('supper-helper.caseId', caseId);
+      localStorage.setItem('super-helper.caseId', caseId);
       chat.innerHTML = '';
       for (const message of json.session.messages || []) {
         add(message.role === 'user' ? 'user' : 'helper', message.body);
@@ -433,7 +433,7 @@ export function renderApp(): string {
           throw new Error(json.error || '请求失败：HTTP ' + res.status);
         }
         caseId = json.caseId;
-        localStorage.setItem('supper-helper.caseId', caseId);
+        localStorage.setItem('super-helper.caseId', caseId);
         setCaseHeader({ id: json.caseId, title: json.title, status: json.status, claudeSessionId: json.claudeSessionId || '', userPersona: json.persona, contextUsage: json.contextUsage });
         await loadSessions();
         await pollSessionUntilSettled(pending, json.caseId, json.userMessageId);
@@ -620,7 +620,7 @@ export function renderApp(): string {
       });
       const json = await res.json();
       caseId = json.session.id;
-      localStorage.setItem('supper-helper.caseId', caseId);
+      localStorage.setItem('super-helper.caseId', caseId);
       chat.innerHTML = '';
       setCaseHeader(json.session);
       await loadSessions();
@@ -669,7 +669,7 @@ export function renderApp(): string {
     loadSessions().then(() => {
       if (caseId) {
         openSession(caseId).catch(() => {
-          localStorage.removeItem('supper-helper.caseId');
+          localStorage.removeItem('super-helper.caseId');
           caseId = '';
           setCaseHeader();
         });

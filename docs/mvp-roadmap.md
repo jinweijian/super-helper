@@ -1,8 +1,8 @@
-# supper helper MVP Roadmap
+# super helper MVP Roadmap
 
 ## Phase 1: Project Initialization / 项目初始化
 
-- Create `/Users/kz/my/supper-helper`.
+- Create `/Users/kz/my/super-helper`.
 - Initialize a TypeScript project.
 - Add minimal domain types for cases, runs, workspaces, MCP tools, Agent config, and diagnostic output.
 - Add docs for product, Agent design, architecture, and roadmap.
@@ -18,7 +18,7 @@
 
 ## Phase 3: mock Agent Flow
 
-- Implement a mock `supper helper Agent`.
+- Implement a mock `super helper Agent`.
 - Add Preflight Gate behavior.
 - If input is insufficient, ask a follow-up question directly.
 - If input is sufficient, create a mock `DiagnosticRequest`.

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { SupperHelperConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 import { getModelProvider } from '../config.js';
 import type { DiagnosticResult, DiagnosticRun, UserPersona } from '../domain.js';
 import type { PreflightDecision } from '../preflight.js';
@@ -46,7 +46,7 @@ export class DiagnosticRuntime {
   private readonly caseTurnQueues = new Map<string, Promise<void>>();
 
   constructor(
-    private readonly config: SupperHelperConfig,
+    private readonly config: SuperHelperConfig,
     private readonly store: FileMemoryStore,
     private readonly worker: ClaudeWorker,
   ) {

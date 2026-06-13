@@ -13,7 +13,7 @@ async function main(): Promise<void> {
     const path = configPath();
     const config = ensureConfig();
     saveConfig(config);
-    console.log(`supper helper config ready at ${path}`);
+    console.log(`super helper config ready at ${path}`);
     return;
   }
 
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     const apiKey = readArg('--api-key');
     const apiKeyEnv = readArg('--api-key-env');
     if (!baseUrl || !model || (!apiKey && !apiKeyEnv)) {
-      console.error('Usage: supper-helper model set <name> --base-url <url> --model <model> (--api-key-env <env> | --api-key <key>)');
+      console.error('Usage: super-helper model set <name> --base-url <url> --model <model> (--api-key-env <env> | --api-key <key>)');
       process.exit(1);
     }
 
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
   if (command === 'workspace' && process.argv[3] === 'set') {
     const rootPath = readArg('--path');
     if (!rootPath) {
-      console.error('Usage: supper-helper workspace set --path <project-path> [--name <name>]');
+      console.error('Usage: super-helper workspace set --path <project-path> [--name <name>]');
       process.exit(1);
     }
 
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
     const id = process.argv[4];
     const protocol = readArg('--protocol') as 'stdio' | 'http' | 'sse' | undefined;
     if (!id || !protocol || !['stdio', 'http', 'sse'].includes(protocol)) {
-      console.error('Usage: supper-helper mcp add <id> --protocol <stdio|http|sse> [--name <name>] [--permission read_only|read_write] [--config-json <json>]');
+      console.error('Usage: super-helper mcp add <id> --protocol <stdio|http|sse> [--name <name>] [--permission read_only|read_write] [--config-json <json>]');
       process.exit(1);
     }
 
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
     }
 
     const server = await startServer({ config });
-    console.log(`supper helper running at ${server.url}`);
+    console.log(`super helper running at ${server.url}`);
     console.log(`config: ${configPath()}`);
     console.log('Press Ctrl+C to stop.');
 
@@ -158,7 +158,7 @@ async function handleKnowledgeCommand(): Promise<void> {
     console.log(`knowledge: ${result.knowledgeRoot}`);
     console.log(`directories created: ${result.directories.length}`);
     console.log(`files written: ${result.files.length}`);
-    console.log('next: supper-helper knowledge update --workspace <workspace>');
+    console.log('next: super-helper knowledge update --workspace <workspace>');
     return;
   }
 
@@ -178,7 +178,7 @@ async function handleKnowledgeCommand(): Promise<void> {
   if (subcommand === 'search') {
     const query = readArg('--query') ?? process.argv[4];
     if (!query) {
-      console.error('Usage: supper-helper knowledge search --query <question> [--workspace <path>] [--limit <n>]');
+      console.error('Usage: super-helper knowledge search --query <question> [--workspace <path>] [--limit <n>]');
       process.exit(1);
     }
     const limit = Number(readArg('--limit') ?? '5');
@@ -187,7 +187,7 @@ async function handleKnowledgeCommand(): Promise<void> {
     return;
   }
 
-  console.error('Usage: supper-helper knowledge <init|update|search> [--workspace <path>]');
+  console.error('Usage: super-helper knowledge <init|update|search> [--workspace <path>]');
   process.exit(1);
 }
 
@@ -219,7 +219,7 @@ function readJsonArg(name: string): unknown {
 }
 
 function printUsage(): void {
-  console.error('Usage: supper-helper [init|doctor|dev|knowledge init|knowledge update|knowledge search|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [init|doctor|dev|knowledge init|knowledge update|knowledge search|model set|workspace set|mcp add]');
 }
 
 main().catch((error) => {

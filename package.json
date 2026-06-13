@@ -1,11 +1,11 @@
 {
-  "name": "supper-helper",
+  "name": "super-helper",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "A chat-first helper agent that mediates between users, workspaces, MCP tools, and Claude Code workers.",
   "bin": {
-    "supper-helper": "./dist/cli.js"
+    "super-helper": "./dist/cli.js"
   },
   "files": [
     "dist",

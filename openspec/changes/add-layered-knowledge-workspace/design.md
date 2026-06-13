@@ -6,7 +6,7 @@
 
 ```text
 Gateway chat route
-  -> SupperHelperAgent facade
+  -> SuperHelperAgent facade
   -> DiagnosticRuntime.startUserTurn
   -> Experience Agent
   -> Preflight Gate
@@ -41,7 +41,7 @@ Main Agent 当前工作方式：
 当前 workspace 假设：
 
 - `WorkspaceConfig.rootPath` 是任意项目代码库根目录。
-- workspace 可包含 `CLAUDE.md` 指导 Claude Code 检查项目，但它不是 supper helper 产品 Agent 配置。
+- workspace 可包含 `CLAUDE.md` 指导 Claude Code 检查项目，但它不是 super helper 产品 Agent 配置。
 - 当前 worker prompt 假设“workspace inspection”主要是 README、docs、specs、routes、services、jobs、配置和源码文件的只读检查。
 - 现有代码还没有把 workspace 作为企业知识库工作区建模，也没有独立的 `knowledge/` 目录、taxonomy、知识文档 schema 或索引状态。
 

@@ -1,10 +1,10 @@
-# supper helper Product Requirements
+# super helper Product Requirements
 
 ## Product Positioning
 
-`supper helper` is a general-purpose super helper for operational and technical diagnosis. It is not limited to one product, one repository, or one support workflow.
+`super helper` is a general-purpose super helper for operational and technical diagnosis. It is not limited to one product, one repository, or one support workflow.
 
-The user interacts with `supper helper Agent`. The Agent may use a configured project `workspace`, any configured MCP protocol tools, and Claude Code workers as diagnostic tools.
+The user interacts with `super helper Agent`. The Agent may use a configured project `workspace`, any configured MCP protocol tools, and Claude Code workers as diagnostic tools.
 
 The first MVP focuses on a calm, chat-first experience:
 
@@ -31,7 +31,7 @@ The main page should not expose raw run history, tool calls, implementation rule
 
 ```text
 用户提出问题
-  -> supper helper Agent 预检
+  -> super helper Agent 预检
      -> 信息不足：直接追问用户
      -> 信息足够：生成 DiagnosticRequest
   -> Claude Code Worker 执行只读排查

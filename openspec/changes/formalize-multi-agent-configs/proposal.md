@@ -57,7 +57,7 @@ This change makes Agent configuration a first-class product concept: runtime Age
   - `docs/agent-design.md`
   - `README.md`
   - `scripts/verify-docs.mjs`
-  - runtime and docs tests in `test/supper-helper.test.mjs`
+  - runtime and docs tests in `test/super-helper.test.mjs`
 - Public HTTP API behavior should not change.
 - Existing persisted case JSON files should remain readable; new optional fields may be added with migration defaults for session lifecycle and log agent labels.
 - The main Agent and current sub-agent behavior contracts should remain behavior-compatible while moving to clearer configuration locations.

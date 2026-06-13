@@ -1,4 +1,4 @@
-import type { SupperHelperConfig } from '../../config.js';
+import type { SuperHelperConfig } from '../../config.js';
 import type { ClaudeWorkerResponse, DiagnosticRequest, WorkerTrace } from '../../domain.js';
 import type { DiagnosticWorker } from '../diagnostic-worker.js';
 import { runCommandWithSessionBusyRetry, shellCommand } from './claude-cli.js';
@@ -9,7 +9,7 @@ import { assertHostCommandAllowed, DEFAULT_DISALLOWED_CLAUDE_TOOLS, readOnlyTool
 export class ClaudeCodeWorker implements DiagnosticWorker {
   private static readonly sessionQueues = new Map<string, Promise<void>>();
 
-  constructor(private readonly config: SupperHelperConfig) {}
+  constructor(private readonly config: SuperHelperConfig) {}
 
   async diagnose(request: DiagnosticRequest): Promise<ClaudeWorkerResponse> {
     return this.withSessionLock(request.claudeSessionId, () => this.diagnoseUnlocked(request));

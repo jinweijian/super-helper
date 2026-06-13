@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { SupperHelperConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 import { ClaudeCodeWorker } from '../claude-worker.js';
-import { SupperHelperAgent } from '../agent.js';
+import { SuperHelperAgent } from '../agent.js';
 import { resolveSessionStorageRoot } from '../sessions/storage-scope.js';
 import { FileMemoryStore } from '../storage.js';
 import { renderApp } from '../ui.js';
@@ -12,13 +12,13 @@ import { handleSessionRoutes } from './routes/session-routes.js';
 import { handleSettingsRoutes } from './routes/settings-routes.js';
 
 export interface StartServerOptions {
-  config: SupperHelperConfig;
+  config: SuperHelperConfig;
 }
 
 export function startServer(options: StartServerOptions): Promise<{ url: string; close: () => Promise<void> }> {
   const { config } = options;
   const store = new FileMemoryStore(resolveSessionStorageRoot(config));
-  const agent = new SupperHelperAgent(config, store, new ClaudeCodeWorker(config));
+  const agent = new SuperHelperAgent(config, store, new ClaudeCodeWorker(config));
 
   const server = createServer(async (req, res) => {
     try {
@@ -46,9 +46,9 @@ export function startServer(options: StartServerOptions): Promise<{ url: string;
 async function route(
   req: IncomingMessage,
   res: ServerResponse,
-  config: SupperHelperConfig,
+  config: SuperHelperConfig,
   store: FileMemoryStore,
-  agent: SupperHelperAgent,
+  agent: SuperHelperAgent,
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 

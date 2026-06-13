@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { SupperHelperConfig } from '../../config.js';
+import type { SuperHelperConfig } from '../../config.js';
 import type { UserPersona } from '../../domain.js';
 import type { FileMemoryStore } from '../../storage.js';
 import { serializeSession, sessionSummary } from '../dto.js';
@@ -9,7 +9,7 @@ export async function handleSessionRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  config: SupperHelperConfig,
+  config: SuperHelperConfig,
   store: FileMemoryStore,
 ): Promise<boolean> {
   if (req.method === 'GET' && url.pathname === '/api/sessions') {

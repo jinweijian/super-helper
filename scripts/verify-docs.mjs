@@ -14,7 +14,7 @@ const checks = [
   },
   {
     file: 'src/agents/main.md',
-    terms: ['supper helper Main Agent', 'Preflight Gate', '不能乱猜', 'DiagnosticRequest', 'Claude Code is a tool', 'Prompt Regression Cases'],
+    terms: ['super helper Main Agent', 'Preflight Gate', '不能乱猜', 'DiagnosticRequest', 'Claude Code is a tool', 'Prompt Regression Cases'],
   },
   {
     file: 'src/agents/input-review.md',
@@ -38,7 +38,7 @@ const checks = [
   },
   {
     file: 'docs/product-requirements.md',
-    terms: ['supper helper', '极简对话页', '输入框吸底', '查看诊断日志', '用户质疑'],
+    terms: ['super helper', '极简对话页', '输入框吸底', '查看诊断日志', '用户质疑'],
   },
   {
     file: 'docs/agent-design.md',
