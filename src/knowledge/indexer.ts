@@ -239,6 +239,7 @@ function chunkDocument(document: KnowledgeDocument): KnowledgeChunk[] {
     source_type: frontmatter.source_type,
     status: frontmatter.status,
     confidence: frontmatter.confidence,
+    visibility: frontmatter.visibility,
     headings: document.headings,
     keywords: Array.from(new Set([
       frontmatter.title,

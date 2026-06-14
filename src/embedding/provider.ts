@@ -3,6 +3,7 @@ import { FakeEmbeddingProvider } from './fake.js';
 import { GeminiEmbeddingProvider } from './gemini.js';
 import { MiniMaxEmbeddingProvider } from './minimax.js';
 import { QwenEmbeddingProvider } from './qwen.js';
+import { SiliconFlowEmbeddingProvider } from './siliconflow.js';
 import type {
   EmbeddingDistanceMetric,
   EmbeddingProvider,
@@ -11,12 +12,12 @@ import type {
   EmbeddingProviderId,
 } from './types.js';
 
-const SUPPORTED_PROVIDERS: EmbeddingProviderId[] = ['minimax', 'gemini', 'qwen', 'fake'];
+const SUPPORTED_PROVIDERS: EmbeddingProviderId[] = ['siliconflow', 'minimax', 'gemini', 'qwen', 'fake'];
 const SUPPORTED_DISTANCES: EmbeddingDistanceMetric[] = ['cosine', 'dot', 'euclidean'];
 
 export function createEmbeddingProvider(
   config: EmbeddingProviderConfig,
-  _options: EmbeddingProviderFactoryOptions = {},
+  options: EmbeddingProviderFactoryOptions = {},
 ): EmbeddingProvider {
   validateEmbeddingProviderConfig(config);
 
@@ -28,6 +29,8 @@ export function createEmbeddingProvider(
         dimensions: config.dimensions,
         distance: config.distance as EmbeddingDistanceMetric,
       });
+    case 'siliconflow':
+      return new SiliconFlowEmbeddingProvider(config, options);
     case 'minimax':
       return new MiniMaxEmbeddingProvider(config);
     case 'gemini':

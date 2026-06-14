@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { defaultConfig, getEmbeddingConfig, isEmbeddingEnabled } from '../dist/config.js';
 import {
@@ -8,6 +12,8 @@ import {
   embeddingConfigFingerprint,
   isEmbeddingManifestCompatible,
   isEmbeddingProviderError,
+  runEmbeddingSmokeTest,
+  runRerankSmokeTest,
   redactEmbeddingErrorMessage,
 } from '../dist/embedding/index.js';
 
@@ -15,10 +21,14 @@ test('default config keeps embedding disabled and independent from agent model p
   const config = defaultConfig();
 
   assert.equal(config.embedding.enabled, false);
-  assert.equal(config.embedding.provider, 'minimax');
+  assert.equal(config.embedding.provider, 'siliconflow');
+  assert.equal(config.embedding.model, 'Qwen/Qwen3-Embedding-0.6B');
+  assert.equal(config.embedding.baseUrl, 'https://api.siliconflow.cn/v1');
+  assert.equal(config.embedding.apiKeyEnv, 'SILICONFLOW_API_KEY');
+  assert.equal(config.embedding.dimensions, 1024);
   assert.equal(config.embedding.distance, 'cosine');
   assert.equal(isEmbeddingEnabled(config), false);
-  assert.equal(getEmbeddingConfig(config).provider, 'minimax');
+  assert.equal(getEmbeddingConfig(config).provider, 'siliconflow');
 
   config.models.providers.agent = {
     type: 'openai-compatible',
@@ -105,6 +115,230 @@ test('provider factory validates config and keeps unsupported providers safe', a
   );
 });
 
+test('siliconflow provider sends official embedding request and maps response metadata', async () => {
+  const requests = [];
+  const provider = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    apiKey: 'sk-test-secret',
+    dimensions: 4,
+    distance: 'cosine',
+    batchSize: 2,
+  }, {
+    fetch: async (url, init) => {
+      requests.push({ url: String(url), init });
+      const body = JSON.parse(String(init.body));
+      const input = Array.isArray(body.input) ? body.input : [body.input];
+      return new Response(JSON.stringify({
+        object: 'list',
+        model: body.model,
+        data: input.map((_, index) => ({
+          object: 'embedding',
+          index,
+          embedding: [index + 0.1, index + 0.2, index + 0.3, index + 0.4],
+        })),
+        usage: { prompt_tokens: 12, total_tokens: 12 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+
+  const result = await provider.embedDocuments([
+    { id: 'a', text: '第一段', contentHash: 'hash-a' },
+    { id: 'b', text: '第二段', contentHash: 'hash-b' },
+    { id: 'c', text: '第三段', contentHash: 'hash-c' },
+  ]);
+  const query = await provider.embedQuery({ id: 'q1', text: '查询' });
+
+  assert.equal(requests.length, 3);
+  assert.equal(requests[0].url, 'https://api.siliconflow.cn/v1/embeddings');
+  assert.equal(requests[0].init.method, 'POST');
+  assert.equal(requests[0].init.headers.Authorization, 'Bearer sk-test-secret');
+  assert.equal(JSON.parse(String(requests[0].init.body)).model, 'Qwen/Qwen3-Embedding-0.6B');
+  assert.deepEqual(JSON.parse(String(requests[0].init.body)).input, ['第一段', '第二段']);
+  assert.equal(JSON.parse(String(requests[0].init.body)).dimensions, 4);
+  assert.equal(result.provider, 'siliconflow');
+  assert.equal(result.results.length, 3);
+  assert.equal(result.results[2].id, 'c');
+  assert.equal(result.results[2].contentHash, 'hash-c');
+  assert.deepEqual(result.results[2].vector, [0.1, 0.2, 0.3, 0.4]);
+  assert.equal(result.usage.providerRequestCount, 2);
+  assert.equal(result.usage.inputTokens, 24);
+  assert.equal(query.id, 'q1');
+  assert.equal(query.vector.length, 4);
+});
+
+test('siliconflow provider normalizes credentials, provider, malformed, and dimension errors safely', async () => {
+  const missing = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    dimensions: 4,
+    distance: 'cosine',
+  });
+  await assert.rejects(
+    () => missing.embedQuery({ text: 'hello' }),
+    (error) => isEmbeddingProviderError(error) && error.code === 'missing_credentials',
+  );
+
+  const providerError = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    apiKey: 'sk-secret-provider-error',
+    dimensions: 4,
+    distance: 'cosine',
+  }, {
+    fetch: async () => new Response(JSON.stringify({ message: 'Authorization: Bearer sk-secret-provider-error failed' }), { status: 429 }),
+  });
+  await assert.rejects(
+    () => providerError.embedQuery({ text: 'hello' }),
+    (error) => (
+      isEmbeddingProviderError(error) &&
+      error.code === 'rate_limited' &&
+      error.retryable === true &&
+      !String(error.safeMessage).includes('sk-secret-provider-error')
+    ),
+  );
+
+  const nonJsonServerError = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    apiKey: 'sk-secret',
+    dimensions: 4,
+    distance: 'cosine',
+  }, {
+    fetch: async () => new Response('upstream overloaded', { status: 503 }),
+  });
+  await assert.rejects(
+    () => nonJsonServerError.embedQuery({ text: 'hello' }),
+    (error) => (
+      isEmbeddingProviderError(error) &&
+      error.code === 'provider_error' &&
+      error.status === 503 &&
+      error.retryable === true
+    ),
+  );
+
+  const malformed = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    apiKey: 'sk-secret',
+    dimensions: 4,
+    distance: 'cosine',
+  }, {
+    fetch: async () => new Response(JSON.stringify({ data: [{ index: 0 }] }), { status: 200 }),
+  });
+  await assert.rejects(
+    () => malformed.embedQuery({ text: 'hello' }),
+    (error) => isEmbeddingProviderError(error) && error.code === 'malformed_response',
+  );
+
+  const partial = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    apiKey: 'sk-secret',
+    dimensions: 4,
+    distance: 'cosine',
+  }, {
+    fetch: async () => new Response(JSON.stringify({
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      data: [{ index: 0, embedding: [1, 2, 3, 4] }],
+      usage: { total_tokens: 1 },
+    }), { status: 200 }),
+  });
+  await assert.rejects(
+    () => partial.embedDocuments([
+      { id: 'a', text: 'hello a' },
+      { id: 'b', text: 'hello b' },
+    ]),
+    (error) => isEmbeddingProviderError(error) && error.code === 'malformed_response',
+  );
+
+  const mismatch = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    apiKey: 'sk-secret',
+    dimensions: 4,
+    distance: 'cosine',
+  }, {
+    fetch: async () => new Response(JSON.stringify({
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      data: [{ index: 0, embedding: [1, 2] }],
+      usage: { total_tokens: 1 },
+    }), { status: 200 }),
+  });
+  await assert.rejects(
+    () => mismatch.embedQuery({ text: 'hello' }),
+    (error) => isEmbeddingProviderError(error) && error.code === 'dimension_mismatch',
+  );
+});
+
+test('embedding smoke test handles disabled config and hides raw vectors', async () => {
+  let fetchCalled = false;
+  const disabled = await runEmbeddingSmokeTest({
+    config: {
+      enabled: false,
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      apiKey: 'sk-secret',
+      dimensions: 4,
+      distance: 'cosine',
+    },
+    fetch: async () => {
+      fetchCalled = true;
+      throw new Error('should not call fetch');
+    },
+  });
+  assert.equal(disabled.ok, false);
+  assert.equal(disabled.error.code, 'disabled');
+  assert.equal(fetchCalled, false);
+
+  const success = await runEmbeddingSmokeTest({
+    config: {
+      enabled: true,
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      apiKey: 'sk-secret',
+      dimensions: 4,
+      distance: 'cosine',
+    },
+    fetch: async () => new Response(JSON.stringify({
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      data: [{ index: 0, embedding: [1, 2, 3, 4] }],
+      usage: { total_tokens: 2 },
+    }), { status: 200 }),
+  });
+  assert.equal(success.ok, true);
+  assert.equal(success.provider, 'siliconflow');
+  assert.equal(success.model, 'Qwen/Qwen3-Embedding-0.6B');
+  assert.equal(success.dimensions, 4);
+  assert.equal(JSON.stringify(success).includes('[1,2,3,4]'), false);
+});
+
+test('rerank smoke maps non-json provider failures by status without leaking payloads', async () => {
+  const result = await runRerankSmokeTest({
+    config: {
+      enabled: true,
+      provider: 'siliconflow',
+      model: 'BAAI/bge-reranker-v2-m3',
+      apiKey: 'sk-secret',
+    },
+    fetch: async () => new Response('Authorization: Bearer sk-secret failed', { status: 503 }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'provider_error');
+  assert.equal(result.error.status, 503);
+  assert.equal(result.error.retryable, true);
+  assert.doesNotMatch(JSON.stringify(result), /sk-secret/);
+});
+
 test('minimax provider is docs-gated and does not guess network calls', async () => {
   let fetchCalled = false;
   const provider = createEmbeddingProvider({
@@ -131,6 +365,21 @@ test('minimax provider is docs-gated and does not guess network calls', async ()
     ),
   );
   assert.equal(fetchCalled, false);
+});
+
+test('embedding CLI reports disabled state without calling network', () => {
+  const home = mkdtempSync(join(tmpdir(), 'super-helper-embedding-cli-'));
+  const result = spawnSync(process.execPath, [
+    'dist/cli.js',
+    'embedding',
+    'test',
+    '--home',
+    home,
+  ], { cwd: process.cwd(), encoding: 'utf8' });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /embedding disabled/);
+  assert.doesNotMatch(result.stdout, /embedding:/);
 });
 
 test('embedding error helpers redact secrets from nested values', () => {

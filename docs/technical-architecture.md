@@ -18,6 +18,7 @@ The current MVP keeps the public import surface stable while separating product 
 - `src/runtime/preflight-gate.ts`, `request-builder.ts`, `review-gate.ts`, and `presenter.ts` own runtime decisions and formatting helpers.
 - `src/runtime/event-recorder.ts` owns lifecycle log event creation for Agent, Claude, and system phases.
 - `src/knowledge/` owns the enterprise knowledge workspace skeleton, Markdown/frontmatter parsing, source metadata, local keyword chunk index, and local evidence-pack search.
+- `src/embedding/` owns embedding/rerank provider contracts, provider factories, SiliconFlow provider calls, provider smoke tests, and provider error normalization.
 - `src/sessions/` owns case repository ports and request context construction.
 - `src/workers/diagnostic-worker.ts` defines the stable worker port.
 - `src/workers/claude/` owns the Claude Code adapter implementation, prompts, policy, CLI execution, and output parsing.
@@ -166,6 +167,56 @@ Quality reports are written next to the indexes and reports directories. Severit
 - `knowledge/reports/source-quality-report.json`: parser failures, unknown-block ratio, table/list preservation, heading structure, and source provenance issues.
 - Knowledge search reads the chunk-quality-report.json and attaches `quality: { severity, issues }` to each evidence result. Evidence with `error` severity is excluded from direct-answer candidates; `warn` lowers judge confidence.
 
+## Embedding Provider and Vector Artifacts
+
+Embeddings are configured independently from the Agent chat model. The default config keeps embedding disabled and points at SiliconFlow only as the primary real provider for this implementation:
+
+```json
+{
+  "embedding": {
+    "enabled": false,
+    "provider": "siliconflow",
+    "model": "Qwen/Qwen3-Embedding-0.6B",
+    "baseUrl": "https://api.siliconflow.cn/v1",
+    "apiKeyEnv": "SILICONFLOW_API_KEY",
+    "dimensions": 1024,
+    "distance": "cosine"
+  },
+  "rerank": {
+    "enabled": false,
+    "provider": "siliconflow",
+    "model": "BAAI/bge-reranker-v2-m3",
+    "baseUrl": "https://api.siliconflow.cn/v1",
+    "apiKeyEnv": "SILICONFLOW_API_KEY"
+  }
+}
+```
+
+`src/embedding/` is the only module that should call remote embedding or rerank provider APIs. It normalizes missing credentials, timeout, rate-limit, invalid request, provider failure, malformed response, and dimension mismatch errors without exposing API keys, bearer headers, cookies, raw provider payloads, raw vectors, or source chunk text.
+
+`src/knowledge/` owns only local vector artifacts:
+
+```text
+knowledge/indexes/
+  vectors.jsonl
+  vector-manifest.json
+  vector-build-report.json
+```
+
+`knowledge vector build` reads the existing `chunks.jsonl`, skips restricted or inactive chunks before calling the provider, writes vector records, and records provider/model/dimensions/distance/source manifest hash in the manifest. Compatibility checks refuse to use stale or mismatched vector artifacts and report that a rebuild is required.
+
+Runtime retrieval is still keyword/frontmatter based in this change. The vector artifacts prove the provider adapter and local indexing path, but they are not yet wired into hybrid retrieval, rerank sorting, or final-answer generation. SiliconFlow rerank has a smoke-test path so operators can validate model credentials and request shape before a future retrieval-ranking change.
+
+Current embedding commands:
+
+```bash
+node dist/cli.js embedding test --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
+node dist/cli.js rerank test --enable --provider siliconflow --model BAAI/bge-reranker-v2-m3 --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY
+node dist/cli.js knowledge vector build --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
+```
+
+The settings drawer exposes the same checks through `测试 Embedding` and `测试 Rerank`; gateway routes remain DTO/config endpoints and do not own provider request logic.
+
 ## Live Knowledge Acceptance
 
 `node dist/cli.js accept knowledge --workspace <path>` (npm alias `accept:knowledge`) runs a repeatable local acceptance check that verifies workspace, model provider activation, knowledge directory presence, source ingest report, Claude Code availability, and read-only worker policy. The default scenarios are:
@@ -233,7 +284,7 @@ knowledge/
   indexes/
 ```
 
-`knowledge/_sources/` preserves original PDFs or source files for provenance. Structured Markdown parent slices are the editable knowledge source. `knowledge/indexes/` contains derived artifacts such as `chunks.jsonl`, `keyword-index.json`, and `manifest.json`; these can be rebuilt from parent slices.
+`knowledge/_sources/` preserves original PDFs or source files for provenance. Structured Markdown parent slices are the editable knowledge source. `knowledge/indexes/` contains derived artifacts such as `chunks.jsonl`, `keyword-index.json`, `manifest.json`, and optional vector artifacts; these can be rebuilt from parent slices.
 
 Current implemented knowledge commands:
 
@@ -241,6 +292,7 @@ Current implemented knowledge commands:
 super-helper knowledge init --workspace /path/to/workspace
 super-helper knowledge init --workspace /path/to/workspace --knowledge-root /path/to/knowledge-base
 super-helper knowledge update --workspace /path/to/workspace
+super-helper knowledge vector build --workspace /path/to/workspace --knowledge-root /path/to/knowledge-base --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
 super-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 ```
 

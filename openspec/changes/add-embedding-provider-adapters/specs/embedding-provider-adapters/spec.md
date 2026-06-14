@@ -30,23 +30,27 @@ The system SHALL configure embedding providers independently from Agent chat mod
 - **WHEN** the Agent uses one model provider and embedding uses another provider
 - **THEN** the system treats them as independent configurations and does not infer embedding settings from Agent model settings
 
-#### Scenario: MiniMax configured as primary provider
-- **WHEN** embedding config selects provider `minimax`
-- **AND** current official MiniMax embedding API documentation has been verified and recorded
-- **THEN** the system can create a MiniMax embedding provider from documented model, base URL or endpoint, API key or API key environment variable, dimensions, distance metric, batch size, and timeout
+#### Scenario: SiliconFlow configured as primary provider
+- **WHEN** embedding config selects provider `siliconflow`
+- **AND** current official SiliconFlow embedding API documentation has been verified and recorded
+- **THEN** the system can create a SiliconFlow embedding provider from configured model, base URL or endpoint, API key or API key environment variable, dimensions, distance metric, batch size, and timeout
 
-#### Scenario: MiniMax docs gate blocks guessed network calls
-- **WHEN** embedding config selects provider `minimax`
-- **AND** official MiniMax embedding API documentation is unavailable or does not document endpoint, auth, request body, response vector path, dimensions behavior, and batch limits
-- **THEN** the system fails MiniMax real network calls with a safe docs-required or unsupported-provider error instead of guessing an endpoint or response format
+#### Scenario: SiliconFlow request shape follows official docs
+- **WHEN** the SiliconFlow provider embeds documents or a query
+- **THEN** it calls `POST /embeddings` with bearer-token auth, configured model, text input, optional dimensions when configured, parses `data[].embedding`, validates dimensions, and normalizes errors without exposing secrets
 
-#### Scenario: Gemini configured as secondary provider
-- **WHEN** embedding config selects provider `gemini`
-- **THEN** the system can create a Gemini embedding provider from configured model, base URL or endpoint, API key or API key environment variable, dimensions, distance metric, batch size, and timeout
+#### Scenario: Future provider extensions are not silently implemented
+- **WHEN** embedding config selects a provider that is not implemented in this change, such as `gemini`, `qwen`, or `minimax`
+- **THEN** the system fails with a clear unsupported-provider or docs-required error instead of silently using another provider
 
-#### Scenario: Qwen reserved for later use
-- **WHEN** embedding config selects provider `qwen` before a real Qwen adapter is implemented
-- **THEN** the system fails with a clear unsupported-provider error instead of silently using another provider
+#### Scenario: Rerank remains a documented future extension
+- **WHEN** a user wants SiliconFlow rerank support
+- **THEN** the README explains how a future rerank adapter can use the SiliconFlow rerank endpoint, but this change does not wire rerank into retrieval ranking
+
+#### Scenario: Rerank model connectivity check
+- **WHEN** rerank config selects provider `siliconflow`
+- **AND** the user explicitly runs the rerank test command or settings test action
+- **THEN** the system calls the SiliconFlow rerank endpoint with harmless test text, verifies that ranked scores are returned, and reports provider/model/top score without printing API keys, request headers, raw documents, or secrets
 
 #### Scenario: Missing credentials blocked
 - **WHEN** embedding is enabled but neither API key nor API key environment variable resolves to a secret
@@ -173,16 +177,16 @@ The system SHALL verify embedding behavior in normal tests without depending on 
 The implementation SHALL include auditable execution evidence that prevents checklist-only or mock-only completion.
 
 #### Scenario: Provider official docs are checked before provider-specific coding
-- **WHEN** an implementer starts MiniMax or Gemini request/response adapter code
+- **WHEN** an implementer starts SiliconFlow request/response adapter code
 - **THEN** implementation notes record the official provider documentation URL, access date, endpoint, auth shape, request fields, response vector path, dimensions behavior, and batch limits
 
 #### Scenario: Third-party provider references are not authoritative
 - **WHEN** a provider behavior is documented only in third-party SDK docs, community examples, prior memory, or old code
 - **THEN** the implementation treats that information as non-authoritative and does not use it to unlock real provider network calls
 
-#### Scenario: Provider docs unavailable stops real adapter coding
-- **WHEN** official provider docs cannot be accessed or contradict the current design
-- **THEN** the implementer stops provider-specific network coding, updates OpenSpec, and may only implement scaffold or fake-contract behavior for that provider
+#### Scenario: Non-scoped providers stay out of implementation
+- **WHEN** official docs exist for Gemini, Qwen, MiniMax, or rerank but the user has not selected that provider for this round
+- **THEN** the implementer documents extension guidance and does not claim those providers are implemented
 
 #### Scenario: Red-green evidence exists for new behavior
 - **WHEN** a new provider, metadata helper, vector builder, CLI command, redaction rule, or compatibility check is implemented
@@ -202,8 +206,8 @@ The implementation SHALL include auditable execution evidence that prevents chec
 - **THEN** fake-provider or fake-fetch smoke output and a fixture vector build report are recorded with provider, model, dimensions, distance, vector count, skipped count, failed count, and artifact paths
 
 #### Scenario: Real provider smoke status is explicit
-- **WHEN** MiniMax or Gemini real credentials are unavailable or real smoke tests are not run
-- **THEN** implementation notes explicitly say they were not run and why; fake tests alone must not be described as real provider acceptance
+- **WHEN** SiliconFlow real credentials are available
+- **THEN** implementation notes include a sanitized smoke result with provider, model, dimensions, duration, and ok/fail only
 
 #### Scenario: Diff boundary audit is required
 - **WHEN** implementation is marked complete

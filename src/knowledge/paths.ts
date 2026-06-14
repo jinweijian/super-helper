@@ -24,6 +24,18 @@ export function chunksPath(workspaceRoot: string): string {
   return join(indexesDir(workspaceRoot), 'chunks.jsonl');
 }
 
+export function vectorsPath(workspaceRoot: string): string {
+  return join(indexesDir(workspaceRoot), 'vectors.jsonl');
+}
+
+export function vectorManifestPath(workspaceRoot: string): string {
+  return join(indexesDir(workspaceRoot), 'vector-manifest.json');
+}
+
+export function vectorBuildReportPath(workspaceRoot: string): string {
+  return join(indexesDir(workspaceRoot), 'vector-build-report.json');
+}
+
 export function ingestReportPath(workspaceRoot: string): string {
   return join(indexesDir(workspaceRoot), 'ingest-report.json');
 }

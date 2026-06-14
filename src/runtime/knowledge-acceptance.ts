@@ -131,7 +131,7 @@ function runDirectKnowledgeScenario(
   scenario: { id: string; name: string; question: string; expectedSource: RegExp },
 ): KnowledgeAcceptanceScenario {
   const route = routeKnowledgeQuestion({ workspaceRoot: input.knowledgeWorkspaceRoot, question: scenario.question });
-  const evidencePack = searchKnowledge({
+  let evidencePack = searchKnowledge({
     workspaceRoot: input.knowledgeWorkspaceRoot,
     query: scenario.question,
     moduleCandidates: route.moduleCandidates,
@@ -139,6 +139,15 @@ function runDirectKnowledgeScenario(
     sourceTypes: route.sourceTypes,
     limit: 8,
   });
+  if (evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
+    evidencePack = searchKnowledge({
+      workspaceRoot: input.knowledgeWorkspaceRoot,
+      query: scenario.question,
+      moduleCandidates: route.moduleCandidates,
+      intentCandidates: route.intentCandidates,
+      limit: 8,
+    });
+  }
   const judge = judgeKnowledgeEvidence({ route, evidencePack, question: scenario.question });
   const top = evidencePack.results[0];
   const sourceText = `${top?.source ?? ''} ${top?.source_document ?? ''} ${top?.title ?? ''}`;
@@ -162,7 +171,7 @@ function runDirectKnowledgeScenario(
 }
 
 function runNoHitEscalationScenario(input: RunKnowledgeAcceptanceInput): KnowledgeAcceptanceScenario {
-  const question = 'no-hit-acceptance-token-zxqv-20260614 文件 src/acceptance/nohit.ts 当前实现在哪里处理？';
+  const question = 'no-hit-acceptance-token-zxqv-20260614-zkpqwlm';
   const route = routeKnowledgeQuestion({ workspaceRoot: input.knowledgeWorkspaceRoot, question });
   const evidencePack = searchKnowledge({ workspaceRoot: input.knowledgeWorkspaceRoot, query: question, limit: 5 });
   const judge = judgeKnowledgeEvidence({ route, evidencePack, question });

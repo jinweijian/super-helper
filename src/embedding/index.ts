@@ -9,6 +9,9 @@ export { FakeEmbeddingProvider } from './fake.js';
 export { GeminiEmbeddingProvider } from './gemini.js';
 export { MiniMaxEmbeddingProvider } from './minimax.js';
 export { QwenEmbeddingProvider } from './qwen.js';
+export { SiliconFlowEmbeddingProvider } from './siliconflow.js';
+export { runEmbeddingSmokeTest } from './smoke-test.js';
+export { runRerankSmokeTest } from './rerank-smoke-test.js';
 export {
   assertEmbeddingDimensions,
   embeddingConfigFingerprint,
@@ -37,4 +40,6 @@ export type {
   EmbeddingRequestOptions,
   EmbeddingUsage,
   EmbeddingVectorResult,
+  RerankProviderConfig,
+  RerankProviderHealthCheckResult,
 } from './types.js';

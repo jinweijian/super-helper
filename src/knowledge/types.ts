@@ -460,9 +460,54 @@ export interface KnowledgeChunk {
   source_type: KnowledgeSourceType;
   status: KnowledgeStatus;
   confidence: KnowledgeConfidence;
+  visibility?: KnowledgeVisibility;
   headings: string[];
   keywords: string[];
   text: string;
+}
+
+export interface KnowledgeVectorRecord {
+  vector_id: string;
+  source: string;
+  document_id: string;
+  chunk_id: string;
+  text_hash: string;
+  provider: string;
+  model: string;
+  dimensions: number;
+  distance: string;
+  vector: number[];
+  created_at: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KnowledgeVectorManifest {
+  version: 1;
+  provider: string;
+  model: string;
+  dimensions: number;
+  distance: string;
+  source_chunk_manifest_hash: string;
+  vector_count: number;
+  skipped_count: number;
+  failed_count: number;
+  generated_at: string;
+  embedding_config_fingerprint: string;
+}
+
+export interface KnowledgeVectorBuildReport {
+  version: 1;
+  generatedAt: string;
+  provider: string;
+  model: string;
+  dimensions: number;
+  distance: string;
+  vectorCount: number;
+  skipped: Array<{ chunkId: string; textHash: string; reason: string }>;
+  failures: Array<{ chunkId: string; textHash?: string; error: string }>;
+  durationMs: number;
+  vectorsPath: string;
+  manifestPath: string;
 }
 
 export interface KnowledgeEvidenceResult {

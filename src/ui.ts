@@ -1914,6 +1914,30 @@ export function renderApp(): string {
           <label>Temperature<input id="temperature" type="number" step="0.1" value="0" /></label>
         </div>
         <label>上下文窗口 Tokens<input id="contextWindowTokens" type="number" value="1000000" /></label>
+        <h3 style="margin: 8px 0 0; font-size: 14px;">Embedding 模型</h3>
+        <label><input id="embeddingEnabled" type="checkbox" /> 启用 Embedding</label>
+        <div class="field-row">
+          <label>Provider<input id="embeddingProvider" value="siliconflow" /></label>
+          <label>模型<input id="embeddingModel" value="Qwen/Qwen3-Embedding-0.6B" /></label>
+        </div>
+        <label>Base URL<input id="embeddingBaseUrl" value="https://api.siliconflow.cn/v1" /></label>
+        <div class="field-row">
+          <label>API Key 环境变量<input id="embeddingApiKeyEnv" value="SILICONFLOW_API_KEY" /></label>
+          <label>维度<input id="embeddingDimensions" type="number" value="1024" /></label>
+        </div>
+        <label>API Key<input id="embeddingApiKey" type="password" autocomplete="off" placeholder="可选：仅本次保存或测试使用" /></label>
+        <h3 style="margin: 8px 0 0; font-size: 14px;">Rerank 模型</h3>
+        <label><input id="rerankEnabled" type="checkbox" /> 启用 Rerank</label>
+        <div class="field-row">
+          <label>Provider<input id="rerankProvider" value="siliconflow" /></label>
+          <label>模型<input id="rerankModel" value="BAAI/bge-reranker-v2-m3" /></label>
+        </div>
+        <label>Base URL<input id="rerankBaseUrl" value="https://api.siliconflow.cn/v1" /></label>
+        <div class="field-row">
+          <label>API Key 环境变量<input id="rerankApiKeyEnv" value="SILICONFLOW_API_KEY" /></label>
+          <label>Top N<input id="rerankTopN" type="number" value="2" /></label>
+        </div>
+        <label>API Key<input id="rerankApiKey" type="password" autocomplete="off" placeholder="可选：仅本次保存或测试使用" /></label>
         <div class="field-row">
           <label>Claude 超时毫秒<input id="claudeTimeoutMs" type="number" value="1200000" /></label>
           <label>Claude 预算 USD<input id="claudeMaxBudgetUsd" type="number" step="0.01" placeholder="不限制" /></label>
@@ -1924,6 +1948,8 @@ export function renderApp(): string {
         </div>
         <div class="tools">
           <button class="primary" onclick="testModel()">测试模型</button>
+          <button onclick="testEmbedding()">测试 Embedding</button>
+          <button onclick="testRerank()">测试 Rerank</button>
           <button onclick="saveSettings()">保存配置</button>
         </div>
         <div class="status" id="settingsStatus">点击测试模型，确认 Agent 模型是否可用。</div>
@@ -1969,6 +1995,20 @@ export function renderApp(): string {
       document.getElementById('maxTokens').value = provider.maxTokens || 1200;
       document.getElementById('contextWindowTokens').value = provider.contextWindowTokens || json.agent.contextWindowTokens || 200000;
       document.getElementById('temperature').value = provider.temperature ?? 0;
+      const embedding = json.embedding || {};
+      document.getElementById('embeddingEnabled').checked = Boolean(embedding.enabled);
+      document.getElementById('embeddingProvider').value = embedding.provider || 'siliconflow';
+      document.getElementById('embeddingModel').value = embedding.model || 'Qwen/Qwen3-Embedding-0.6B';
+      document.getElementById('embeddingBaseUrl').value = embedding.baseUrl || 'https://api.siliconflow.cn/v1';
+      document.getElementById('embeddingApiKeyEnv').value = embedding.apiKeyEnv || 'SILICONFLOW_API_KEY';
+      document.getElementById('embeddingDimensions').value = embedding.dimensions || 1024;
+      const rerank = json.rerank || {};
+      document.getElementById('rerankEnabled').checked = Boolean(rerank.enabled);
+      document.getElementById('rerankProvider').value = rerank.provider || 'siliconflow';
+      document.getElementById('rerankModel').value = rerank.model || 'BAAI/bge-reranker-v2-m3';
+      document.getElementById('rerankBaseUrl').value = rerank.baseUrl || 'https://api.siliconflow.cn/v1';
+      document.getElementById('rerankApiKeyEnv').value = rerank.apiKeyEnv || 'SILICONFLOW_API_KEY';
+      document.getElementById('rerankTopN').value = rerank.topN || 2;
       document.getElementById('claudeTimeoutMs').value = json.claude.timeoutMs ?? 1200000;
       document.getElementById('claudeMaxBudgetUsd').value = json.claude.maxBudgetUsd ?? '';
       document.getElementById('sessionBusyMaxRetries').value = json.claude.sessionBusyMaxRetries ?? 3;
@@ -2499,6 +2539,33 @@ export function renderApp(): string {
       };
     }
 
+    function readEmbeddingForm(includeKey) {
+      const apiKey = document.getElementById('embeddingApiKey').value.trim();
+      return {
+        enabled: document.getElementById('embeddingEnabled').checked,
+        provider: document.getElementById('embeddingProvider').value.trim() || 'siliconflow',
+        model: document.getElementById('embeddingModel').value.trim(),
+        baseUrl: document.getElementById('embeddingBaseUrl').value.trim(),
+        apiKeyEnv: document.getElementById('embeddingApiKeyEnv').value.trim(),
+        apiKey: includeKey && apiKey ? apiKey : undefined,
+        dimensions: Number(document.getElementById('embeddingDimensions').value || 1024),
+        distance: 'cosine'
+      };
+    }
+
+    function readRerankForm(includeKey) {
+      const apiKey = document.getElementById('rerankApiKey').value.trim();
+      return {
+        enabled: document.getElementById('rerankEnabled').checked,
+        provider: document.getElementById('rerankProvider').value.trim() || 'siliconflow',
+        model: document.getElementById('rerankModel').value.trim(),
+        baseUrl: document.getElementById('rerankBaseUrl').value.trim(),
+        apiKeyEnv: document.getElementById('rerankApiKeyEnv').value.trim(),
+        apiKey: includeKey && apiKey ? apiKey : undefined,
+        topN: Number(document.getElementById('rerankTopN').value || 2)
+      };
+    }
+
     async function testModel() {
       const status = document.getElementById('settingsStatus');
       status.textContent = '正在测试模型...';
@@ -2513,6 +2580,38 @@ export function renderApp(): string {
         : '模型连接失败：' + json.error;
     }
 
+    async function testEmbedding() {
+      const status = document.getElementById('settingsStatus');
+      status.textContent = '正在测试 Embedding...';
+      const payload = readEmbeddingForm(true);
+      payload.enabled = true;
+      const res = await fetch('/api/settings/embedding/test', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      status.textContent = json.ok
+        ? 'Embedding 连接成功：' + json.model + ' · ' + json.dimensions + ' 维'
+        : 'Embedding 连接失败：' + (json.error ? json.error.safeMessage : 'unknown');
+    }
+
+    async function testRerank() {
+      const status = document.getElementById('settingsStatus');
+      status.textContent = '正在测试 Rerank...';
+      const payload = readRerankForm(true);
+      payload.enabled = true;
+      const res = await fetch('/api/settings/rerank/test', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      status.textContent = json.ok
+        ? 'Rerank 连接成功：' + json.model + ' · top score ' + json.topScore
+        : 'Rerank 连接失败：' + (json.error ? json.error.safeMessage : 'unknown');
+    }
+
     async function saveSettings() {
       const status = document.getElementById('settingsStatus');
       status.textContent = '正在保存配置...';
@@ -2522,6 +2621,18 @@ export function renderApp(): string {
         body: JSON.stringify(readSettingsForm(true))
       });
       const modelJson = await res.json();
+      const embeddingRes = await fetch('/api/settings/embedding', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(readEmbeddingForm(true))
+      });
+      const embeddingJson = await embeddingRes.json();
+      const rerankRes = await fetch('/api/settings/rerank', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(readRerankForm(true))
+      });
+      const rerankJson = await rerankRes.json();
       const claudeRes = await fetch('/api/settings/claude', {
         method: 'POST',
         headers: {'content-type': 'application/json'},
@@ -2533,8 +2644,10 @@ export function renderApp(): string {
         })
       });
       const claudeJson = await claudeRes.json();
-      status.textContent = modelJson.agent && claudeJson.claude ? '配置已保存。' : '保存失败：' + JSON.stringify({modelJson, claudeJson});
+      status.textContent = modelJson.agent && embeddingJson.embedding && rerankJson.rerank && claudeJson.claude ? '配置已保存。' : '保存失败：' + JSON.stringify({modelJson, embeddingJson, rerankJson, claudeJson});
       document.getElementById('apiKey').value = '';
+      document.getElementById('embeddingApiKey').value = '';
+      document.getElementById('rerankApiKey').value = '';
       await loadConfig();
     }
 

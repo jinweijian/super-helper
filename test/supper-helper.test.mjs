@@ -112,7 +112,15 @@ test('app exposes a model settings and test entry', () => {
 
   assert.match(html, /openSettings\(\)/);
   assert.match(html, /测试模型/);
+  assert.match(html, /测试 Embedding/);
+  assert.match(html, /测试 Rerank/);
   assert.match(html, /保存配置/);
+  assert.match(html, /id="embeddingEnabled"/);
+  assert.match(html, /id="rerankEnabled"/);
+  assert.match(html, /enabled: document\.getElementById\('embeddingEnabled'\)\.checked/);
+  assert.match(html, /enabled: document\.getElementById\('rerankEnabled'\)\.checked/);
+  assert.match(html, /payload = readEmbeddingForm\(true\)[\s\S]*payload\.enabled = true/);
+  assert.match(html, /payload = readRerankForm\(true\)[\s\S]*payload\.enabled = true/);
   assert.match(html, /上下文窗口 Tokens/);
   assert.match(html, /id="contextWindowTokens"/);
   assert.match(html, /contextWindowTokens: Number\(document\.getElementById\('contextWindowTokens'\)\.value/);
@@ -260,8 +268,26 @@ test('settings API sanitizes secrets and can test model connectivity', async () 
   const originalFetch = globalThis.fetch;
   let server;
 
-  globalThis.fetch = async (_url, init) => {
+  globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
+    const urlText = String(url);
+    if (urlText.endsWith('/embeddings')) {
+      assert.equal(body.model, 'Qwen/Qwen3-Embedding-0.6B');
+      assert.equal(body.dimensions, 4);
+      return new Response(JSON.stringify({
+        model: body.model,
+        data: [{ index: 0, embedding: [1, 2, 3, 4] }],
+        usage: { total_tokens: 2 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (urlText.endsWith('/rerank')) {
+      assert.equal(body.model, 'BAAI/bge-reranker-v2-m3');
+      assert.equal(body.return_documents, false);
+      return new Response(JSON.stringify({
+        id: 'rerank-test',
+        results: [{ index: 0, relevance_score: 0.9 }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
     assert.equal(body.model, 'MiniMax-M3');
     assert.equal(body.messages.at(-1).content.includes('super helper model connectivity test'), true);
     return chatResponse('model ok');
@@ -277,6 +303,11 @@ test('settings API sanitizes secrets and can test model connectivity', async () 
     assert.equal(settings.agent.modelProvider, 'minimax');
     assert.equal(settings.models.providers.minimax.hasApiKey, true);
     assert.equal('apiKey' in settings.models.providers.minimax, false);
+    assert.equal(settings.embedding.provider, 'siliconflow');
+    assert.equal(settings.embedding.hasApiKey, false);
+    assert.equal('apiKey' in settings.embedding, false);
+    assert.equal(settings.rerank.provider, 'siliconflow');
+    assert.equal('apiKey' in settings.rerank, false);
     assert.equal(settings.claude.timeoutMs, 1000);
 
     const claudeSettings = await originalFetch('http://127.0.0.1:43971/api/settings/claude', {
@@ -297,6 +328,44 @@ test('settings API sanitizes secrets and can test model connectivity', async () 
     assert.equal(testResult.ok, true);
     assert.equal(testResult.providerId, 'minimax');
     assert.equal(testResult.model, 'MiniMax-M3');
+
+    const embeddingTest = await originalFetch('http://127.0.0.1:43971/api/settings/embedding/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        enabled: true,
+        provider: 'siliconflow',
+        model: 'Qwen/Qwen3-Embedding-0.6B',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        apiKey: 'sk-test-secret',
+        dimensions: 4,
+        distance: 'cosine',
+      }),
+    }).then((res) => res.json());
+
+    assert.equal(embeddingTest.ok, true);
+    assert.equal(embeddingTest.provider, 'siliconflow');
+    assert.equal(embeddingTest.model, 'Qwen/Qwen3-Embedding-0.6B');
+    assert.equal(embeddingTest.dimensions, 4);
+    assert.doesNotMatch(JSON.stringify(embeddingTest), /sk-test-secret|\\[1,2,3,4\\]/);
+
+    const rerankTest = await originalFetch('http://127.0.0.1:43971/api/settings/rerank/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        enabled: true,
+        provider: 'siliconflow',
+        model: 'BAAI/bge-reranker-v2-m3',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        apiKey: 'sk-test-secret',
+      }),
+    }).then((res) => res.json());
+
+    assert.equal(rerankTest.ok, true);
+    assert.equal(rerankTest.provider, 'siliconflow');
+    assert.equal(rerankTest.model, 'BAAI/bge-reranker-v2-m3');
+    assert.equal(typeof rerankTest.topScore, 'number');
+    assert.doesNotMatch(JSON.stringify(rerankTest), /sk-test-secret|apple|banana/);
   } finally {
     if (server) {
       await server.close();

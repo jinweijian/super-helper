@@ -1,7 +1,13 @@
 export { parseMarkdownDocument, parseSimpleYaml } from './frontmatter.js';
 export { initKnowledgeWorkspace } from './init.js';
 export { defaultSourceDirectory, ingestSourceDocuments } from './ingest.js';
-export { knowledgeRoot } from './paths.js';
+export {
+  chunksPath,
+  knowledgeRoot,
+  vectorBuildReportPath,
+  vectorManifestPath,
+  vectorsPath,
+} from './paths.js';
 export { resolveKnowledgeWorkspaceRoot, workspaceKnowledgeKey } from './storage-scope.js';
 export {
   discoverKnowledgeDocuments,
@@ -45,6 +51,21 @@ export {
 } from './case-review.js';
 export { runKnowledgeEval, loadQuestions } from './eval.js';
 export type { RunKnowledgeEvalInput } from './eval.js';
+export {
+  buildKnowledgeVectorIndex,
+  checkKnowledgeVectorCompatibility,
+  chunkToEmbeddingDocumentInput,
+  isChunkEligibleForRemoteEmbedding,
+  loadKnowledgeChunksForEmbedding,
+  readKnowledgeVectorManifest,
+  readKnowledgeVectorRecords,
+} from './vector-index.js';
+export type {
+  BuildKnowledgeVectorIndexInput,
+  BuildKnowledgeVectorIndexResult,
+  KnowledgeVectorCompatibilityResult,
+  KnowledgeVectorCompatibilityStatus,
+} from './vector-index.js';
 export type {
   // Document types
   KnowledgeChunk,
@@ -64,6 +85,9 @@ export type {
   KnowledgeStatus,
   KnowledgeUpdateResult,
   KnowledgeVisibility,
+  KnowledgeVectorBuildReport,
+  KnowledgeVectorManifest,
+  KnowledgeVectorRecord,
   // Pipeline types
   KnowledgePipelineStage,
   KnowledgePipelineStatus,

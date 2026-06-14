@@ -1,0 +1,170 @@
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { createEmbeddingProvider } from '../dist/embedding/index.js';
+import {
+  buildKnowledgeVectorIndex,
+  checkKnowledgeVectorCompatibility,
+  chunksPath,
+  readKnowledgeVectorManifest,
+  readKnowledgeVectorRecords,
+  vectorBuildReportPath,
+  vectorManifestPath,
+  vectorsPath,
+} from '../dist/knowledge/index.js';
+
+function tempWorkspace() {
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kv-'));
+  const indexes = join(workspace, 'knowledge', 'indexes');
+  return { workspace, indexes };
+}
+
+function writeChunks(indexes, chunks) {
+  mkdirSync(indexes, { recursive: true });
+  writeFileSync(join(indexes, 'chunks.jsonl'), chunks.map((chunk) => JSON.stringify(chunk)).join('\n') + '\n', 'utf8');
+}
+
+test('knowledge vector build writes artifacts and skips restricted chunks before provider call', async () => {
+  const { workspace, indexes } = tempWorkspace();
+  const chunks = [
+    {
+      chunk_id: 'chk_public',
+      parent_id: 'doc_public',
+      source: 'knowledge/faq/public.md',
+      module: 'ai-companion',
+      intent: 'policy',
+      source_type: 'faq',
+      status: 'active',
+      confidence: 'high',
+      visibility: 'internal',
+      headings: [],
+      keywords: ['学习日'],
+      text: '学习日晚上8点未完成任务会提醒',
+    },
+    {
+      chunk_id: 'chk_restricted',
+      parent_id: 'doc_restricted',
+      source: 'knowledge/runbooks/restricted.md',
+      module: 'security',
+      intent: 'secret',
+      source_type: 'runbook',
+      status: 'active',
+      confidence: 'high',
+      visibility: 'restricted',
+      headings: [],
+      keywords: ['secret'],
+      text: 'RESTRICTED_SECRET_TEXT_SHOULD_NOT_LEAVE',
+    },
+  ];
+  writeChunks(indexes, chunks);
+
+  const submitted = [];
+  const provider = createEmbeddingProvider({
+    enabled: true,
+    provider: 'fake',
+    model: 'fake-vector',
+    dimensions: 5,
+    distance: 'cosine',
+  });
+  const original = provider.embedDocuments.bind(provider);
+  provider.embedDocuments = async (input, options) => {
+    submitted.push(...input.map((item) => item.text));
+    return original(input, options);
+  };
+
+  const result = await buildKnowledgeVectorIndex({
+    workspaceRoot: workspace,
+    provider,
+    config: {
+      enabled: true,
+      provider: 'fake',
+      model: 'fake-vector',
+      dimensions: 5,
+      distance: 'cosine',
+    },
+  });
+
+  assert.deepEqual(submitted, ['学习日晚上8点未完成任务会提醒']);
+  assert.equal(result.vectorCount, 1);
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.skipped[0].chunkId, 'chk_restricted');
+  assert.equal(existsSync(vectorsPath(workspace)), true);
+  assert.equal(existsSync(vectorManifestPath(workspace)), true);
+  assert.equal(existsSync(vectorBuildReportPath(workspace)), true);
+
+  const records = readKnowledgeVectorRecords(workspace);
+  assert.equal(records.records.length, 1);
+  assert.equal(records.records[0].chunk_id, 'chk_public');
+  assert.equal(records.records[0].provider, 'fake');
+  assert.equal(records.records[0].vector.length, 5);
+
+  const manifest = readKnowledgeVectorManifest(workspace);
+  assert.equal(manifest.provider, 'fake');
+  assert.equal(manifest.model, 'fake-vector');
+  assert.equal(manifest.vector_count, 1);
+  assert.equal(manifest.skipped_count, 1);
+
+  const report = JSON.parse(readFileSync(vectorBuildReportPath(workspace), 'utf8'));
+  assert.equal(report.vectorCount, 1);
+  assert.equal(report.skipped.length, 1);
+  assert.doesNotMatch(JSON.stringify(report), /RESTRICTED_SECRET_TEXT_SHOULD_NOT_LEAVE/);
+});
+
+test('knowledge vector compatibility detects missing, matching, mismatch, and stale chunk artifacts', async () => {
+  const { workspace, indexes } = tempWorkspace();
+  const config = {
+    enabled: true,
+    provider: 'fake',
+    model: 'fake-vector',
+    dimensions: 3,
+    distance: 'cosine',
+  };
+
+  assert.equal(checkKnowledgeVectorCompatibility({ workspaceRoot: workspace, embeddingConfig: config }).status, 'missing-index');
+
+  writeChunks(indexes, [{
+    chunk_id: 'chk_one',
+    parent_id: 'doc_one',
+    source: 'knowledge/faq/one.md',
+    module: 'ai-companion',
+    intent: 'policy',
+    source_type: 'faq',
+    status: 'active',
+    confidence: 'high',
+    visibility: 'internal',
+    headings: [],
+    keywords: ['提醒'],
+    text: '提醒规则',
+  }]);
+  const provider = createEmbeddingProvider(config);
+  await buildKnowledgeVectorIndex({ workspaceRoot: workspace, provider, config });
+
+  assert.equal(checkKnowledgeVectorCompatibility({ workspaceRoot: workspace, embeddingConfig: config }).status, 'compatible');
+  assert.deepEqual(
+    checkKnowledgeVectorCompatibility({
+      workspaceRoot: workspace,
+      embeddingConfig: { ...config, model: 'other-model' },
+    }).mismatches,
+    ['model'],
+  );
+
+  writeChunks(indexes, [{
+    chunk_id: 'chk_one',
+    parent_id: 'doc_one',
+    source: 'knowledge/faq/one.md',
+    module: 'ai-companion',
+    intent: 'policy',
+    source_type: 'faq',
+    status: 'active',
+    confidence: 'high',
+    visibility: 'internal',
+    headings: [],
+    keywords: ['提醒'],
+    text: '提醒规则已经变化',
+  }]);
+  const stale = checkKnowledgeVectorCompatibility({ workspaceRoot: workspace, embeddingConfig: config });
+  assert.equal(stale.status, 'rebuild-required');
+  assert.deepEqual(stale.mismatches, ['source_chunks']);
+});

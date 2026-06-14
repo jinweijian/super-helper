@@ -5,7 +5,7 @@
 - Agent 模型链路：`src/model.ts` 通过 `models.providers` 调用 OpenAI-compatible chat/completions，用于 preflight / review 等模型辅助判断。
 - 知识库链路：`src/knowledge/` 负责 Markdown/frontmatter/source metadata、keyword chunks 和本地 evidence pack search。
 
-embedding 不应复用 Agent 模型链路。用户计划优先使用 MiniMax embedding，次选 Gemini，后续再接千问。如果把 embedding API 写死到 `src/knowledge/indexer.ts` 或复用 `src/model.ts`，会产生几个问题：
+embedding 不应复用 Agent 模型链路。最新实施范围改为优先使用 SiliconFlow embedding API，Gemini/千问/Qwen 暂无接入渠道，MiniMax 当前不支持用户需要的 embedding/rerank 路径，因此不在本轮实装。如果把 embedding API 写死到 `src/knowledge/indexer.ts` 或复用 `src/model.ts`，会产生几个问题：
 
 - 文档向量和查询向量可能来自不同 provider/model/dimensions，导致检索结果不可解释。
 - 换 provider 后旧向量容易被误用。
@@ -19,9 +19,9 @@ embedding 不应复用 Agent 模型链路。用户计划优先使用 MiniMax emb
 **Goals:**
 
 - 新增统一 `EmbeddingProvider` 接口，支持 document embedding、query embedding、batch 和 provider metadata。
-- 第一轮创建 MiniMax provider 模块和配置入口；真实 MiniMax 网络 adapter 只有在官方 MiniMax embedding API 文档核对完成后才能实现。若官方文档不可得，MiniMax 只能作为 scaffold/fake-contract provider，并用明确 unsupported/docs-required 错误阻止真实调用。
-- 第一轮实现 Gemini embedding adapter 或至少完成同等 adapter contract 和 fake HTTP 测试；若真实 API 细节无法确认，必须在任务中标记需要核对官方文档后再编码。
-- 为千问/Qwen 预留 adapter 文件、provider id、配置形态和测试入口，但不要求真实可调用。
+- 第一轮实现 SiliconFlow embedding provider 和配置入口，支持后台配置 model/baseUrl/endpoint/apiKeyEnv/dimensions/distance/batch/timeout。
+- Gemini、千问/Qwen、MiniMax 不在本轮真实 provider 范围内；README 只说明如何按同一接口扩展。
+- SiliconFlow rerank API 提供显式 smoke 检测入口，用来验证配置和模型正确性；本 change 不把 reranker 接入 runtime 检索排序。
 - 将 Agent model provider 与 embedding provider 配置分离。
 - 为向量索引定义 metadata 和一致性检查，确保同一索引内文档向量与查询向量使用同一 provider/model/dimensions/distance。
 - 提供 CLI smoke test 和本地 fake provider 测试，避免普通测试产生付费网络调用。
@@ -43,9 +43,10 @@ Access date for this design audit: 2026-06-14.
 
 | Provider | Official documentation baseline | Implementation constraint |
 | --- | --- | --- |
+| SiliconFlow | SiliconFlow official embedding API `https://api-docs.siliconflow.cn/docs/api/embeddings-post` and rerank API `https://api-docs.siliconflow.cn/docs/api/rerank-post` were checked on 2026-06-14. Embeddings use `POST https://api.siliconflow.cn/v1/embeddings`, `Authorization: Bearer <token>`, request fields `model`, `input`, optional `encoding_format`, optional `dimensions` for Qwen/Qwen3 series, and response path `data[].embedding` with usage under `usage`. Rerank uses `POST https://api.siliconflow.cn/v1/rerank`. | Implement real SiliconFlow embedding adapter with fake fetch tests and one sanitized local smoke test. Add rerank smoke detection for model/config correctness. Keep model/dimensions configurable. Do not implement rerank retrieval sorting in this change; document the extension path. |
 | MiniMax | MiniMax official docs index `https://platform.minimaxi.com/docs/llms.txt`、API overview `https://platform.minimaxi.com/docs/api-reference/api-overview`、rate limits `https://platform.minimaxi.com/docs/guides/rate-limits`、error codes `https://platform.minimaxi.com/docs/api-reference/errorcode` were checked during spec hardening. The current docs index does not expose an embedding-specific API page or embedding OpenAPI spec. | Do not infer `embo-01`, `/embeddings`, dimensions, auth, response vector path, or batch limits from Spring AI, LangChain, old code, or memory. Unless the implementer finds current official MiniMax embedding docs or the user supplies them, MiniMax real network calls must remain unsupported/scaffolded and covered by fake/scaffold tests only. |
-| Gemini | Google Gemini official guide `https://ai.google.dev/gemini-api/docs/embeddings` and API reference `https://ai.google.dev/api/embeddings` document `models.embedContent`, `models.batchEmbedContents`, `x-goog-api-key`, `embedding.values` / `embeddings[]`, task types, output dimensionality, and model names such as `gemini-embedding-2` / `gemini-embedding-001`. | Gemini real adapter may be implemented after the implementer re-verifies the current docs and records endpoint, auth, request body, response vector path, dimensions behavior, task/document-query behavior, batch limits, and error handling. |
-| Qwen / Alibaba Cloud Model Studio | Alibaba Cloud Model Studio official embedding docs `https://www.alibabacloud.com/help/en/model-studio/embedding` document OpenAI-compatible embedding calls, `DASHSCOPE_API_KEY`, regional base URLs, `text-embedding-v4`, custom dimensions, and batch/spec limits. | Qwen remains out of scope for real calls in this change. These docs may inform a future Qwen change, but this change must keep Qwen as scaffold unless the user explicitly expands scope and OpenSpec is updated first. |
+| Gemini | Google Gemini docs are not re-verified for this implementation because the user explicitly excluded Gemini real integration from this round. | Do not implement Gemini real network calls. README may describe how to add a future adapter. |
+| Qwen / Alibaba Cloud Model Studio | Alibaba Cloud Model Studio docs are not re-verified for this implementation because the user explicitly excluded Qwen real integration from this round. SiliconFlow may serve Qwen-named models behind the SiliconFlow provider. | Do not implement direct Qwen/DashScope real network calls. README may describe how to add a future adapter. |
 
 Documentation freshness rule:
 
@@ -68,7 +69,8 @@ src/embedding/
   provider.ts
   minimax.ts
   gemini.ts
-  qwen.ts
+  siliconflow.ts
+  qwen.ts (optional unsupported scaffold)
   fake.ts
   metadata.ts
   index.ts
@@ -94,17 +96,17 @@ Decision:
 
 - 在 `SuperHelperConfig` 中新增 `embedding` 节点。
 - 默认 `enabled: false`，避免 `knowledge:init` 或测试无意调用远程 API。
-- MiniMax docs-gated setup template. This is not a ready-to-run default until official MiniMax embedding docs are verified:
+- SiliconFlow setup template:
 
 ```jsonc
 {
   "embedding": {
     "enabled": false,
-    "provider": "minimax",
-    "model": "<official-minimax-embedding-model>",
-    "baseUrl": "<official-minimax-embedding-base-url>",
-    "apiKeyEnv": "MINIMAX_API_KEY",
-    "dimensions": 0,
+    "provider": "siliconflow",
+    "model": "Qwen/Qwen3-Embedding-0.6B",
+    "baseUrl": "https://api.siliconflow.cn/v1",
+    "apiKeyEnv": "SILICONFLOW_API_KEY",
+    "dimensions": 1024,
     "distance": "cosine",
     "batchSize": 16,
     "timeoutMs": 60000
@@ -112,10 +114,7 @@ Decision:
 }
 ```
 
-Before `enabled` can become `true`, `model`, `baseUrl` or `endpoint`, and `dimensions` must be replaced with values confirmed from official MiniMax embedding docs.
-
-- Gemini 示例配置使用 provider `gemini`，模型名和 endpoint 必须通过配置提供，不在核心代码中作为不可变常量。
-- Qwen 示例配置使用 provider `qwen`，第一轮可以只保留 unsupported adapter scaffold。
+The command may override `model`, `baseUrl`, `endpoint`, `apiKeyEnv`, and `dimensions` for local smoke or vector build. Enabling embedding must remain explicit.
 
 Rationale:
 
@@ -178,7 +177,7 @@ Decision:
   document_id: string;
   chunk_id: string;
   text_hash: string;
-  provider: 'minimax' | 'gemini' | 'qwen' | 'fake';
+  provider: 'siliconflow' | 'minimax' | 'gemini' | 'qwen' | 'fake';
   model: string;
   dimensions: number;
   distance: 'cosine' | 'dot' | 'euclidean';
@@ -256,7 +255,8 @@ knowledge/indexes/vector-manifest.json
 
 ```bash
 super-helper knowledge vector build --workspace <path>
-super-helper embedding test --provider minimax
+super-helper embedding test --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --dimensions 1024
+super-helper rerank test --provider siliconflow --model BAAI/bge-reranker-v2-m3
 ```
 
 - 后续 hybrid retrieval change 再决定如何把 vector scores 融合到 evidence pack。
@@ -412,9 +412,8 @@ Phase 1: 配置和类型
 
 Phase 2: Provider adapters
 
-- 实现 MiniMax docs-gated provider module；只有官方 embedding docs 解锁后才实现真实网络 adapter，否则保持 scaffold/unsupported/docs-required。
-- 实现 Gemini adapter 或完成 adapter scaffold 并标记需要官方 API 确认的任务。
-- 新增 Qwen scaffold，返回明确 unsupported error，避免误以为已可用。
+- 实现 SiliconFlow provider module 和 fake fetch tests。
+- 旧 MiniMax/Gemini/Qwen provider 不作为本轮验收；如保留文件，必须保持 unsupported/docs-required 行为，避免误以为已可用。
 
 Phase 3: Vector metadata artifacts
 
@@ -441,7 +440,5 @@ Rollback strategy:
 
 ## Open Questions
 
-- MiniMax embedding 的默认模型名、维度和 endpoint 需要实现前按官方文档确认，不能只依赖历史记忆；截至 2026-06-14 的 spec hardening 审核未在 MiniMax 当前官方 docs index 中找到 embedding-specific API 页面，因此真实 MiniMax adapter 默认被 docs gate 阻塞。
-- Gemini embedding 的默认模型名、维度和 endpoint 需要实现前按官方文档确认。
 - restricted 文档是否允许发送到远程 embedding API，需要后续产品策略明确；第一版至少要支持跳过 restricted 文档。
-- Qwen adapter 是只保留 scaffold，还是在本 change 一并实现真实调用，取决于用户后续是否准备好 API key 和选型。
+- SiliconFlow rerank API 是否接入 hybrid/rerank runtime，需要后续 retrieval change 明确输入粒度、隐私策略、成本和 Evidence Judge score contract。

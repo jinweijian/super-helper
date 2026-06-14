@@ -79,7 +79,7 @@ export function routeKnowledgeQuestion(input: { workspaceRoot: string; question:
     sourceTypes.add('faq');
     sourceTypes.add('runbook');
   }
-  if (/规则|为什么|说明|介绍|是什么/.test(input.question)) {
+  if (/规则|为什么|说明|介绍|是什么|提醒/.test(input.question)) {
     sourceTypes.add('whitepaper');
     sourceTypes.add('module_doc');
   }

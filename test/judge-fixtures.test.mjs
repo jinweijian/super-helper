@@ -9,6 +9,7 @@ import {
   updateKnowledgeIndex,
   writeKnowledgeQualityReport,
   auditKnowledgeQuality,
+  routeKnowledgeQuestion,
 } from '../dist/knowledge/index.js';
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 
@@ -242,6 +243,71 @@ test('11.3 direct whitepaper success yields high score and no blockers', () => {
   } finally {
     cleanup(workspace);
   }
+});
+
+test('11.3a reminder how-to routing keeps whitepaper candidates available', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const route = routeKnowledgeQuestion({
+      workspaceRoot: workspace,
+      question: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
+    });
+    assert.equal(route.sourceTypes.includes('whitepaper'), true);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('11.3b answer-bearing whitepaper with warning quality can still direct answer', () => {
+  const evidence = {
+    evidence_id: 'ev_kb_warn_whitepaper',
+    document_id: 'doc_warn_whitepaper',
+    parent_id: 'doc_warn_whitepaper',
+    chunk_id: 'chk_warn_whitepaper',
+    source: 'knowledge/whitepapers/ai-companion/rule.md',
+    source_document: 'knowledge/_sources/whitepapers/ai.docx',
+    source_document_id: 'src_ai',
+    source_pages: [],
+    title: '学习日晚上8点',
+    type: 'whitepaper_slice',
+    module: 'ai-companion',
+    intent: 'product_rule',
+    source_type: 'whitepaper',
+    confidence: 'medium',
+    status: 'active',
+    visibility: 'internal',
+    last_verified_at: '2026-06-13',
+    matched_terms: ['学习日晚上', '学习', '晚上', '提醒', '伴学助手', 'ai'],
+    summary: '学习日晚上8点 命中：提醒',
+    excerpt: '学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。',
+    score: 266,
+    quality: { severity: 'warn', issues: ['duplicate_content', 'multi_topic_slice'] },
+  };
+  const route = {
+    normalizedQuestion: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
+    moduleCandidates: ['ai-companion'],
+    intentCandidates: ['product_rule'],
+    keywords: ['AI伴学助手', '学习日', '晚上8点', '提醒'],
+    sourceTypes: ['whitepaper'],
+    codeEscalationSignals: [],
+    risks: [],
+  };
+  const judge = judgeKnowledgeEvidence({
+    route,
+    question: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
+    evidencePack: {
+      query: {
+        normalized_question: route.normalizedQuestion,
+        module_candidates: route.moduleCandidates,
+        intent_candidates: route.intentCandidates,
+        keywords: route.keywords,
+      },
+      results: [evidence],
+      coverage: { searched_files: 1, matched_files: 1, filtered_out: [] },
+    },
+  });
+  assert.equal(judge.answerable, true, `expected answerable, score=${judge.answer_score}, blockers=${judge.blockers.join(',')}`);
 });
 
 test('11.4 generic keyword false positive is blocked', () => {

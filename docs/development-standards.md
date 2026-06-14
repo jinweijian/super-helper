@@ -37,7 +37,8 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 | `src/gateway/` | HTTP server, routes, DTOs, request parsing, response serialization | Preflight, worker dispatch policy, evidence review, final reply formatting |
 | `src/agents/` | Product Agent configuration documents and `registry.json` stage pairings | Runtime orchestration, HTTP routing, worker execution, persistence |
 | `src/runtime/` | Agent turn orchestration, Preflight Gate, request building, review decisions, presentation, lifecycle event recording | HTTP APIs, route DTOs, raw file persistence details, Claude CLI implementation |
-| `src/knowledge/` | Enterprise knowledge workspace schema, templates, Markdown/frontmatter parsing, source metadata, keyword chunk index, local knowledge search | Runtime orchestration, user-facing final replies, Claude Code execution, HTTP route decisions, vector/RAG infrastructure |
+| `src/embedding/` | Embedding/rerank provider contracts, provider factories, remote provider adapters, provider smoke tests, safe provider error normalization | Knowledge workspace indexing decisions, runtime orchestration, HTTP DTO parsing, final replies |
+| `src/knowledge/` | Enterprise knowledge workspace schema, templates, Markdown/frontmatter parsing, source metadata, keyword chunk index, local knowledge search, local vector artifact build/read/compatibility checks | Runtime orchestration, user-facing final replies, Claude Code execution, HTTP route decisions, remote provider API calls, retrieval ranking/rerank decisions |
 | `src/sessions/` | Case repository ports, file-backed repository export, diagnostic context building | Worker execution, model calls, user-facing final replies |
 | `src/workers/` | Diagnostic worker port and worker adapters | Case orchestration, user chat responses, route handling |
 | `src/workers/claude/` | Claude prompts, CLI policy, CLI execution, output parsing, Claude adapter | Runtime decisions, user-facing review, HTTP behavior |
@@ -130,6 +131,10 @@ Public response compatibility must be protected by tests for:
 - `/api/sessions`
 - `/api/settings`
 - `/api/settings/model/test`
+- `/api/settings/embedding`
+- `/api/settings/embedding/test`
+- `/api/settings/rerank`
+- `/api/settings/rerank/test`
 - `/api/logs`
 
 ## Session and Persistence Contract
@@ -178,7 +183,9 @@ Rules:
 - Original PDFs and source files belong under `knowledge/_sources/`; they are provenance, not direct answer context.
 - Structured Markdown parent slices under `knowledge/faq/`, `knowledge/runbooks/`, `knowledge/whitepapers/`, `knowledge/modules/`, `knowledge/glossary/`, and `knowledge/tickets/` are the canonical editable knowledge.
 - `knowledge/indexes/chunks.jsonl`, `keyword-index.json`, and `manifest.json` are derived artifacts and must be rebuildable from parent slices.
-- MVP knowledge search is local Markdown/frontmatter/keyword search only. Do not add vector databases, GraphRAG, Obsidian runtime dependency, or model-based RAG inside this module.
+- Optional vector artifacts live under `knowledge/indexes/vectors.jsonl`, `vector-manifest.json`, and `vector-build-report.json`. They are derived and must be rebuildable from `chunks.jsonl` plus embedding configuration.
+- `src/knowledge/` may build/read vector artifacts and report compatibility, but remote embedding/rerank calls must go through `src/embedding/`.
+- MVP runtime knowledge search is local Markdown/frontmatter/keyword search only. Do not add vector databases, GraphRAG, Obsidian runtime dependency, runtime vector retrieval, runtime rerank sorting, or model-based final-answer generation inside this module.
 - The knowledge module returns structured evidence packs. It must not produce user-facing final replies.
 - Runtime integration must preserve the existing Evidence Review contract before any knowledge evidence reaches the user.
 
@@ -252,6 +259,8 @@ Required coverage by change type:
 - Gateway changes: route compatibility tests and response shape tests.
 - Runtime changes: preflight, request building, review, presentation, sync/async pipeline tests.
 - Agent config changes: registry resolution, `/api/agents`, and docs lint tests.
+- Embedding changes: provider factory tests, fake-fetch provider tests, safe error/redaction tests, smoke helper tests, and no-network default test paths.
+- Knowledge vector changes: fixture vector build tests, restricted-slice skip tests, manifest/report tests, and compatibility mismatch tests.
 - Worker changes: prompt separation, read-only policy, CLI failure conversion, output parsing tests.
 - Session changes: repository behavior and context builder tests.
 - Observability changes: log block and drawer behavior tests.

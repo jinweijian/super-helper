@@ -1,7 +1,8 @@
 import type { ModelProviderConfig, SuperHelperConfig } from '../config.js';
-import { inferModelContextWindowTokens, resolveContextWindowTokens } from '../config.js';
+import { defaultConfig, inferModelContextWindowTokens, resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
+import type { EmbeddingProviderConfig, RerankProviderConfig } from '../embedding/index.js';
 import { buildKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/index.js';
 import type { StoredCase } from '../storage.js';
 
@@ -17,6 +18,32 @@ export interface ModelSettingsInput {
   maxTokens?: number;
   contextWindowTokens?: number;
   useModelForPreflight?: boolean;
+}
+
+export interface EmbeddingSettingsInput {
+  enabled?: boolean;
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  endpoint?: string;
+  apiKey?: string;
+  apiKeyEnv?: string;
+  dimensions?: number;
+  distance?: string;
+  batchSize?: number;
+  timeoutMs?: number;
+}
+
+export interface RerankSettingsInput {
+  enabled?: boolean;
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  endpoint?: string;
+  apiKey?: string;
+  apiKeyEnv?: string;
+  timeoutMs?: number;
+  topN?: number;
 }
 
 export interface ClaudeSettingsInput {
@@ -57,6 +84,9 @@ export interface AgentActivityItem {
 }
 
 export function publicSettings(config: SuperHelperConfig): unknown {
+  const defaults = defaultConfig();
+  const embedding = { ...defaults.embedding, ...config.embedding };
+  const rerank = { ...defaults.rerank, ...config.rerank };
   return {
     agent: config.agent,
     models: {
@@ -77,6 +107,8 @@ export function publicSettings(config: SuperHelperConfig): unknown {
         ]),
       ),
     },
+    embedding: publicEmbeddingSettings(embedding),
+    rerank: publicRerankSettings(rerank),
     claude: {
       enabled: config.claude.enabled,
       command: config.claude.command,
@@ -90,6 +122,74 @@ export function publicSettings(config: SuperHelperConfig): unknown {
       sessionBusyMaxRetries: config.claude.sessionBusyMaxRetries,
       sessionBusyRetryDelayMs: config.claude.sessionBusyRetryDelayMs,
     },
+  };
+}
+
+export function embeddingProviderFromInput(
+  input: EmbeddingSettingsInput,
+  existing: EmbeddingProviderConfig,
+): EmbeddingProviderConfig {
+  return {
+    ...existing,
+    enabled: input.enabled ?? existing.enabled,
+    provider: input.provider?.trim() || existing.provider,
+    model: input.model?.trim() || existing.model,
+    baseUrl: input.baseUrl?.trim() || existing.baseUrl,
+    endpoint: input.endpoint?.trim() || existing.endpoint,
+    apiKeyEnv: input.apiKeyEnv?.trim() || existing.apiKeyEnv,
+    apiKey: input.apiKey?.trim() || existing.apiKey,
+    dimensions: positiveInteger(input.dimensions) ?? existing.dimensions,
+    distance: input.distance?.trim() || existing.distance,
+    batchSize: positiveInteger(input.batchSize) ?? existing.batchSize,
+    timeoutMs: positiveInteger(input.timeoutMs) ?? existing.timeoutMs,
+  };
+}
+
+export function rerankProviderFromInput(
+  input: RerankSettingsInput,
+  existing: RerankProviderConfig,
+): RerankProviderConfig {
+  return {
+    ...existing,
+    enabled: input.enabled ?? existing.enabled,
+    provider: input.provider?.trim() || existing.provider,
+    model: input.model?.trim() || existing.model,
+    baseUrl: input.baseUrl?.trim() || existing.baseUrl,
+    endpoint: input.endpoint?.trim() || existing.endpoint,
+    apiKeyEnv: input.apiKeyEnv?.trim() || existing.apiKeyEnv,
+    apiKey: input.apiKey?.trim() || existing.apiKey,
+    timeoutMs: positiveInteger(input.timeoutMs) ?? existing.timeoutMs,
+    topN: positiveInteger(input.topN) ?? existing.topN,
+  };
+}
+
+function publicEmbeddingSettings(config: EmbeddingProviderConfig): Record<string, unknown> {
+  return {
+    enabled: config.enabled,
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.baseUrl,
+    endpoint: config.endpoint,
+    apiKeyEnv: config.apiKeyEnv,
+    hasApiKey: Boolean(config.apiKey || (config.apiKeyEnv && process.env[config.apiKeyEnv])),
+    dimensions: config.dimensions,
+    distance: config.distance,
+    batchSize: config.batchSize,
+    timeoutMs: config.timeoutMs,
+  };
+}
+
+function publicRerankSettings(config: RerankProviderConfig): Record<string, unknown> {
+  return {
+    enabled: config.enabled,
+    provider: config.provider,
+    model: config.model,
+    baseUrl: config.baseUrl,
+    endpoint: config.endpoint,
+    apiKeyEnv: config.apiKeyEnv,
+    hasApiKey: Boolean(config.apiKey || (config.apiKeyEnv && process.env[config.apiKeyEnv])),
+    timeoutMs: config.timeoutMs,
+    topN: config.topN,
   };
 }
 

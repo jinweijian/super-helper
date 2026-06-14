@@ -1,4 +1,4 @@
-export type EmbeddingProviderId = 'minimax' | 'gemini' | 'qwen' | 'fake';
+export type EmbeddingProviderId = 'siliconflow' | 'minimax' | 'gemini' | 'qwen' | 'fake';
 
 export type EmbeddingDistanceMetric = 'cosine' | 'dot' | 'euclidean';
 
@@ -14,6 +14,19 @@ export interface EmbeddingProviderConfig {
   distance: EmbeddingDistanceMetric | string;
   batchSize?: number;
   timeoutMs?: number;
+  extra?: Record<string, unknown>;
+}
+
+export interface RerankProviderConfig {
+  enabled: boolean;
+  provider: 'siliconflow' | string;
+  model: string;
+  baseUrl?: string;
+  endpoint?: string;
+  apiKey?: string;
+  apiKeyEnv?: string;
+  timeoutMs?: number;
+  topN?: number;
   extra?: Record<string, unknown>;
 }
 
@@ -75,6 +88,20 @@ export interface EmbeddingProviderHealthCheckResult {
   dimensions: number;
   ok: boolean;
   durationMs: number;
+  error?: {
+    code: string;
+    status?: number;
+    retryable: boolean;
+    safeMessage: string;
+  };
+}
+
+export interface RerankProviderHealthCheckResult {
+  provider: string;
+  model: string;
+  ok: boolean;
+  durationMs: number;
+  topScore?: number;
   error?: {
     code: string;
     status?: number;

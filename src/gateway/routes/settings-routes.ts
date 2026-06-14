@@ -1,9 +1,19 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
-import { saveConfig } from '../../config.js';
+import { defaultConfig, saveConfig } from '../../config.js';
+import { runEmbeddingSmokeTest, runRerankSmokeTest } from '../../embedding/index.js';
 import { createModelClient } from '../../model.js';
 import { listPublicAgentConfigs } from '../../runtime/agent-configs.js';
-import { type ClaudeSettingsInput, type ModelSettingsInput, modelProviderFromInput, publicSettings } from '../dto.js';
+import {
+  embeddingProviderFromInput,
+  type ClaudeSettingsInput,
+  type EmbeddingSettingsInput,
+  type ModelSettingsInput,
+  type RerankSettingsInput,
+  modelProviderFromInput,
+  publicSettings,
+  rerankProviderFromInput,
+} from '../dto.js';
 import { readJson, sendJson } from '../http-utils.js';
 
 export async function handleSettingsRoutes(
@@ -89,6 +99,38 @@ export async function handleSettingsRoutes(
     return true;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/settings/embedding') {
+    const body = (await readJson(req)) as EmbeddingSettingsInput;
+    config.embedding = embeddingProviderFromInput(body, embeddingConfig(config));
+    saveConfig(config);
+    sendJson(res, 200, publicSettings(config));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/settings/embedding/test') {
+    const body = (await readJson(req)) as EmbeddingSettingsInput;
+    const embedding = embeddingProviderFromInput(body, embeddingConfig(config));
+    const result = await runEmbeddingSmokeTest({ config: embedding, force: body.enabled === true });
+    sendJson(res, 200, result);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/settings/rerank') {
+    const body = (await readJson(req)) as RerankSettingsInput;
+    config.rerank = rerankProviderFromInput(body, rerankConfig(config));
+    saveConfig(config);
+    sendJson(res, 200, publicSettings(config));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/settings/rerank/test') {
+    const body = (await readJson(req)) as RerankSettingsInput;
+    const rerank = rerankProviderFromInput(body, rerankConfig(config));
+    const result = await runRerankSmokeTest({ config: rerank, force: body.enabled === true });
+    sendJson(res, 200, result);
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/settings/claude') {
     const body = (await readJson(req)) as ClaudeSettingsInput;
     if (body.timeoutMs !== undefined) {
@@ -114,6 +156,14 @@ export async function handleSettingsRoutes(
   }
 
   return false;
+}
+
+function embeddingConfig(config: SuperHelperConfig): SuperHelperConfig['embedding'] {
+  return { ...defaultConfig().embedding, ...config.embedding };
+}
+
+function rerankConfig(config: SuperHelperConfig): SuperHelperConfig['rerank'] {
+  return { ...defaultConfig().rerank, ...config.rerank };
 }
 
 function optionalPositiveNumber(value: number | string | null | undefined): number | undefined {

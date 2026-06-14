@@ -336,7 +336,8 @@ function computeBreakdown(
   const agreement = state.conflicts.length > 0 ? 0.2 : results.length > 1 ? 0.9 : 0.75;
   const actionability = /faq|runbook|solved_case/.test(top.source_type) ? 0.9 : 0.65;
   const conflict_penalty = state.conflicts.length > 0 ? 0.25 : 0;
-  const ambiguity_penalty = matchedTermCount < 2 || genericHits > 0 ? 0.15 : 0;
+  const nonGenericHits = matchedTermCount - genericHits;
+  const ambiguity_penalty = matchedTermCount < 2 || nonGenericHits <= 1 || genericHits >= nonGenericHits ? 0.15 : 0;
   const risk_penalty = state.risks.length > 0 ? 0.2 : 0;
   const quality_penalty = top.quality?.severity === 'error' ? 0.3 : top.quality?.severity === 'warn' ? 0.1 : 0;
 

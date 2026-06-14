@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { UserPersona } from './domain.js';
-import type { EmbeddingProviderConfig } from './embedding/types.js';
+import type { EmbeddingProviderConfig, RerankProviderConfig } from './embedding/types.js';
 
 export interface ModelProviderConfig {
   type: 'openai-compatible';
@@ -44,6 +44,7 @@ export interface SuperHelperConfig {
     providers: Record<string, ModelProviderConfig>;
   };
   embedding: EmbeddingProviderConfig;
+  rerank: RerankProviderConfig;
   claude: {
     enabled: boolean;
     command: string;
@@ -105,13 +106,23 @@ export function defaultConfig(): SuperHelperConfig {
     },
     embedding: {
       enabled: false,
-      provider: 'minimax',
-      model: '',
-      apiKeyEnv: 'MINIMAX_API_KEY',
-      dimensions: 0,
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      baseUrl: 'https://api.siliconflow.cn/v1',
+      apiKeyEnv: 'SILICONFLOW_API_KEY',
+      dimensions: 1024,
       distance: 'cosine',
       batchSize: 16,
       timeoutMs: 60_000,
+    },
+    rerank: {
+      enabled: false,
+      provider: 'siliconflow',
+      model: 'BAAI/bge-reranker-v2-m3',
+      baseUrl: 'https://api.siliconflow.cn/v1',
+      apiKeyEnv: 'SILICONFLOW_API_KEY',
+      timeoutMs: 60_000,
+      topN: 2,
     },
     claude: {
       enabled: true,
@@ -178,6 +189,7 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
     agent: { ...defaults.agent, ...parsed.agent },
     models: { ...defaults.models, ...parsed.models },
     embedding: { ...defaults.embedding, ...parsed.embedding },
+    rerank: { ...defaults.rerank, ...parsed.rerank },
     claude: { ...defaults.claude, ...parsed.claude },
     workspaces: parsed.workspaces?.length ? parsed.workspaces : defaults.workspaces,
     mcpTools: parsed.mcpTools ?? defaults.mcpTools,

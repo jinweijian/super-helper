@@ -4,10 +4,19 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { configPath, defaultConfig, ensureConfig, saveConfig, type SuperHelperConfig } from './config.js';
+import {
+  createEmbeddingProvider,
+  formatEmbeddingSafeError,
+  runEmbeddingSmokeTest,
+  runRerankSmokeTest,
+  type EmbeddingProviderConfig,
+  type RerankProviderConfig,
+} from './embedding/index.js';
 import { startServer } from './server.js';
 import {
   applyKnowledgeRepairPlan,
   auditKnowledgeQuality,
+  buildKnowledgeVectorIndex,
   buildDraftSlices,
   defaultSourceDirectory,
   evaluateQualityGate,
@@ -54,6 +63,16 @@ async function main(): Promise<void> {
 
   if (command === 'knowledge') {
     await handleKnowledgeCommand();
+    return;
+  }
+
+  if (command === 'embedding') {
+    await handleEmbeddingCommand();
+    return;
+  }
+
+  if (command === 'rerank') {
+    await handleRerankCommand();
     return;
   }
 
@@ -179,6 +198,36 @@ async function handleKnowledgeCommand(): Promise<void> {
   const context = resolveKnowledgeCommandContext();
   const projectWorkspaceRoot = context.projectWorkspaceRoot;
   const workspaceRoot = context.knowledgeWorkspaceRoot;
+
+  if (subcommand === 'vector' && process.argv[4] === 'build') {
+    const embedding = embeddingConfigFromFlags(context.config.embedding);
+    if (!embedding.enabled) {
+      console.log('embedding disabled');
+      console.log(`provider: ${embedding.provider}`);
+      console.log(`model: ${embedding.model}`);
+      process.exit(1);
+    }
+    try {
+      const provider = createEmbeddingProvider(embedding);
+      const result = await buildKnowledgeVectorIndex({ workspaceRoot, provider, config: embedding });
+      console.log('knowledge vector index built');
+      console.log(`workspace: ${projectWorkspaceRoot}`);
+      console.log(`knowledge workspace: ${workspaceRoot}`);
+      console.log(`provider: ${result.provider}`);
+      console.log(`model: ${result.model}`);
+      console.log(`dimensions: ${result.dimensions}`);
+      console.log(`distance: ${result.distance}`);
+      console.log(`vectors: ${result.vectorCount}`);
+      console.log(`skipped: ${result.skipped.length}`);
+      console.log(`failed: ${result.failures.length}`);
+      console.log(`vectors path: ${result.vectorsPath}`);
+      console.log(`manifest: ${result.manifestPath}`);
+      return;
+    } catch (error) {
+      console.error(formatEmbeddingSafeError(error));
+      process.exit(1);
+    }
+  }
 
   if (subcommand === 'init') {
     const sourceDir = readArg('--source-dir') ?? readArg('--source') ?? defaultSourceDirectory();
@@ -385,8 +434,68 @@ async function handleKnowledgeCommand(): Promise<void> {
     return;
   }
 
-  console.error('Usage: super-helper knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval> [--workspace <path>] [--knowledge-root <path>]');
+  console.error('Usage: super-helper knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|vector build> [--workspace <path>] [--knowledge-root <path>]');
   process.exit(1);
+}
+
+async function handleEmbeddingCommand(): Promise<void> {
+  const subcommand = process.argv[3];
+  if (subcommand !== 'test') {
+    console.error('Usage: super-helper embedding test [--enable] [--provider siliconflow|fake] [--model <model>] [--dimensions <n>] [--api-key-env <env>] [--base-url <url>]');
+    process.exit(1);
+  }
+
+  const config = ensureConfig(readArg('--home'));
+  const embedding = embeddingConfigFromFlags(config.embedding);
+  const result = await runEmbeddingSmokeTest({ config: embedding, force: process.argv.includes('--enable') });
+  if (!result.ok && result.error?.code === 'disabled') {
+    console.log('embedding disabled');
+    console.log(`provider: ${result.provider}`);
+    console.log(`model: ${result.model}`);
+    return;
+  }
+  console.log(result.ok ? 'embedding model ok' : 'embedding model failed');
+  console.log(`provider: ${result.provider}`);
+  console.log(`model: ${result.model}`);
+  console.log(`dimensions: ${result.dimensions}`);
+  console.log(`durationMs: ${result.durationMs}`);
+  if (result.error) {
+    console.log(`error: ${result.error.code} ${result.error.safeMessage}`);
+  }
+  if (!result.ok) {
+    process.exit(1);
+  }
+}
+
+async function handleRerankCommand(): Promise<void> {
+  const subcommand = process.argv[3];
+  if (subcommand !== 'test') {
+    console.error('Usage: super-helper rerank test [--enable] [--provider siliconflow] [--model <model>] [--api-key-env <env>] [--base-url <url>]');
+    process.exit(1);
+  }
+
+  const config = ensureConfig(readArg('--home'));
+  const rerank = rerankConfigFromFlags(config.rerank);
+  const result = await runRerankSmokeTest({ config: rerank, force: process.argv.includes('--enable') });
+  if (!result.ok && result.error?.code === 'disabled') {
+    console.log('rerank disabled');
+    console.log(`provider: ${result.provider}`);
+    console.log(`model: ${result.model}`);
+    return;
+  }
+  console.log(result.ok ? 'rerank model ok' : 'rerank model failed');
+  console.log(`provider: ${result.provider}`);
+  console.log(`model: ${result.model}`);
+  console.log(`durationMs: ${result.durationMs}`);
+  if (result.topScore !== undefined) {
+    console.log(`top score: ${result.topScore}`);
+  }
+  if (result.error) {
+    console.log(`error: ${result.error.code} ${result.error.safeMessage}`);
+  }
+  if (!result.ok) {
+    process.exit(1);
+  }
 }
 
 function resolveKnowledgeCommandContext(): {
@@ -444,6 +553,44 @@ function readQualityGateArg(defaultGate: 'warn' | 'strict' | 'off'): 'warn' | 's
     process.exit(1);
   }
   return value;
+}
+
+function embeddingConfigFromFlags(existing: EmbeddingProviderConfig): EmbeddingProviderConfig {
+  return {
+    ...existing,
+    enabled: process.argv.includes('--enable') || existing.enabled,
+    provider: readArg('--provider') ?? existing.provider,
+    model: readArg('--model') ?? existing.model,
+    baseUrl: readArg('--base-url') ?? existing.baseUrl,
+    endpoint: readArg('--endpoint') ?? existing.endpoint,
+    apiKeyEnv: readArg('--api-key-env') ?? existing.apiKeyEnv,
+    dimensions: optionalPositiveInteger(readArg('--dimensions')) ?? existing.dimensions,
+    distance: readArg('--distance') ?? existing.distance,
+    batchSize: optionalPositiveInteger(readArg('--batch-size')) ?? existing.batchSize,
+    timeoutMs: optionalPositiveInteger(readArg('--timeout-ms')) ?? existing.timeoutMs,
+  };
+}
+
+function rerankConfigFromFlags(existing: RerankProviderConfig): RerankProviderConfig {
+  return {
+    ...existing,
+    enabled: process.argv.includes('--enable') || existing.enabled,
+    provider: readArg('--provider') ?? existing.provider,
+    model: readArg('--model') ?? existing.model,
+    baseUrl: readArg('--base-url') ?? existing.baseUrl,
+    endpoint: readArg('--endpoint') ?? existing.endpoint,
+    apiKeyEnv: readArg('--api-key-env') ?? existing.apiKeyEnv,
+    timeoutMs: optionalPositiveInteger(readArg('--timeout-ms')) ?? existing.timeoutMs,
+    topN: optionalPositiveInteger(readArg('--top-n')) ?? existing.topN,
+  };
+}
+
+function optionalPositiveInteger(value?: string): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
 }
 
 function printQualitySummary(result: {
@@ -540,7 +687,7 @@ function readJsonArg(name: string): unknown {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [init|doctor|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval>|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [init|doctor|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|vector build>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 
 main().catch((error) => {
