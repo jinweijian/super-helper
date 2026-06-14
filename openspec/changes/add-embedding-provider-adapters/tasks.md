@@ -7,10 +7,22 @@
 - [ ] 1.5 Confirm `src/config.ts` owns embedding config defaults and loading/merging, not runtime orchestration.
 - [ ] 1.6 Confirm `src/cli.ts` only parses CLI arguments and delegates to `src/embedding/` or `src/knowledge/` helpers.
 - [ ] 1.7 Confirm `src/runtime/`, `src/gateway/`, and `src/agents/` are not modified unless a task explicitly requires compatibility fields or docs; embedding must not become a product Agent.
-- [ ] 1.8 Verify current official MiniMax embedding API docs before implementing `src/embedding/minimax.ts`; if docs differ from this design, update OpenSpec design/tasks before coding.
+- [ ] 1.8 Verify current official MiniMax embedding API docs before implementing any real network request/response logic in `src/embedding/minimax.ts`; if the current official MiniMax docs still do not expose an embedding-specific API page or OpenAPI spec, keep MiniMax real calls scaffolded/unsupported and update implementation notes instead of guessing.
 - [ ] 1.9 Verify current official Gemini embedding API docs before implementing `src/embedding/gemini.ts`; if docs differ from this design, update OpenSpec design/tasks before coding.
 - [ ] 1.10 Do not implement real Qwen network calls in this change unless the user explicitly expands scope; scaffold must fail clearly as unsupported.
 - [ ] 1.11 Capture `openspec instructions apply --change add-embedding-provider-adapters --json` output in implementation notes before starting code changes.
+- [ ] 1.12 Create or update `openspec/changes/add-embedding-provider-adapters/implementation-notes.md` before coding; this file must collect provider docs verification, red/green test evidence, smoke output, vector fixture output, verification commands, and deferred items.
+- [ ] 1.13 If Superpowers skills are available, load and use `test-driven-development` before writing provider/vector/CLI behavior; if unavailable, explicitly follow the same red -> fail -> implement -> pass loop and record evidence.
+- [ ] 1.14 If Superpowers skills are available, load and use `systematic-debugging` before changing code for provider failures, dimension mismatches, malformed responses, timeout/rate-limit behavior, vector compatibility mismatches, or flaky tests; if unavailable, record root-cause analysis before fixing.
+- [ ] 1.15 If Superpowers skills are available, load and use `verification-before-completion` before marking any section complete; if unavailable, run fresh verification and record output before claiming completion.
+- [ ] 1.16 Do not mark any task complete just because a file, interface, class, or command exists; completion requires tests for behavior, error path, metadata, and security/privacy where applicable.
+- [ ] 1.17 For MiniMax docs verification, record official docs URL, access date, endpoint, auth header/query shape, request body fields, response vector path, dimensions behavior, batch limit, and retry guidance in implementation notes.
+- [ ] 1.18 For Gemini docs verification, record official docs URL, access date, endpoint, auth shape, model naming, request body fields, response vector path, task type/output dimension behavior, batch limit, and retry guidance in implementation notes.
+- [ ] 1.19 If official provider docs cannot be accessed, stop provider-specific network implementation and update OpenSpec; only scaffold/fake contract code may proceed for that provider.
+- [ ] 1.20 Before coding each major section, list the focused tests that should fail first; after coding, record the matching passing test command in implementation notes.
+- [ ] 1.21 Record the provider documentation baseline from `design.md` in implementation notes before coding: MiniMax official docs index/API overview/rate-limit/error-code pages, Gemini official embeddings guide/API reference, and Alibaba Cloud Model Studio embedding docs for future Qwen scope.
+- [ ] 1.22 Treat third-party SDK docs, examples, community posts, prior code, or model memory as non-authoritative for provider request/response shape. Completion evidence must say whether each provider was unlocked by official docs or intentionally kept as scaffold.
+- [ ] 1.23 If MiniMax real network code remains blocked by missing official embedding docs, add tests proving `minimax` selection fails safely with docs-required/unsupported behavior and does not call network, while shared fake provider/vector builder tests still pass.
 
 ## 2. Embedding Module Skeleton
 
@@ -19,7 +31,7 @@
 - [ ] 2.3 Add `src/embedding/errors.ts` for normalized provider errors and safe error helpers.
 - [ ] 2.4 Add `src/embedding/provider.ts` for provider factory and provider registry.
 - [ ] 2.5 Add `src/embedding/fake.ts` for deterministic fake provider used by tests.
-- [ ] 2.6 Add `src/embedding/minimax.ts` for MiniMax adapter.
+- [ ] 2.6 Add `src/embedding/minimax.ts` for the MiniMax docs-gated provider module.
 - [ ] 2.7 Add `src/embedding/gemini.ts` for Gemini adapter.
 - [ ] 2.8 Add `src/embedding/qwen.ts` for Qwen scaffold that throws unsupported-provider until implemented.
 - [ ] 2.9 Add `src/embedding/metadata.ts` for vector metadata compatibility helpers shared with knowledge vector builder.
@@ -46,7 +58,7 @@
 
 - [ ] 4.1 Implement `EmbeddingProviderError` in `src/embedding/errors.ts` extending `Error`.
 - [ ] 4.2 `EmbeddingProviderError` must include `provider`, `code`, `retryable`, `status?`, `safeMessage`, and `cause?`.
-- [ ] 4.3 Define error codes including `missing_credentials`, `unsupported_provider`, `timeout`, `rate_limited`, `invalid_request`, `provider_error`, `malformed_response`, `dimension_mismatch`, and `network_error`.
+- [ ] 4.3 Define error codes including `missing_credentials`, `unsupported_provider`, `docs_required`, `timeout`, `rate_limited`, `invalid_request`, `provider_error`, `malformed_response`, `dimension_mismatch`, and `network_error`.
 - [ ] 4.4 Add `isEmbeddingProviderError(error)` type guard.
 - [ ] 4.5 Add `redactEmbeddingErrorMessage(value)` helper that removes API keys, bearer tokens, cookies, and long credential-like strings.
 - [ ] 4.6 Add `formatEmbeddingSafeError(error)` helper for CLI output; it must never include request headers, API key values, cookies, or raw payloads.
@@ -102,27 +114,30 @@
 
 ## 8. MiniMax Provider Adapter
 
-- [ ] 8.1 Implement `MiniMaxEmbeddingProvider` in `src/embedding/minimax.ts`.
-- [ ] 8.2 Before coding request/response shape, check current MiniMax official embedding API docs and update this OpenSpec if endpoint, model, auth, or response format differs from assumptions.
+- [ ] 8.1 Create `MiniMaxEmbeddingProvider` in `src/embedding/minimax.ts` as a docs-gated provider module.
+- [ ] 8.2 Before coding request/response shape, check current MiniMax official embedding API docs and update this OpenSpec if endpoint, model, auth, dimensions, batch limit, or response format differs from assumptions.
+- [ ] 8.2a If current official MiniMax docs do not document embedding endpoint/auth/request/response/dimensions/batch limits, do not implement real HTTP calls; implement a safe scaffold that throws `EmbeddingProviderError` code `unsupported_provider` or `docs_required` with a safe message.
+- [ ] 8.2b If the user supplies current official MiniMax embedding docs, record the supplied docs URL and access date in implementation notes before switching 8.2a from scaffold to real adapter work.
 - [ ] 8.3 Constructor must accept `EmbeddingProviderConfig` and optional injected `fetch`.
 - [ ] 8.4 Provider id must be `minimax`.
 - [ ] 8.5 Adapter must resolve credentials from `apiKey` or `apiKeyEnv` at request time.
 - [ ] 8.6 Adapter must throw `missing_credentials` when credentials are absent.
-- [ ] 8.7 Adapter must build request URL from configured `baseUrl` or `endpoint`; do not hard-code a single endpoint if docs/config require flexibility.
-- [ ] 8.8 Adapter must set authorization headers according to current official docs and must never log them.
-- [ ] 8.9 Adapter must support document batch requests up to configured `batchSize`.
-- [ ] 8.10 Adapter must split larger document input arrays into provider-sized batches.
-- [ ] 8.11 Adapter must support `embedQuery` using the query/document distinction required by docs; if MiniMax has no distinction, document that both use the same endpoint with different local method names.
-- [ ] 8.12 Adapter must use `AbortController` and respect configured `timeoutMs`.
-- [ ] 8.13 Adapter must normalize non-2xx responses into `EmbeddingProviderError` with status and retryable flag.
-- [ ] 8.14 Adapter must classify 429 and 5xx as retryable unless provider docs specify otherwise.
-- [ ] 8.15 Adapter must parse successful responses into `EmbeddingVectorResult[]`.
-- [ ] 8.16 Adapter must verify every returned vector length equals configured `dimensions`.
-- [ ] 8.17 Adapter must throw `dimension_mismatch` when provider vector length differs from config.
-- [ ] 8.18 Adapter must preserve input id to output id mapping.
-- [ ] 8.19 Adapter must aggregate usage metadata when provider returns token or request usage.
-- [ ] 8.20 Adapter must reject malformed responses with `malformed_response`.
-- [ ] 8.21 Add fake HTTP tests for successful document batch, successful query, missing credentials, timeout, 429, 500, malformed JSON, missing vector, and dimension mismatch.
+- [ ] 8.7 If real MiniMax docs are verified, adapter must build request URL from configured `baseUrl` or `endpoint`; do not hard-code a single endpoint if docs/config require flexibility.
+- [ ] 8.8 If real MiniMax docs are verified, adapter must set authorization headers according to current official docs and must never log them.
+- [ ] 8.9 If real MiniMax docs are verified, adapter must support document batch requests up to configured `batchSize`.
+- [ ] 8.10 If real MiniMax docs are verified, adapter must split larger document input arrays into provider-sized batches.
+- [ ] 8.11 If real MiniMax docs are verified, adapter must support `embedQuery` using the query/document distinction required by docs; if MiniMax has no distinction, document that both use the same endpoint with different local method names.
+- [ ] 8.12 If real MiniMax docs are verified, adapter must use `AbortController` and respect configured `timeoutMs`.
+- [ ] 8.13 If real MiniMax docs are verified, adapter must normalize non-2xx responses into `EmbeddingProviderError` with status and retryable flag.
+- [ ] 8.14 If real MiniMax docs are verified, adapter must classify 429 and 5xx as retryable unless provider docs specify otherwise.
+- [ ] 8.15 If real MiniMax docs are verified, adapter must parse successful responses into `EmbeddingVectorResult[]`.
+- [ ] 8.16 If real MiniMax docs are verified, adapter must verify every returned vector length equals configured `dimensions`.
+- [ ] 8.17 If real MiniMax docs are verified, adapter must throw `dimension_mismatch` when provider vector length differs from config.
+- [ ] 8.18 If real MiniMax docs are verified, adapter must preserve input id to output id mapping.
+- [ ] 8.19 If real MiniMax docs are verified, adapter must aggregate usage metadata when provider returns token or request usage.
+- [ ] 8.20 If real MiniMax docs are verified, adapter must reject malformed responses with `malformed_response`.
+- [ ] 8.21 If real MiniMax docs are verified, add fake HTTP tests for successful document batch, successful query, missing credentials, timeout, 429, 500, malformed JSON, missing vector, and dimension mismatch.
+- [ ] 8.22 If real MiniMax docs are not verified, add scaffold tests proving `embedDocuments` and `embedQuery` fail with safe docs-required/unsupported errors, no network call occurs even when `fetch` is injected, and no secret/config values appear in the error.
 
 ## 9. Gemini Provider Adapter
 
@@ -279,7 +294,7 @@
 - [ ] 20.4 Test provider factory for MiniMax, Gemini, Qwen scaffold, fake provider, and unknown provider.
 - [ ] 20.5 Test provider config validation.
 - [ ] 20.6 Test safe error redaction.
-- [ ] 20.7 Test MiniMax adapter with injected fake fetch.
+- [ ] 20.7 Test MiniMax real adapter with injected fake fetch only if official MiniMax embedding docs are verified; otherwise test the MiniMax scaffold/docs-required behavior and prove injected fetch is not called.
 - [ ] 20.8 Test Gemini adapter with injected fake fetch.
 - [ ] 20.9 Test Qwen unsupported behavior.
 - [ ] 20.10 Test smoke test helper with fake provider.
@@ -337,11 +352,11 @@
 
 ## 25. Real Provider Acceptance Notes
 
-- [ ] 25.1 Add documentation for running MiniMax smoke test locally with `MINIMAX_API_KEY`.
+- [ ] 25.1 Add documentation for running MiniMax smoke test locally with `MINIMAX_API_KEY` only if official MiniMax embedding docs are verified; otherwise document why MiniMax real smoke is blocked by docs gate.
 - [ ] 25.2 Add documentation for running Gemini smoke test locally with the configured Gemini API key env.
 - [ ] 25.3 Real smoke tests must be optional and excluded from `pnpm test`.
 - [ ] 25.4 Real smoke test output must record provider, model, dimensions, duration, and ok/fail only.
-- [ ] 25.5 If real MiniMax credentials are unavailable during implementation, document that only fake-fetch adapter tests were run.
+- [ ] 25.5 If real MiniMax credentials or official MiniMax embedding docs are unavailable during implementation, document that real MiniMax smoke was not run and only scaffold/fake-contract tests were run.
 - [ ] 25.6 If real Gemini credentials are unavailable during implementation, document that only fake-fetch adapter tests were run.
 - [ ] 25.7 If official docs cannot be accessed by the implementer, stop provider-specific coding and update OpenSpec rather than guessing endpoint/response shape.
 
@@ -359,3 +374,31 @@
 - [ ] 26.10 Confirm no new default command calls remote embedding providers.
 - [ ] 26.11 Confirm old config files without `embedding` still load.
 - [ ] 26.12 Confirm existing keyword knowledge search still works when embedding is disabled.
+
+## 27. Completion Gates and Anti-Fake-Complete Audit
+
+- [ ] 27.1 Review every checked task and confirm each has either a behavior test, documented verification evidence, or a clearly documented reason why it is documentation-only.
+- [ ] 27.2 Confirm provider adapter completion is not based only on class existence; Gemini and any docs-unlocked MiniMax real adapter must have fake HTTP tests for success, missing credentials, timeout/provider error, malformed response, and dimension mismatch. If MiniMax remains docs-blocked, completion requires scaffold/unsupported tests and explicit implementation-notes evidence.
+- [ ] 27.3 Confirm Qwen is not described as implemented unless real Qwen network calls were explicitly added by scope change; scaffold must throw `unsupported_provider`.
+- [ ] 27.4 Confirm fake provider smoke test output is captured in implementation notes and includes provider, model, dimensions, distance, ok/fail, duration, and safe error if any.
+- [ ] 27.5 Confirm fake vector build fixture output is captured in implementation notes and includes vectors path, manifest path, vector count, skipped count, failed count, provider, model, dimensions, and distance.
+- [ ] 27.6 Confirm real MiniMax smoke status is explicit: either record sanitized success output or record that credentials/network/docs were unavailable and only fake-fetch tests were run.
+- [ ] 27.7 Confirm real Gemini smoke status is explicit: either record sanitized success output or record that credentials/network/docs were unavailable and only fake-fetch tests were run.
+- [ ] 27.8 Confirm no raw vector values are printed by default in CLI output, reports, or implementation notes.
+- [ ] 27.9 Confirm no raw chunk text is printed or persisted in vector build reports; reports must use ids, hashes, counts, paths, and safe summaries.
+- [ ] 27.10 Confirm no API key, bearer token, cookie, request header, or provider raw payload appears in errors, reports, logs, CLI output, vector manifest, or implementation notes.
+- [ ] 27.11 Confirm changing provider, model, dimensions, or distance produces `rebuild_required` or equivalent refusal to use old vectors.
+- [ ] 27.12 Confirm deleting vector artifacts leaves canonical knowledge intact and rebuildable.
+- [ ] 27.13 Confirm `pnpm test` and normal `knowledge update` do not call real MiniMax, Gemini, or Qwen by default.
+- [ ] 27.14 Confirm `embedding.enabled: false` returns the system to keyword-only knowledge behavior.
+- [ ] 27.15 Review git diff and record boundary audit in implementation notes: provider network logic in `src/embedding/`, vector artifact logic in `src/knowledge/`, config in `src/config.ts`, CLI only parses/delegates, no embedding business logic in `src/runtime/`, `src/gateway/`, `src/workers/`, or `src/agents/`.
+- [ ] 27.16 Run `openspec status --change add-embedding-provider-adapters --json` and record whether OpenSpec artifacts remain complete.
+- [ ] 27.17 Do not mark this change complete until implementation notes include fresh verification summaries for `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, focused embedding tests, focused knowledge vector tests, fake smoke, fake vector build, and the diff boundary audit.
+- [ ] 27.18 Anti-fake-complete rethink: list every place where an implementer could create files/classes/interfaces but fail to move real data through the provider/vector path; add missing behavior tests or tasks before completing.
+- [ ] 27.19 Anti-fake-complete rethink: list every test that could pass while only testing mocks or scaffolds; confirm at least one fixture path exercises factory -> provider/fake -> vector builder -> artifact metadata.
+- [ ] 27.20 Anti-fake-complete rethink: list every stale artifact/cache/schema path that could make vector compatibility look green; confirm rebuild-required behavior for provider/model/dimensions/distance/text hash changes.
+- [ ] 27.21 Anti-fake-complete rethink: list every provider-specific assumption that came from third-party docs or memory; confirm it is either replaced by official docs evidence or blocked as scaffold.
+- [ ] 27.22 Anti-fake-complete rethink: list every command that could accidentally call network, spend money, write outside the configured knowledge workspace, or persist raw chunk text; confirm default commands are safe.
+- [ ] 27.23 Anti-fake-complete rethink: list every module boundary that could be violated; confirm no embedding provider logic was added to `src/runtime/`, `src/gateway/`, `src/workers/`, `src/agents/`, or compatibility entry points.
+- [ ] 27.24 Anti-fake-complete rethink: list every place secrets/raw provider payloads/raw vectors/raw chunk text could appear; confirm redaction tests and report inspections cover them.
+- [ ] 27.25 Anti-fake-complete rethink: after answering 27.18-27.24, update `design.md`, `specs/embedding-provider-adapters/spec.md`, `tasks.md`, or `implementation-notes.md` for any gap found; do not leave the rethink only as a checklist assertion.

@@ -42,6 +42,7 @@ import { findExperienceMatch } from './experience-agent.js';
 import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
 import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from './case-curator.js';
+import { nextDeepQueryPivot } from './query-correction.js';
 
 export interface AgentResponse {
   caseSession: StoredCase;
@@ -197,12 +198,51 @@ export class DiagnosticRuntime {
 
     let review = await this.reviewAndFormat(caseSession, result, run);
     if (shouldRunFollowUp(review, result, workerResponse.trace)) {
-      this.events.followUpDiagnosticRequested(caseSession, run, result);
+      const deepRetry = prepareDeepQueryRetry({
+        previousRequest: decision.request,
+        previousResult: result,
+        workerTrace: workerResponse.trace,
+        reviewDecision: review.decision,
+      });
+      if (deepRetry.stop) {
+        this.events.deepQueryStopped(caseSession, deepRetry.stop);
+      } else {
+        this.events.followUpDiagnosticRequested(caseSession, run, result);
       const followUpRequest = createFollowUpDiagnosticRequest({
         caseSession,
         previousRequest: decision.request,
         previousResult: result,
       });
+        if (deepRetry.retry) {
+          followUpRequest.context ??= {
+            isFollowUp: true,
+            currentUserMessage: followUpRequest.userGoal,
+            recentMessages: [],
+            previousRuns: [],
+          };
+          followUpRequest.context.knowledge = decision.request.context?.knowledge;
+          followUpRequest.context.deepQuery = deepRetry.retry.deepQuery;
+          followUpRequest.constraints = Array.from(new Set([
+            ...followUpRequest.constraints,
+            'Deep Query retry: continue read-only investigation with the pivoted artifact targets.',
+            `Pivot artifact targets: ${deepRetry.retry.deepQuery.artifactTargets.join(', ')}`,
+            `Correction actions: ${deepRetry.retry.deepQuery.correctionActions.join(', ')}`,
+          ]));
+          this.events.deepQueryRetryRequested(caseSession, {
+            attempt: deepRetry.retry.deepQuery.attempt ?? 2,
+            maxAttempts: deepRetry.retry.deepQuery.maxAttempts ?? 2,
+            previousArtifactTargets: deepRetry.retry.deepQuery.previousArtifactTargets ?? [],
+            nextArtifactTargets: deepRetry.retry.deepQuery.artifactTargets,
+            failedReasons: deepRetry.retry.deepQuery.failedReasons ?? [],
+            correctionActions: deepRetry.retry.deepQuery.correctionActions,
+          });
+          this.events.deepQueryPivotSelected(caseSession, {
+            attempt: deepRetry.retry.deepQuery.attempt ?? 2,
+            previousArtifactTargets: deepRetry.retry.deepQuery.previousArtifactTargets ?? [],
+            nextArtifactTargets: deepRetry.retry.deepQuery.artifactTargets,
+            correctionActions: deepRetry.retry.deepQuery.correctionActions,
+          });
+        }
       const followUpRun: DiagnosticRun = {
         id: followUpRequest.runId,
         caseId: caseSession.id,
@@ -219,6 +259,7 @@ export class DiagnosticRuntime {
       this.store.saveCase(caseSession);
       this.events.workerTrace(caseSession, followUpResponse.trace);
       review = await this.reviewAndFormat(caseSession, followUpResponse.result, followUpRun);
+      }
     }
 
     const reply = review.reply;
@@ -659,6 +700,157 @@ Rules:
       decision: decisionFromReviewOutcome(parsed.outcome, result),
     };
   }
+}
+
+type DeepQueryContext = NonNullable<NonNullable<DiagnosticRequest['context']>['deepQuery']>;
+
+function prepareDeepQueryRetry(input: {
+  previousRequest: DiagnosticRequest;
+  previousResult: DiagnosticResult;
+  workerTrace?: { error?: string; exitCode?: number };
+  reviewDecision: AgentResponse['decision'];
+}): {
+  retry?: { deepQuery: DeepQueryContext };
+  stop?: {
+    reason: string;
+    attempt: number;
+    maxAttempts?: number;
+    previousArtifactTargets?: string[];
+    nextArtifactTargets?: string[];
+    failedReasons?: string[];
+    correctionActions?: string[];
+  };
+} {
+  const previousDeepQuery = input.previousRequest.context?.deepQuery;
+  if (!previousDeepQuery) {
+    return {};
+  }
+
+  const attempt = previousDeepQuery.attempt ?? 1;
+  const maxAttempts = previousDeepQuery.maxAttempts ?? 2;
+  const previousArtifactTargets = previousDeepQuery.artifactTargets ?? [];
+  const failedReasons = Array.from(new Set([
+    ...(previousDeepQuery.failedReasons ?? []),
+    ...deriveDeepQueryFailedReasons(input.previousResult, input.workerTrace),
+  ]));
+
+  if (input.workerTrace?.error || input.workerTrace?.exitCode) {
+    return {
+      stop: {
+        reason: 'worker_failure',
+        attempt,
+        maxAttempts,
+        previousArtifactTargets,
+        failedReasons,
+      },
+    };
+  }
+
+  if (input.reviewDecision === 'escalate') {
+    return {
+      stop: {
+        reason: 'human_escalation',
+        attempt,
+        maxAttempts,
+        previousArtifactTargets,
+        failedReasons,
+      },
+    };
+  }
+
+  if (input.previousResult.recommendedNextAction === 'ask_user') {
+    return {
+      stop: {
+        reason: 'needs_user',
+        attempt,
+        maxAttempts,
+        previousArtifactTargets,
+        failedReasons,
+      },
+    };
+  }
+
+  const judge = input.previousRequest.context?.knowledge?.judge as { answerable?: boolean; blockers?: string[] } | undefined;
+  const pivot = nextDeepQueryPivot({
+    previousArtifactTargets,
+    workerResultSummary: input.previousResult.summary,
+    judgeResult: judge
+      ? {
+          answerable: Boolean(judge.answerable),
+          blockers: judge.blockers ?? [],
+        }
+      : undefined,
+    attempt,
+    maxAttempts,
+  });
+
+  if (pivot.stopReason) {
+    return {
+      stop: {
+        reason: pivot.stopReason,
+        attempt,
+        maxAttempts,
+        previousArtifactTargets,
+        nextArtifactTargets: pivot.nextArtifactTargets,
+        failedReasons,
+        correctionActions: pivot.correctionActions,
+      },
+    };
+  }
+
+  if (sameStringSet(previousArtifactTargets, pivot.nextArtifactTargets)) {
+    return {
+      stop: {
+        reason: 'no_new_pivot',
+        attempt,
+        maxAttempts,
+        previousArtifactTargets,
+        nextArtifactTargets: pivot.nextArtifactTargets,
+        failedReasons,
+        correctionActions: pivot.correctionActions,
+      },
+    };
+  }
+
+  const nextAttempt = attempt + 1;
+  return {
+    retry: {
+      deepQuery: {
+        ...previousDeepQuery,
+        attempt: nextAttempt,
+        maxAttempts,
+        previousArtifactTargets,
+        artifactTargets: pivot.nextArtifactTargets,
+        correctionActions: pivot.correctionActions,
+        failedReasons,
+        triedQueries: Array.from(new Set([...(previousDeepQuery.triedQueries ?? []), input.previousRequest.userGoal])),
+        nextPivot: pivot.nextArtifactTargets[0],
+        stopReason: undefined,
+      },
+    },
+  };
+}
+
+function deriveDeepQueryFailedReasons(result: DiagnosticResult, trace?: { error?: string }): string[] {
+  const reasons: string[] = [];
+  if (result.summary) {
+    reasons.push(result.summary.slice(0, 160));
+  }
+  for (const item of result.missingInfo) {
+    reasons.push(`missing:${item}`);
+  }
+  if (trace?.error) {
+    reasons.push(`worker:${trace.error}`);
+  }
+  return reasons;
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
 }
 
 function parseJsonObject<T>(text: string): T {

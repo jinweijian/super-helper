@@ -32,7 +32,13 @@ The system SHALL configure embedding providers independently from Agent chat mod
 
 #### Scenario: MiniMax configured as primary provider
 - **WHEN** embedding config selects provider `minimax`
-- **THEN** the system can create a MiniMax embedding provider from configured model, base URL, API key or API key environment variable, dimensions, distance metric, batch size, and timeout
+- **AND** current official MiniMax embedding API documentation has been verified and recorded
+- **THEN** the system can create a MiniMax embedding provider from documented model, base URL or endpoint, API key or API key environment variable, dimensions, distance metric, batch size, and timeout
+
+#### Scenario: MiniMax docs gate blocks guessed network calls
+- **WHEN** embedding config selects provider `minimax`
+- **AND** official MiniMax embedding API documentation is unavailable or does not document endpoint, auth, request body, response vector path, dimensions behavior, and batch limits
+- **THEN** the system fails MiniMax real network calls with a safe docs-required or unsupported-provider error instead of guessing an endpoint or response format
 
 #### Scenario: Gemini configured as secondary provider
 - **WHEN** embedding config selects provider `gemini`
@@ -162,3 +168,52 @@ The system SHALL verify embedding behavior in normal tests without depending on 
 #### Scenario: Real provider tests are opt-in
 - **WHEN** a test or command would call MiniMax, Gemini, or Qwen over the network
 - **THEN** it runs only through an explicit smoke or acceptance command and never as part of default `pnpm test`
+
+### Requirement: Execution guardrails and completion evidence
+The implementation SHALL include auditable execution evidence that prevents checklist-only or mock-only completion.
+
+#### Scenario: Provider official docs are checked before provider-specific coding
+- **WHEN** an implementer starts MiniMax or Gemini request/response adapter code
+- **THEN** implementation notes record the official provider documentation URL, access date, endpoint, auth shape, request fields, response vector path, dimensions behavior, and batch limits
+
+#### Scenario: Third-party provider references are not authoritative
+- **WHEN** a provider behavior is documented only in third-party SDK docs, community examples, prior memory, or old code
+- **THEN** the implementation treats that information as non-authoritative and does not use it to unlock real provider network calls
+
+#### Scenario: Provider docs unavailable stops real adapter coding
+- **WHEN** official provider docs cannot be accessed or contradict the current design
+- **THEN** the implementer stops provider-specific network coding, updates OpenSpec, and may only implement scaffold or fake-contract behavior for that provider
+
+#### Scenario: Red-green evidence exists for new behavior
+- **WHEN** a new provider, metadata helper, vector builder, CLI command, redaction rule, or compatibility check is implemented
+- **THEN** implementation notes or test history show that a focused regression test failed before the implementation and passed after it
+
+#### Scenario: Superpowers or equivalent discipline is used
+- **WHEN** the execution environment provides Superpowers skills
+- **THEN** the implementer uses `test-driven-development`, `systematic-debugging`, and `verification-before-completion` for this change
+- **AND** when those skills are unavailable, the implementer records equivalent red/green, root-cause, and fresh-verification evidence
+
+#### Scenario: Completion cannot rely on file existence
+- **WHEN** a task creates a file, interface, CLI command, provider class, vector artifact, or report
+- **THEN** the task is not considered complete until behavior tests prove the public contract, error path, security behavior, and artifact metadata
+
+#### Scenario: Fake smoke and vector fixture evidence are required
+- **WHEN** implementation is ready for review
+- **THEN** fake-provider or fake-fetch smoke output and a fixture vector build report are recorded with provider, model, dimensions, distance, vector count, skipped count, failed count, and artifact paths
+
+#### Scenario: Real provider smoke status is explicit
+- **WHEN** MiniMax or Gemini real credentials are unavailable or real smoke tests are not run
+- **THEN** implementation notes explicitly say they were not run and why; fake tests alone must not be described as real provider acceptance
+
+#### Scenario: Diff boundary audit is required
+- **WHEN** implementation is marked complete
+- **THEN** the final review records that provider network code stayed in `src/embedding/`, vector artifact code stayed in `src/knowledge/`, CLI stayed transport/argument parsing only, and no runtime/gateway/agent business decision was added
+
+#### Scenario: Anti-fake-complete rethink updates artifacts
+- **WHEN** the implementer performs the completion audit
+- **THEN** the audit identifies how the change could be falsely completed through file/class existence, mock-only tests, stale artifacts, old caches, missing real docs, skipped retrieval validation, leaked secrets, or module-boundary violations
+- **AND** any discovered gap is added back to design, specs, tasks, or implementation notes before the change is marked complete
+
+#### Scenario: Fresh verification transcript is required
+- **WHEN** an implementer marks this change complete
+- **THEN** implementation notes include fresh output summaries for `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, focused embedding tests, focused vector tests, fake smoke, and fake vector build

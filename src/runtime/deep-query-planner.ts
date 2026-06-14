@@ -10,6 +10,13 @@ export interface DeepQueryPlan {
   likelyPaths: string[];
   avoidAssumptions: string[];
   correctionActions: string[];
+  attempt: number;
+  maxAttempts: number;
+  triedQueries: string[];
+  failedReasons: string[];
+  nextPivot?: string;
+  stopReason?: 'max_attempts' | 'sufficient_evidence' | 'needs_user' | 'human_escalation';
+  previousArtifactTargets: string[];
 }
 
 export function planDeepQuery(input: {
@@ -17,7 +24,14 @@ export function planDeepQuery(input: {
   route: KnowledgeRoute;
   evidencePack: KnowledgeEvidencePack;
   judge: EvidenceJudgeResult;
+  attempt?: number;
+  maxAttempts?: number;
+  previousArtifactTargets?: string[];
+  triedQueries?: string[];
+  failedReasons?: string[];
 }): DeepQueryPlan {
+  const attempt = input.attempt ?? 1;
+  const maxAttempts = input.maxAttempts ?? 2;
   const artifactTargets = inferArtifactTargets(input.question, input.route);
   const anchorTerms = Array.from(new Set([
     ...input.route.keywords,
@@ -41,6 +55,13 @@ export function planDeepQuery(input: {
       ambiguous: !input.judge.answerable && input.evidencePack.results.length > 0,
       artifactTargets,
     }),
+    attempt,
+    maxAttempts,
+    triedQueries: input.triedQueries ?? [],
+    failedReasons: input.failedReasons ?? [],
+    nextPivot: undefined,
+    stopReason: undefined,
+    previousArtifactTargets: input.previousArtifactTargets ?? [],
   };
 }
 

@@ -1,7 +1,10 @@
 import type {
+  KnowledgeCaseReviewAction,
   KnowledgeConfidence,
   KnowledgeDocumentType,
   KnowledgeFrontmatter,
+  KnowledgePipelineStage,
+  KnowledgePipelineStatus,
   KnowledgeSourceType,
   KnowledgeStatus,
   KnowledgeVisibility,
@@ -88,6 +91,21 @@ export function parseMarkdownDocument(content: string, pathForError = 'document'
     chunking_strategy: optionalString(raw.chunking_strategy),
     tags: optionalStringArray(raw.tags, 'tags', pathForError),
     review_cycle_days: optionalNumber(raw.review_cycle_days, 'review_cycle_days', pathForError),
+    // Optional pipeline and review fields
+    quality_status: optionalQualityStatus(raw.quality_status),
+    source_block_ids: optionalStringArray(raw.source_block_ids, 'source_block_ids', pathForError),
+    pipeline_stage: optionalPipelineStage(raw.pipeline_stage),
+    pipeline_status: optionalPipelineStatus(raw.pipeline_status),
+    review_id: optionalString(raw.review_id),
+    publish_id: optionalString(raw.publish_id),
+    repair_plan_ids: optionalStringArray(raw.repair_plan_ids, 'repair_plan_ids', pathForError),
+    // Solved case review fields
+    reviewer: optionalString(raw.reviewer),
+    reviewed_at: optionalString(raw.reviewed_at),
+    review_notes: optionalString(raw.review_notes),
+    review_status: optionalReviewStatus(raw.review_status),
+    review_action: optionalReviewAction(raw.review_action),
+    review_source: optionalReviewSource(raw.review_source),
   };
 
   return { frontmatter, body: match[2] ?? '' };
@@ -212,4 +230,76 @@ function optionalNumber(value: unknown, field: string, pathForError: string): nu
     throw new Error(`${pathForError}: frontmatter field ${field} must be a number`);
   }
   return numberValue;
+}
+
+const pipelineStatuses = new Set<KnowledgePipelineStatus>([
+  'imported',
+  'extracted',
+  'normalized',
+  'draft',
+  'quality_warn',
+  'quality_error',
+  'review_required',
+  'approved',
+  'rejected',
+  'published',
+]);
+
+const pipelineStages = new Set<KnowledgePipelineStage>([
+  'intake',
+  'extract',
+  'normalize',
+  'slice',
+  'audit',
+  'repair',
+  'review',
+  'publish',
+  'index',
+  'eval',
+]);
+
+const reviewStatuses = new Set<NonNullable<KnowledgeFrontmatter['review_status']>>(['pending', 'approved', 'rejected', 'request_edits']);
+const reviewActions = new Set<KnowledgeCaseReviewAction>(['approve', 'reject', 'request_edits', 'convert_to_unresolved', 'accept_warnings']);
+const qualityStatuses = new Set<NonNullable<KnowledgeFrontmatter['quality_status']>>(['unchecked', 'ok', 'warn', 'error']);
+
+function optionalPipelineStatus(value: unknown): KnowledgePipelineStatus | undefined {
+  if (value === undefined) return undefined;
+  const str = String(value).trim();
+  if (!pipelineStatuses.has(str as KnowledgePipelineStatus)) return undefined;
+  return str as KnowledgePipelineStatus;
+}
+
+function optionalPipelineStage(value: unknown): KnowledgePipelineStage | undefined {
+  if (value === undefined) return undefined;
+  const str = String(value).trim();
+  if (!pipelineStages.has(str as KnowledgePipelineStage)) return undefined;
+  return str as KnowledgePipelineStage;
+}
+
+function optionalQualityStatus(value: unknown): KnowledgeFrontmatter['quality_status'] {
+  if (value === undefined) return undefined;
+  const str = String(value).trim();
+  if (!qualityStatuses.has(str as NonNullable<KnowledgeFrontmatter['quality_status']>)) return undefined;
+  return str as NonNullable<KnowledgeFrontmatter['quality_status']>;
+}
+
+function optionalReviewStatus(value: unknown): KnowledgeFrontmatter['review_status'] {
+  if (value === undefined) return undefined;
+  const str = String(value).trim();
+  if (!reviewStatuses.has(str as NonNullable<KnowledgeFrontmatter['review_status']>)) return undefined;
+  return str as NonNullable<KnowledgeFrontmatter['review_status']>;
+}
+
+function optionalReviewAction(value: unknown): KnowledgeFrontmatter['review_action'] {
+  if (value === undefined) return undefined;
+  const str = String(value).trim();
+  if (!reviewActions.has(str as KnowledgeCaseReviewAction)) return undefined;
+  return str as KnowledgeFrontmatter['review_action'];
+}
+
+function optionalReviewSource(value: unknown): 'cli' | 'runtime' | 'api' | undefined {
+  if (value === undefined) return undefined;
+  const str = String(value).trim();
+  if (str !== 'cli' && str !== 'runtime' && str !== 'api') return undefined;
+  return str;
 }

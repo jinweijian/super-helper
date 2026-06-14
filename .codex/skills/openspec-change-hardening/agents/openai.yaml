@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenSpec Change Hardening"
+  short_description: "Harden OpenSpec changes against fake completion"
+  default_prompt: "Use $openspec-change-hardening to harden this OpenSpec change with complete requirements, acceptance gates, and anti-fake-completion tasks."

@@ -1,5 +1,11 @@
 export const KNOWLEDGE_DIRECTORIES = [
   '_sources/whitepapers',
+  '_pipeline/extracts',
+  '_pipeline/normalized',
+  '_pipeline/drafts',
+  '_pipeline/repair-plans',
+  '_pipeline/review',
+  '_pipeline/publish',
   '_taxonomy',
   'modules',
   'faq',
@@ -9,6 +15,7 @@ export const KNOWLEDGE_DIRECTORIES = [
   'whitepapers',
   'glossary/terms',
   'indexes',
+  'reports',
 ] as const;
 
 export const taxonomyTemplates: Record<string, string> = {

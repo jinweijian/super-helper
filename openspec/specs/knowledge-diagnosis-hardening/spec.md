@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define the local knowledge processing pipeline, quality audit, evidence-judge hardening, deep-query retry, live acceptance, and case review workflow for the `super helper` knowledge-first runtime. The capability covers everything between source ingest and a published, audited slice that can be cited by the Evidence Judge.
+
+## Requirements
 
 ### Requirement: Knowledge processing pipeline
 The system SHALL process source knowledge through explicit local pipeline stages before published knowledge can be treated as production-ready evidence.
@@ -191,49 +195,6 @@ The system SHALL make knowledge quality issues visible without silently blocking
 #### Scenario: Search avoids fatal-quality evidence
 - **WHEN** a document or chunk is marked with fatal quality issues
 - **THEN** knowledge search excludes it from answerable evidence or marks it as non-answerable evidence for Evidence Judge
-
-### Requirement: Pipeline gap closure guardrails
-The system SHALL close the implementation gaps found after the first hardening implementation review.
-
-#### Scenario: Init does not bypass review by default
-- **WHEN** `knowledge init` imports source documents without an explicit legacy publish flag
-- **THEN** it writes intake, extract, normalize, draft, audit, and ingest reports but does not convert unchecked draft slices into active formal knowledge documents
-
-#### Scenario: Legacy publish is explicit and visible
-- **WHEN** a user chooses a compatibility option that publishes without human review
-- **THEN** the command output and ingest report mark the run as legacy compatibility publish and include the quality report path and unresolved issue counts
-
-#### Scenario: Review approval does not equal active publication
-- **WHEN** `knowledge review --action approve` runs for draft slices
-- **THEN** the draft frontmatter records an approved pipeline state and review metadata, but active searchable Markdown is only created by `knowledge publish`
-
-#### Scenario: Quality OK requires audit evidence
-- **WHEN** a draft or published slice has `quality_status: ok`
-- **THEN** the latest quality report for that document or source contains no blocking issue for that status, and the publish report records the audit used
-
-#### Scenario: Source quality report is generated from real artifacts
-- **WHEN** extraction and normalization have produced reports
-- **THEN** `knowledge audit` writes `knowledge/reports/source-quality-report.json` by reading those reports and converting parser, table/list, heading, duplicate, and provenance warnings into structured issues
-
-#### Scenario: Chunk quality audits derived chunks
-- **WHEN** `knowledge audit` runs after `knowledge update`
-- **THEN** it reads `knowledge/indexes/chunks.jsonl`, counts inspected chunks, reports orphan chunks whose parent does not exist, and reports active parent slices that produce no chunk
-
-#### Scenario: Oversized slices are split
-- **WHEN** normalized blocks for one section exceed the configured parent slice character limit
-- **THEN** the slicer creates multiple ordered draft slice files using heading, list, table, or paragraph boundaries; it only emits a manual split warning when no safe boundary exists
-
-#### Scenario: Evidence score remains calibrated
-- **WHEN** Evidence Judge computes `answer_score`
-- **THEN** component weights produce a score in `[0, 1]` without relying on post-hoc clamping of an over-summed score, and tests prove weak/generic evidence remains below the direct-answer threshold
-
-#### Scenario: Deep Query pivot runs in runtime
-- **WHEN** the first code escalation returns partial or insufficient evidence and a deterministic pivot is available
-- **THEN** runtime dispatches at most one additional read-only diagnostic request with pivoted artifact targets, records retry events, and stops on max attempts, high risk, worker failure, no new pivot, or user-required context
-
-#### Scenario: Acceptance includes behavior scenarios
-- **WHEN** `accept knowledge` runs in mock-worker mode
-- **THEN** it executes config checks plus whitepaper direct-answer, no-hit escalation, implementation-detail escalation, and solved-case curation smoke scenarios, and writes pass/fail details for each scenario
 
 ### Requirement: Evidence Judge hardening
 The system SHALL produce explainable evidence sufficiency decisions with score breakdowns, blockers, and false-positive controls.

@@ -120,17 +120,71 @@ Gateway chat route
   -> DiagnosticRuntime.startUserTurn
   -> Experience Agent
   -> Preflight Gate
+  -> Knowledge Router / Knowledge Search / Evidence Judge
+       -> knowledge direct answer (when evidence is answerable)
+       -> or continuation to Claude Code escalation
   -> DiagnosticRequest builder
   -> DiagnosticWorker port
+       -> bounded retry / pivot (Deep Query Correction)
   -> Review Gate
   -> Presenter
   -> RuntimeEventRecorder
   -> CaseRepository
+  -> optional Case Curator (solved case draft, review workflow)
 ```
 
 Route code must not embed preflight, worker, review, or presentation decisions. It validates HTTP input, invokes the runtime, and serializes response DTOs.
 
 Same-case async turns are serialized in the runtime so every accepted user message receives its own helper reply.
+
+## Knowledge Processing Pipeline
+
+Knowledge lives behind a strict local processing pipeline so that only audited, published slices can support high-confidence direct answers. The full pipeline is:
+
+```text
+intake -> extract -> normalize -> draft slice -> audit -> repair -> review -> publish -> index -> eval
+```
+
+- `intake` copies the source file into `knowledge/_sources/<kind>/` and writes a `.meta.json` with id, sha256, parser, and import metadata.
+- `extract` produces structured `blocks.jsonl` (heading / paragraph / list_item / table / toc / header_footer / image_caption) plus an `extract-report.json`.
+- `normalize` cleans blocks, attaches `section_path` from heading inheritance, and labels boilerplate blocks (TOC, headers, footers, repeated titles) with `included_in_slice: false`.
+- `slice` writes candidate parent slices under `knowledge/_pipeline/drafts/<source-id>/` with `status: draft`, `quality_status: unchecked`, and `source_block_ids` provenance. Drafts are not active knowledge.
+- `audit` writes `knowledge/indexes/chunk-quality-report.json` and `knowledge/reports/source-quality-report.json` listing `empty_body`, `toc_like`, `duplicate_content`, `missing_source_block_ids`, `multi_topic_slice`, `broken_coreference`, `not_answer_bearing`, and similar issues.
+- `repair` writes a `repair-plan-<timestamp>.json` derived from audit issues and only applies deterministic safe actions (`merge_adjacent_short_slices`, `add_section_path`, `add_related_terms`, `mark_review_required`). Unsafe actions are kept in the plan as `review_required` and never auto-applied.
+- `review` records `reviewer`, `action`, `notes`, and status transitions in `knowledge/_pipeline/review/<source-id>.review.json`.
+- `publish` writes approved slices to the formal `knowledge/whitepapers/<module>/<source-slug>/` tree with `status: active`, `pipeline_status: published`, and preserved provenance, then sets the index dirty flag.
+- `index` (`knowledge update`) rebuilds `chunks.jsonl`, `manifest.json`, and `keyword-index.json` from formal published documents only. Drafts, repair plans, and review records are never indexed.
+- `eval` runs the golden question set and reports `Hit@1/3/5`, answer-bearing rate, false positives, and per-question failure attribution.
+
+One-shot `knowledge init` is a safe compatibility wrapper. By default it runs intake, extract, normalize, draft slice, audit, and indexing for already-published formal documents, but it does not convert unchecked drafts into active formal knowledge. If an old one-command active publish flow is needed, the user must pass `--legacy-active-publish`; the command output and ingest report mark that normal review/publish was bypassed. Intermediate artifacts under `knowledge/_pipeline/` and `knowledge/reports/` are always retained for re-runs and audits.
+
+## Knowledge Quality Reports
+
+Quality reports are written next to the indexes and reports directories. Severity levels are `info`, `warn`, and `error`. The default `--quality-gate` is `warn`: warnings are visible but the command still exits 0, while `strict` exits non-zero on any `error` issue. The `off` gate skips audit entirely.
+
+- `knowledge/indexes/chunk-quality-report.json`: per-slice and per-chunk issues.
+- `knowledge/reports/source-quality-report.json`: parser failures, unknown-block ratio, table/list preservation, heading structure, and source provenance issues.
+- Knowledge search reads the chunk-quality-report.json and attaches `quality: { severity, issues }` to each evidence result. Evidence with `error` severity is excluded from direct-answer candidates; `warn` lowers judge confidence.
+
+## Live Knowledge Acceptance
+
+`node dist/cli.js accept knowledge --workspace <path>` (npm alias `accept:knowledge`) runs a repeatable local acceptance check that verifies workspace, model provider activation, knowledge directory presence, source ingest report, Claude Code availability, and read-only worker policy. The default scenarios are:
+
+1. Direct whitepaper answer for `AI伴学助手学习日晚上8点未完成任务会怎么提醒？`.
+2. EduSoho whitepaper search for `EduSoho 教培线课程搜索栏支持按什么搜索课程？`.
+3. No-hit escalation that records evidence count 0 and Deep Query correction actions.
+4. Implementation-detail escalation that requires code escalation with read-only constraints.
+5. Solved case curation smoke test that confirms a review-required draft is generated in a temporary knowledge workspace by default. Passing `--keep-cases` keeps the smoke-test draft in the configured knowledge workspace for manual inspection.
+
+Reports are written to `reports/knowledge-acceptance-<timestamp>.json`. The redaction helper strips API keys, bearer tokens, cookies, and known secret fields before writing. The acceptance command does not call paid model endpoints by default.
+
+## Solved Case Review Lifecycle
+
+Solved case drafts under `knowledge/tickets/solved-cases/<module>/` are written with `status: review_required` and `confidence: medium`. A reviewer can change the status to `active` (approve) or keep it as `review_required` (reject / request edits) using either the CLI or the runtime orchestration method. Review metadata (`reviewer`, `reviewed_at`, `review_notes`, `review_action`, `review_source`) is written to the case frontmatter and an optional `<case>.review.json` sidecar is stored next to the file. A reviewer can also convert a solved case to an unresolved case under `knowledge/tickets/unresolved-cases/<module>/`. Each action marks the knowledge index dirty so the next `knowledge update` rebuilds the indexes.
+
+## Knowledge Workspace Contract Updates
+
+`src/knowledge/` continues to own the local enterprise knowledge base. Pipeline stages run inside this module and the runtime only orchestrates the slice review lifecycle. Knowledge search excludes `_pipeline/`, `_sources/`, `_taxonomy/`, `indexes/`, and `reports/` from the searchable tree so draft and review artifacts cannot support high-confidence direct answers.
 
 ## Session Repository
 

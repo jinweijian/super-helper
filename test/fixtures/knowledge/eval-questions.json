@@ -1,0 +1,24 @@
+[
+  {
+    "id": "ai-companion-8pm-reminder",
+    "question": "AI伴学助手学习日晚上8点未完成任务会怎么提醒？",
+    "shouldHit": true,
+    "expectedDocument": "ai-companion",
+    "expectedSourceType": "whitepaper",
+    "expectedKeywords": ["学习日", "晚上8点", "提醒"]
+  },
+  {
+    "id": "edusoho-course-search",
+    "question": "EduSoho 教培线课程搜索栏支持按什么搜索课程？",
+    "shouldHit": true,
+    "expectedDocument": "edusoho-training",
+    "expectedSourceType": "whitepaper",
+    "expectedKeywords": ["搜索", "课程", "名称"]
+  },
+  {
+    "id": "no-hit-control-question",
+    "question": "一个完全无关的、不存在于知识库中的、独一无二的查询 token xyzunique123",
+    "shouldHit": false,
+    "expectedEscalation": "code"
+  }
+]

@@ -1,16 +1,48 @@
 import type { KnowledgeEvidencePack, KnowledgeEvidenceResult, KnowledgeRoute } from '../knowledge/index.js';
 
+export type EvidenceJudgeBlocker =
+  | 'generic_keyword_only'
+  | 'low_quality_evidence'
+  | 'module_mismatch'
+  | 'stale_knowledge'
+  | 'conflicting_knowledge'
+  | 'high_risk_uncertainty'
+  | 'implementation_detail'
+  | 'missing_answer_bearing_sentence'
+  | 'no_active_evidence'
+  | 'ambiguity'
+  | 'low_signal_terms';
+
+export interface EvidenceJudgeScoreBreakdown {
+  relevance: number;
+  coverage: number;
+  source_authority: number;
+  freshness: number;
+  version_match: number;
+  agreement: number;
+  actionability: number;
+  conflict_penalty: number;
+  ambiguity_penalty: number;
+  risk_penalty: number;
+  quality_penalty: number;
+}
+
 export interface EvidenceJudgeResult {
   answerable: boolean;
   confidence: 'low' | 'medium' | 'high';
   need_code_escalation: boolean;
   reason: string;
+  rationale: string;
   evidence: string[];
   risks: string[];
   missing_info: string[];
   conflicts: string[];
+  blockers: EvidenceJudgeBlocker[];
+  ambiguity: string[];
+  quality_issues: string[];
   recommended_next_action: 'final_answer' | 'dispatch_code_diagnosis' | 'ask_user' | 'escalate_to_human';
   answer_score: number;
+  score_breakdown: EvidenceJudgeScoreBreakdown;
 }
 
 const sourceAuthority: Record<string, number> = {
@@ -22,6 +54,23 @@ const sourceAuthority: Record<string, number> = {
   glossary: 0.45,
   unresolved_case: 0.25,
 };
+
+const GENERIC_KEYWORDS = ['课程', '配置', '功能', '怎么', '支持', '使用', '如何', '哪里', '什么', '帮助', '介绍', '说明', '推荐'];
+const ANSWER_BEARING_PATTERNS = [
+  /(当|如果|若|在).{2,30}(时|情况|条件下|之后)/,
+  /步骤[一二三四五六七八九十0-9]+/,
+  /[一二三四五六七八九十0-9]+[\.、]/,
+  /(支持|不支持|会|不会|需要|必须|返回|提示|提醒|开通|关闭|开启|启用)/,
+  /(会|不会).{0,20}(提醒|提示|开通|触发|记录|通知|发送)/,
+  /学习日.{0,15}(提醒|未完成|任务)/,
+  /(search|搜索).{0,20}(按|根据|通过|支持)/i,
+  // Chinese rule/condition patterns
+  /(包含|包括).{0,30}(任务|时长|时间|内容|状态|字段)/,
+  /(可以通过|可通过|可以|能).{0,20}(查看|操作|设置|管理|发送|搜索|学习|提醒|添加|删除|修改)/,
+  /学员|教师|管理员|用户|订单|课程|班级|任务|学习|计划/,
+  /[一二三四五六七八九十]+[、.]/,
+  /(支持|不支持|会|不会|需要|必须|返回|提示|提醒|开通|关闭|开启|启用).{0,40}(功能|操作|行为|动作)/,
+];
 
 export function judgeKnowledgeEvidence(input: {
   route: KnowledgeRoute;
@@ -35,112 +84,274 @@ export function judgeKnowledgeEvidence(input: {
   const active = results.filter((result) => result.status === 'active');
   const nonActive = results.filter((result) => result.status !== 'active');
   const implementationSignals = input.route.codeEscalationSignals;
+  const blockers: EvidenceJudgeBlocker[] = [];
+  const ambiguity: string[] = [];
+  const qualityIssues: string[] = [];
 
+  // Must-block: implementation-detail signals
   if (implementationSignals.length > 0) {
-    return {
+    blockers.push('implementation_detail');
+    return buildResult({
+      results,
       answerable: false,
-      confidence: 'low',
-      need_code_escalation: true,
       reason: `用户问题包含当前实现或错误线索：${implementationSignals.join('、')}，需要升级到只读代码调查。`,
-      evidence: results.slice(0, 5).map((result) => result.evidence_id),
       risks: Array.from(new Set([...risks, 'implementation_detail'])),
-      missing_info: ['当前实现证据'],
+      missing: ['当前实现证据'],
       conflicts,
-      recommended_next_action: 'dispatch_code_diagnosis',
-      answer_score: scoreResults(results, { conflicts, risks, stale }),
-    };
+      blockers,
+      ambiguity,
+      qualityIssues,
+      action: 'dispatch_code_diagnosis',
+      score: scoreResults(results, { conflicts, risks, stale }),
+    });
   }
 
+  // No hits
   if (results.length === 0) {
-    return {
+    blockers.push('no_active_evidence');
+    return buildResult({
+      results,
       answerable: false,
-      confidence: 'low',
-      need_code_escalation: true,
       reason: '知识库没有找到可用证据，需要升级到代码或其他证据源查询。',
-      evidence: [],
       risks,
-      missing_info: ['知识库命中证据'],
+      missing: ['知识库命中证据'],
       conflicts: [],
-      recommended_next_action: 'dispatch_code_diagnosis',
-      answer_score: 0,
-    };
+      blockers,
+      ambiguity,
+      qualityIssues,
+      action: 'dispatch_code_diagnosis',
+      score: 0,
+    });
   }
 
-  const answerScore = scoreResults(results, { conflicts, risks, stale });
+  const breakdown = computeBreakdown(results, { conflicts, risks, stale, route: input.route, question: input.question });
+  const answerScore = scoreFromBreakdown(breakdown);
+  const normalizedScore = Math.max(0, Math.min(1, answerScore));
+
+  // Generic keyword false-positive control
+  const matchedGeneric = input.route.keywords.filter((kw) => GENERIC_KEYWORDS.includes(kw));
+  const topMatchedTerms = results[0]?.matched_terms ?? [];
+  const topNonGenericTerms = topMatchedTerms.filter((term) => !GENERIC_KEYWORDS.includes(term));
+  if (matchedGeneric.length >= 1 && results[0] && (topMatchedTerms.length < 2 || topNonGenericTerms.length === 0)) {
+    blockers.push('generic_keyword_only');
+    ambiguity.push(`仅泛词命中：${matchedGeneric.join('、')}`);
+  }
+
+  // Module mismatch detection
+  if (input.route.moduleCandidates.length > 0 && results[0] && !input.route.moduleCandidates.includes(results[0].module)) {
+    blockers.push('module_mismatch');
+  }
+
+  // Answer-bearing check
+  if (results[0] && !hasAnswerBearingSentence(results[0].excerpt + ' ' + results[0].title + ' ' + results[0].summary)) {
+    blockers.push('missing_answer_bearing_sentence');
+  }
+
+  // Low quality evidence
+  if (results[0]?.quality?.severity === 'error') {
+    blockers.push('low_quality_evidence');
+    qualityIssues.push(...(results[0].quality.issues ?? []));
+  } else if (results[0]?.quality?.severity === 'warn') {
+    qualityIssues.push(...(results[0].quality.issues ?? []));
+  }
+
+  // Conflict
   if (conflicts.length > 0) {
-    return {
+    blockers.push('conflicting_knowledge');
+    return buildResult({
+      results,
       answerable: false,
-      confidence: 'low',
-      need_code_escalation: true,
       reason: '知识库命中的文档之间存在冲突，不能直接回答。',
-      evidence: results.slice(0, 5).map((result) => result.evidence_id),
       risks,
-      missing_info: ['冲突文档复核'],
+      missing: ['冲突文档复核'],
       conflicts,
-      recommended_next_action: 'dispatch_code_diagnosis',
-      answer_score: answerScore,
-    };
+      blockers,
+      ambiguity,
+      qualityIssues,
+      action: 'dispatch_code_diagnosis',
+      score: normalizedScore,
+      breakdown,
+    });
   }
 
+  // High risk
   if (risks.length > 0) {
-    return {
+    blockers.push('high_risk_uncertainty');
+    return buildResult({
+      results,
       answerable: false,
-      confidence: answerScore >= 0.7 ? 'medium' : 'low',
-      need_code_escalation: true,
       reason: `问题涉及高风险域：${risks.join('、')}，不能只依赖知识库直接回答。`,
-      evidence: results.slice(0, 5).map((result) => result.evidence_id),
       risks,
-      missing_info: ['高风险证据复核'],
+      missing: ['高风险证据复核'],
       conflicts,
-      recommended_next_action: 'escalate_to_human',
-      answer_score: answerScore,
-    };
+      blockers,
+      ambiguity,
+      qualityIssues,
+      action: 'escalate_to_human',
+      score: normalizedScore,
+      breakdown,
+    });
   }
 
+  // Stale
   if (stale.length > 0 && active.length === 0) {
-    return {
+    blockers.push('stale_knowledge');
+    return buildResult({
+      results,
       answerable: false,
-      confidence: 'low',
-      need_code_escalation: true,
       reason: '命中的知识文档已过期或待复核，不能作为高置信答案。',
-      evidence: results.slice(0, 5).map((result) => result.evidence_id),
       risks: ['stale_knowledge'],
-      missing_info: ['当前版本证据'],
+      missing: ['当前版本证据'],
       conflicts,
-      recommended_next_action: 'dispatch_code_diagnosis',
-      answer_score: answerScore,
-    };
+      blockers,
+      ambiguity,
+      qualityIssues,
+      action: 'dispatch_code_diagnosis',
+      score: normalizedScore,
+      breakdown,
+    });
   }
 
+  // Non-active evidence
   if (nonActive.length > 0 && (active.length === 0 || results[0]?.status !== 'active')) {
-    return {
+    return buildResult({
+      results: active,
       answerable: false,
-      confidence: 'low',
-      need_code_escalation: true,
       reason: `命中的知识文档不是 active 状态：${Array.from(new Set(nonActive.map((result) => result.status))).join('、')}，不能作为直接回答证据。`,
-      evidence: active.slice(0, 5).map((result) => result.evidence_id),
       risks: Array.from(new Set([...risks, 'non_active_knowledge'])),
-      missing_info: ['active 知识证据'],
+      missing: ['active 知识证据'],
       conflicts,
-      recommended_next_action: 'dispatch_code_diagnosis',
-      answer_score: answerScore,
-    };
+      blockers,
+      ambiguity,
+      qualityIssues,
+      action: 'dispatch_code_diagnosis',
+      score: normalizedScore,
+      breakdown,
+    });
   }
 
-  const answerable = answerScore >= directAnswerThreshold(results);
-  return {
+  const answerable = normalizedScore >= directAnswerThreshold(results) && blockers.length === 0;
+  return buildResult({
+    results,
     answerable,
-    confidence: answerScore >= 0.78 ? 'high' : answerScore >= 0.6 ? 'medium' : 'low',
-    need_code_escalation: !answerable,
     reason: answerable
       ? '知识库命中 active FAQ/runbook/whitepaper 证据，内容可支撑直接回答。'
-      : '知识库有命中但分数不足，需要补充证据或升级查询。',
-    evidence: results.slice(0, 5).map((result) => result.evidence_id),
+      : `知识库有命中但分数不足（score=${normalizedScore.toFixed(2)}, blockers=${blockers.length}），需要补充证据或升级查询。`,
     risks,
-    missing_info: answerable ? [] : ['更高置信证据'],
+    missing: answerable ? [] : ['更高置信证据'],
     conflicts,
-    recommended_next_action: answerable ? 'final_answer' : 'dispatch_code_diagnosis',
-    answer_score: answerScore,
+    blockers,
+    ambiguity,
+    qualityIssues,
+    action: answerable ? 'final_answer' : 'dispatch_code_diagnosis',
+    score: normalizedScore,
+    breakdown,
+  });
+}
+
+function scoreFromBreakdown(breakdown: EvidenceJudgeScoreBreakdown): number {
+  const positive =
+    breakdown.relevance * 0.25 +
+    breakdown.coverage * 0.15 +
+    breakdown.source_authority * 0.15 +
+    breakdown.freshness * 0.10 +
+    breakdown.version_match * 0.10 +
+    breakdown.agreement * 0.10 +
+    breakdown.actionability * 0.15;
+  const penalties =
+    breakdown.conflict_penalty +
+    breakdown.ambiguity_penalty +
+    breakdown.risk_penalty +
+    breakdown.quality_penalty;
+  return Math.max(0, Math.min(1, Number((positive - penalties).toFixed(2))));
+}
+
+function buildResult(input: {
+  results: KnowledgeEvidenceResult[];
+  answerable: boolean;
+  reason: string;
+  risks: string[];
+  missing: string[];
+  conflicts: string[];
+  blockers: EvidenceJudgeBlocker[];
+  ambiguity: string[];
+  qualityIssues: string[];
+  action: EvidenceJudgeResult['recommended_next_action'];
+  score: number;
+  breakdown?: EvidenceJudgeScoreBreakdown;
+}): EvidenceJudgeResult {
+  const breakdown = input.breakdown ?? computeBreakdown(input.results, { conflicts: input.conflicts, risks: input.risks, stale: [], route: { moduleCandidates: [], keywords: [], codeEscalationSignals: [], risks: [], normalizedQuestion: '', intentCandidates: [], sourceTypes: [] }, question: '' });
+  const confidence: EvidenceJudgeResult['confidence'] = input.answerable
+    ? input.score >= 0.78 ? 'high' : input.score >= 0.6 ? 'medium' : 'low'
+    : 'low';
+  return {
+    answerable: input.answerable,
+    confidence,
+    need_code_escalation: !input.answerable,
+    reason: input.reason,
+    rationale: input.reason,
+    evidence: input.results.slice(0, 5).map((r) => r.evidence_id),
+    risks: input.risks,
+    missing_info: input.missing,
+    conflicts: input.conflicts,
+    blockers: input.blockers,
+    ambiguity: input.ambiguity,
+    quality_issues: input.qualityIssues,
+    recommended_next_action: input.action,
+    answer_score: input.score,
+    score_breakdown: breakdown,
+  };
+}
+
+function computeBreakdown(
+  results: KnowledgeEvidenceResult[],
+  state: { conflicts: string[]; risks: string[]; stale: KnowledgeEvidenceResult[]; route: KnowledgeRoute; question: string },
+): EvidenceJudgeScoreBreakdown {
+  if (results.length === 0) {
+    return {
+      relevance: 0,
+      coverage: 0,
+      source_authority: 0,
+      freshness: 0,
+      version_match: 0,
+      agreement: 0,
+      actionability: 0,
+      conflict_penalty: 0,
+      ambiguity_penalty: 0,
+      risk_penalty: 0,
+      quality_penalty: 0,
+    };
+  }
+  const top = results[0]!;
+  const matchedTermCount = top.matched_terms.length;
+  const genericHits = top.matched_terms.filter((t) => GENERIC_KEYWORDS.includes(t)).length;
+  const titleMatch = state.question && top.title && state.question.includes(top.title.slice(0, 4)) ? 1 : 0;
+  const moduleMatch = state.route.moduleCandidates.length === 0 || state.route.moduleCandidates.includes(top.module) ? 1 : 0;
+
+  const relevance = Math.min(1, Math.max(0.1, (matchedTermCount * 0.18) + (titleMatch * 0.25) + (moduleMatch * 0.15)) - (genericHits >= matchedTermCount ? 0.3 : 0));
+  const coverage = /faq|runbook|whitepaper|solved_case/.test(top.source_type) ? 0.85 : 0.45;
+  const source_authority = sourceAuthority[top.source_type] ?? 0.4;
+  const freshness = isStale(top) ? 0.35 : 0.9;
+  const version_match = top.status === 'active' ? 0.8 : 0.45;
+  const agreement = state.conflicts.length > 0 ? 0.2 : results.length > 1 ? 0.9 : 0.75;
+  const actionability = /faq|runbook|solved_case/.test(top.source_type) ? 0.9 : 0.65;
+  const conflict_penalty = state.conflicts.length > 0 ? 0.25 : 0;
+  const ambiguity_penalty = matchedTermCount < 2 || genericHits > 0 ? 0.15 : 0;
+  const risk_penalty = state.risks.length > 0 ? 0.2 : 0;
+  const quality_penalty = top.quality?.severity === 'error' ? 0.3 : top.quality?.severity === 'warn' ? 0.1 : 0;
+
+  return {
+    relevance: Number(relevance.toFixed(2)),
+    coverage: Number(coverage.toFixed(2)),
+    source_authority: Number(source_authority.toFixed(2)),
+    freshness: Number(freshness.toFixed(2)),
+    version_match: Number(version_match.toFixed(2)),
+    agreement: Number(agreement.toFixed(2)),
+    actionability: Number(actionability.toFixed(2)),
+    conflict_penalty: Number(conflict_penalty.toFixed(2)),
+    ambiguity_penalty: Number(ambiguity_penalty.toFixed(2)),
+    risk_penalty: Number(risk_penalty.toFixed(2)),
+    quality_penalty: Number(quality_penalty.toFixed(2)),
   };
 }
 
@@ -195,12 +406,12 @@ function detectConflicts(results: KnowledgeEvidenceResult[]): string[] {
     activeByModule.set(key, new Set([...(activeByModule.get(key) ?? []), result.status]));
   }
   return Array.from(activeByModule.entries())
-    .filter(([, statuses]) => statuses.has('active') && (statuses.has('deprecated') || statuses.has('archived')))
+    .filter(([, statuses]) => statuses.has('active') && (statuses.has('deprecated') || statuses.has('archived') || statuses.has('review_required')))
     .map(([key]) => key);
 }
 
 function isStale(result: KnowledgeEvidenceResult): boolean {
-  if (result.status === 'deprecated' || result.status === 'archived' || result.status === 'review_required') {
+  if (result.status === 'deprecated' || result.status === 'archived' || result.status === 'review_required' || result.status === 'draft') {
     return true;
   }
   const verifiedAt = Date.parse(result.last_verified_at);
@@ -210,3 +421,10 @@ function isStale(result: KnowledgeEvidenceResult): boolean {
   const days = (Date.now() - verifiedAt) / 86_400_000;
   return days > 180;
 }
+
+function hasAnswerBearingSentence(text: string): boolean {
+  const sentences = text.split(/[\n。；;]/).map((s) => s.trim()).filter(Boolean);
+  return sentences.some((s) => ANSWER_BEARING_PATTERNS.some((p) => p.test(s)));
+}
+
+export const __testing = { hasAnswerBearingSentence, GENERIC_KEYWORDS, ANSWER_BEARING_PATTERNS };

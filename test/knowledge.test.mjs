@@ -6,12 +6,23 @@ import { join } from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
 import {
+  approveSolvedCase,
+  auditKnowledgeQuality,
+  buildDraftSlices,
+  evaluateQualityGate,
+  generateKnowledgeRepairPlan,
   initKnowledgeWorkspace,
   parseMarkdownDocument,
+  publishApprovedDraftSlices,
   resolveKnowledgeWorkspaceRoot,
+  reviewDraftSlices,
   routeKnowledgeQuestion,
+  runKnowledgeEval,
   searchKnowledge,
   updateKnowledgeIndex,
+  applyKnowledgeRepairPlan,
+  writeKnowledgeRepairPlan,
+  writeKnowledgeQualityReport,
 } from '../dist/knowledge/index.js';
 import { listPublicAgentConfigs, loadAgentRegistry } from '../dist/runtime/agent-configs.js';
 
@@ -224,7 +235,7 @@ test('knowledge CLI initializes and updates a workspace', () => {
   }
 });
 
-test('knowledge init ingests two DOCX whitepapers into searchable parent slices', () => {
+test('knowledge init leaves imported whitepaper slices as drafts by default', () => {
   const workspace = tempWorkspace();
   const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
   try {
@@ -254,9 +265,86 @@ test('knowledge init ingests two DOCX whitepapers into searchable parent slices'
 
     assert.equal(report.sourceDocuments, 2);
     assert.equal(report.parentSlices >= 2, true);
+    assert.equal(report.chunks, 0);
+    assert.equal(
+      report.imported.some((item) => item.sourceDocumentPath.includes('AI伴学助手用户指南.docx')),
+      true,
+    );
+    assert.equal(
+      report.imported.some((item) => item.sourceDocumentPath.includes('EduSoho教培线用户指南.docx')),
+      true,
+    );
+    assert.equal(existsSync(join(knowledgeRoot, 'indexes', 'chunk-quality-report.json')), true);
+    assert.equal(existsSync(join(knowledgeRoot, 'reports', 'source-quality-report.json')), true);
+    for (const imported of report.imported) {
+      assert.equal(existsSync(imported.draftRoot), true);
+    }
+
+    const activeWhitepaperSlices = findGeneratedMarkdown(join(knowledgeRoot, 'whitepapers'));
+    assert.equal(activeWhitepaperSlices.length, 0, 'safe init must not create active whitepaper slices');
+
+    const aiResult = searchKnowledge({
+      workspaceRoot: workspace,
+      query: '学习日晚上8点没有完成任务会怎么提醒',
+      limit: 5,
+    });
+
+    assert.equal(aiResult.results.length, 0);
+  } finally {
+    cleanup(workspace);
+    cleanup(sourceDir);
+  }
+});
+
+test('source intake keeps same filename with different content in separate hash paths', () => {
+  const workspace = tempWorkspace();
+  const sourceDir = tempWorkspace();
+  try {
+    const sourcePath = join(sourceDir, '产品白皮书.md');
+    writeFileSync(sourcePath, '# 产品白皮书\n\n版本一会在晚上8点提醒未完成任务。\n', 'utf8');
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+    const firstReport = JSON.parse(readFileSync(join(workspace, 'knowledge', 'indexes', 'ingest-report.json'), 'utf8'));
+    const firstStored = firstReport.imported[0].sourceDocumentPath;
+    const firstStoredAbsolute = join(workspace, firstStored);
+
+    writeFileSync(sourcePath, '# 产品白皮书\n\n版本二支持按课程名称搜索课程。\n', 'utf8');
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+    const secondReport = JSON.parse(readFileSync(join(workspace, 'knowledge', 'indexes', 'ingest-report.json'), 'utf8'));
+    const secondStored = secondReport.imported[0].sourceDocumentPath;
+
+    assert.notEqual(firstStored, secondStored);
+    assert.match(readFileSync(firstStoredAbsolute, 'utf8'), /版本一/);
+    assert.match(readFileSync(join(workspace, secondStored), 'utf8'), /版本二/);
+  } finally {
+    cleanup(workspace);
+    cleanup(sourceDir);
+  }
+});
+
+test('legacy active publish is explicit and visible', () => {
+  const workspace = tempWorkspace();
+  const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
+  try {
+    const docxPath = join(sourceDir, 'AI伴学助手用户指南.docx');
+    const trainingDocxPath = join(sourceDir, 'EduSoho教培线用户指南.docx');
+    writeMinimalDocx(docxPath, [
+      { style: '2', text: 'AI伴学助手' },
+      { style: '3', text: '督学提醒' },
+      { text: '学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。' },
+    ]);
+    writeMinimalDocx(trainingDocxPath, [
+      { style: '2', text: 'EduSoho教培线' },
+      { style: '3', text: '课程搜索' },
+      { text: '课程列表的搜索栏支持按照课程名称、课程编号和课程分类搜索课程。' },
+    ]);
+
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir, legacyActivePublish: true });
+    const knowledgeRoot = join(workspace, 'knowledge');
+    const report = JSON.parse(readFileSync(join(knowledgeRoot, 'indexes', 'ingest-report.json'), 'utf8'));
+
+    assert.equal(report.compatibility_mode, 'legacy_active_publish');
+    assert.equal(report.quality_gate_bypassed, true);
     assert.equal(report.chunks >= 2, true);
-    assert.equal(existsSync(join(knowledgeRoot, '_sources', 'whitepapers', 'AI伴学助手用户指南.docx')), true);
-    assert.equal(existsSync(join(knowledgeRoot, '_sources', 'whitepapers', 'EduSoho教培线用户指南.docx')), true);
 
     const aiResult = searchKnowledge({
       workspaceRoot: workspace,
@@ -296,12 +384,12 @@ test('knowledge init does not overwrite edited parent slices unless forced', () 
       { text: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。' },
     ]);
 
-    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir, legacyActivePublish: true });
     const generatedSlice = findFirstGeneratedMarkdown(join(workspace, 'knowledge', 'whitepapers'));
     const editedContent = `${readFileSync(generatedSlice, 'utf8')}\n\n人工修订保留。\n`;
     writeFileSync(generatedSlice, editedContent, 'utf8');
 
-    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir });
+    initKnowledgeWorkspace({ workspaceRoot: workspace, sourceDir, legacyActivePublish: true });
 
     assert.equal(readFileSync(generatedSlice, 'utf8'), editedContent);
   } finally {
@@ -557,16 +645,691 @@ function escapeXml(value) {
 }
 
 function findFirstGeneratedMarkdown(root) {
-  const entries = execFileSync('find', [root, '-type', 'f', '-name', '*.md'], { encoding: 'utf8' })
+  const entries = findGeneratedMarkdown(root);
+  assert.equal(entries.length > 0, true);
+  return entries[0];
+}
+
+function findGeneratedMarkdown(root) {
+  if (!existsSync(root)) {
+    return [];
+  }
+  return execFileSync('find', [root, '-type', 'f', '-name', '*.md'], { encoding: 'utf8' })
     .trim()
     .split('\n')
     .filter(Boolean)
     .filter((path) => !path.endsWith('/README.md'))
     .sort();
-  assert.equal(entries.length > 0, true);
-  return entries[0];
 }
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+test('knowledge quality audit detects empty body and missing provenance', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const faqDir = join(workspace, 'knowledge', 'faq', 'general');
+    mkdirSync(faqDir, { recursive: true });
+    // Slice with no body content and no source_document
+    writeFileSync(
+      join(faqDir, 'empty-faq.md'),
+      `---
+id: kb_faq_general_empty
+title: 空 FAQ
+type: faq
+module: general
+intent: how_to
+source_type: faq
+confidence: medium
+status: active
+visibility: internal
+product_versions: []
+related_terms: []
+related_repos: []
+last_verified_at: 2026-06-13
+owner: knowledge-admin
+---
+
+# 空 FAQ
+
+## 问题
+
+## 答案
+`,
+      'utf8',
+    );
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+    const report = auditKnowledgeQuality({ workspaceRoot: workspace, gate: 'warn' });
+    const codes = report.issues.map((i) => i.code);
+    assert.equal(codes.includes('missing_source_document'), true, 'expected missing_source_document');
+    assert.equal(codes.includes('missing_source_document_id'), true, 'expected missing_source_document_id');
+    assert.equal(codes.includes('empty_body') || codes.includes('heading_only'), true, 'expected empty body issue');
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge repair plan can be generated and applied for safe actions', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const faqDir = join(workspace, 'knowledge', 'faq', 'general');
+    mkdirSync(faqDir, { recursive: true });
+    const slicePath = join(faqDir, 'low-signals.md');
+    writeFileSync(
+      slicePath,
+      `---
+id: kb_faq_general_lowsignals
+title: 弱信号 FAQ
+type: faq
+module: general
+intent: how_to
+source_type: faq
+confidence: medium
+status: active
+visibility: internal
+product_versions: []
+related_terms:
+  - 一个
+related_repos: []
+last_verified_at: 2026-06-13
+owner: knowledge-admin
+source_document: knowledge/_sources/whitepapers/test.docx
+source_document_id: src_test
+source_pages: []
+section_path:
+  - 弱信号 FAQ
+---
+
+# 弱信号 FAQ
+
+## 问题
+
+弱信号
+
+## 答案
+
+弱信号答案
+`,
+      'utf8',
+    );
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+    const report = auditKnowledgeQuality({ workspaceRoot: workspace });
+    const path = writeKnowledgeQualityReport({ workspaceRoot: workspace, report });
+    assert.equal(existsSync(path), true);
+    const plan = generateKnowledgeRepairPlan({ workspaceRoot: workspace });
+    assert.equal(plan.actions.length > 0, true);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('safe merge repair action mutates adjacent draft slices instead of silently skipping', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const draftRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_merge_repair');
+    mkdirSync(draftRoot, { recursive: true });
+    writeFileSync(join(draftRoot, '001-short.md'), approvedDraftMarkdown('drf_merge_001', 'draft', 'warn').replace('当审核通过后，知识库发布命令会把通过审核的草稿写入正式知识目录，并保留来源和审核信息。', '短内容一。'), 'utf8');
+    writeFileSync(join(draftRoot, '002-short.md'), approvedDraftMarkdown('drf_merge_002', 'draft', 'warn').replace('当审核通过后，知识库发布命令会把通过审核的草稿写入正式知识目录，并保留来源和审核信息。', '短内容二。'), 'utf8');
+
+    const quality = auditKnowledgeQuality({ workspaceRoot: workspace });
+    const qualityPath = writeKnowledgeQualityReport({ workspaceRoot: workspace, report: quality });
+    assert.equal(existsSync(qualityPath), true);
+    const plan = generateKnowledgeRepairPlan({ workspaceRoot: workspace });
+    assert.equal(plan.actions.some((action) => action.actionType === 'merge_adjacent_short_slices' && action.safety === 'safe'), true);
+    const planPath = writeKnowledgeRepairPlan({ workspaceRoot: workspace, plan, timestamp: 'merge-test' });
+    const result = applyKnowledgeRepairPlan({ workspaceRoot: workspace, planPath });
+
+    assert.equal(result.appliedActions.some((action) => action.actionType === 'merge_adjacent_short_slices'), true);
+    assert.equal(result.changedFiles.length >= 2, true);
+    assert.match(readFileSync(join(draftRoot, '001-short.md'), 'utf8'), /短内容一[\s\S]*短内容二/);
+    assert.match(readFileSync(join(draftRoot, '002-short.md'), 'utf8'), /status: archived/);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge review records are written and statuses change', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const dir = join(workspace, 'knowledge', 'tickets', 'solved-cases', 'general');
+    mkdirSync(dir, { recursive: true });
+    const slicePath = join(dir, 'sample.md');
+    writeFileSync(
+      slicePath,
+      `---
+id: kb_case_solved_general_sample
+title: 示例 Case
+type: solved_case
+module: general
+intent: troubleshooting
+source_type: solved_case
+confidence: medium
+status: review_required
+visibility: internal
+product_versions: []
+related_terms:
+  - 示例
+related_repos: []
+last_verified_at: 2026-06-13
+owner: knowledge-admin
+---
+
+# 示例
+
+## 用户原始问题
+
+## 解决方案
+
+`,
+      'utf8',
+    );
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+    // Use a known source id from the existing pipeline (not really required for review)
+    // We need to create a draft root with at least one slice in _pipeline for reviewDraftSlices.
+    const draftsRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_test_001');
+    mkdirSync(draftsRoot, { recursive: true });
+    writeFileSync(
+      join(draftsRoot, '001-test.md'),
+      `---
+id: drf_test_001
+title: 测试
+type: whitepaper_slice
+module: general
+intent: product_rule
+source_type: whitepaper
+confidence: medium
+status: draft
+visibility: internal
+product_versions: []
+related_terms: []
+related_repos: []
+last_verified_at: 2026-06-13
+owner: knowledge-admin
+source_document_id: src_test_001
+source_block_ids:
+  - blk_test_001_00001
+section_path: []
+chunking_strategy: semantic-section-v2
+pipeline_stage: slice
+pipeline_status: draft
+quality_status: unchecked
+---
+
+# 测试
+
+## 核心内容
+
+Test body.
+`,
+      'utf8',
+    );
+    const record = reviewDraftSlices({
+      workspaceRoot: workspace,
+      sourceDocumentId: 'src_test_001',
+      action: 'approve',
+      reviewer: 'test-user',
+      notes: 'approve for test',
+    });
+    assert.equal(record.action, 'approve');
+    assert.equal(record.reviewedIds.length, 1);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge quality gate evaluator distinguishes warn and strict', () => {
+  const report = {
+    version: 1,
+    workspaceRoot: '/tmp',
+    knowledgeRoot: '/tmp/knowledge',
+    generatedAt: new Date().toISOString(),
+    thresholds: { minBodyChars: 80, maxParentChars: 2800, maxUnknownBlockRatio: 0.3, minRelatedTerms: 3, maxDuplicateNormalizedHashes: 1, multiTopicHeadingThreshold: 3 },
+    inspected: { sourceDocuments: 0, draftSlices: 0, publishedSlices: 0, chunks: 0 },
+    stageSummaries: {},
+    severityCounts: { info: 0, warn: 0, error: 0 },
+    issueCounts: {},
+    issues: [],
+    recommendedActions: [],
+    gate: 'warn',
+  };
+  // Off: passes
+  const off = evaluateQualityGate(report, 'off');
+  assert.equal(off.passed, true);
+  // Warn with no errors: passes
+  const warnOk = evaluateQualityGate(report, 'warn');
+  assert.equal(warnOk.passed, true);
+  // Strict with errors: fails
+  report.severityCounts.error = 1;
+  const strictFail = evaluateQualityGate(report, 'strict');
+  assert.equal(strictFail.passed, false);
+  assert.equal(strictFail.exitCode, 2);
+});
+
+test('solved case review accepts relative path without leading slash (regression for case-review path check)', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const dir = join(workspace, 'knowledge', 'tickets', 'solved-cases', 'general');
+    mkdirSync(dir, { recursive: true });
+    const slicePath = join(dir, 'sample.md');
+    writeFileSync(
+      slicePath,
+      `---
+id: kb_case_solved_general_regression
+title: 回归 Case
+type: solved_case
+module: general
+intent: troubleshooting
+source_type: solved_case
+confidence: medium
+status: review_required
+visibility: internal
+product_versions: []
+related_terms:
+  - 回归
+related_repos: []
+last_verified_at: 2026-06-13
+owner: knowledge-admin
+---
+
+# 回归
+
+## 用户原始问题
+
+## 解决方案
+`,
+      'utf8',
+    );
+    // The user supplies a relative path (no leading slash) — must not throw path-not-under-solved-cases
+    const record = approveSolvedCase({
+      workspaceRoot: workspace,
+      pathOrId: 'knowledge/tickets/solved-cases/general/sample.md',
+      reviewer: 'tester',
+      notes: 'approve',
+    });
+    assert.equal(record.action, 'approve');
+    assert.equal(record.nextStatus, 'active');
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge publish reads pipeline_status back from frontmatter (regression for parseMarkdownDocument pipeline fields)', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    // Create a draft with pipeline_status: approved
+    const draftsRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_publish_test');
+    mkdirSync(draftsRoot, { recursive: true });
+    writeFileSync(
+      join(draftsRoot, '001-test.md'),
+      `---
+id: drf_publish_test_001
+title: 测试发布
+type: whitepaper_slice
+module: general
+intent: product_rule
+source_type: whitepaper
+confidence: medium
+status: draft
+visibility: internal
+product_versions: []
+related_terms: []
+related_repos: []
+last_verified_at: 2026-06-13
+owner: knowledge-admin
+source_document_id: src_publish_test
+source_block_ids:
+  - blk_publish_test_00001
+section_path: []
+chunking_strategy: semantic-section-v2
+pipeline_stage: slice
+pipeline_status: approved
+quality_status: ok
+---
+
+# 测试发布
+
+## 核心内容
+
+This is a meaningful content body that exceeds the minimum body length requirement for an answer-bearing slice.
+
+## 原文来源
+
+- source_document_id: src_publish_test
+`,
+      'utf8',
+    );
+    writeKnowledgeQualityReport({
+      workspaceRoot: workspace,
+      report: emptyQualityReport(workspace),
+    });
+    const report = publishApprovedDraftSlices({ workspaceRoot: workspace, sourceDocumentId: 'src_publish_test', qualityGate: 'warn' });
+    // The approved draft should be picked up and published to the formal tree
+    assert.equal(report.publishedIds.length >= 1, true, `expected >=1 published, got ${report.publishedIds.length}`);
+    assert.equal(report.indexDirty, true);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge publish rejects ok quality status when no audit report exists', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const draftsRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_no_audit');
+    mkdirSync(draftsRoot, { recursive: true });
+    writeFileSync(join(draftsRoot, '001-test.md'), approvedDraftMarkdown('drf_no_audit_001', 'approved', 'ok'), 'utf8');
+    rmSync(join(workspace, 'knowledge', 'indexes', 'chunk-quality-report.json'), { force: true });
+    const report = publishApprovedDraftSlices({ workspaceRoot: workspace, sourceDocumentId: 'src_no_audit', qualityGate: 'warn' });
+    assert.equal(report.publishedIds.length, 0);
+    assert.deepEqual(report.rejectedIds, ['drf_no_audit_001']);
+    assert.match(report.warningOverrides[0].reason, /quality audit report is required/);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('draft slicer splits oversized heading group into multiple draft files', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const blocks = [
+      normalizedBlock('src_split', 1, 'heading', '课程搜索'),
+      normalizedBlock('src_split', 2, 'paragraph', '课程搜索支持按课程名称进行精确查询。'.repeat(6)),
+      normalizedBlock('src_split', 3, 'paragraph', '课程搜索支持按课程编号进行精确查询。'.repeat(6)),
+      normalizedBlock('src_split', 4, 'paragraph', '课程搜索支持按课程分类进行筛选查询。'.repeat(6)),
+    ];
+    const result = buildDraftSlices({
+      workspaceRoot: workspace,
+      sourceDocumentId: 'src_split',
+      sourceTitle: 'EduSoho教培线用户指南',
+      sourceKind: 'whitepaper_docx',
+      sourceDocumentPath: 'knowledge/_sources/whitepapers/test.docx',
+      normalizedBlocks: blocks,
+      maxParentChars: 170,
+    });
+    assert.equal(result.draftPaths.length > 1, true);
+    assert.equal(result.report.uncoveredSourceBlockIds.length, 0);
+    for (const draftPath of result.draftPaths) {
+      assert.doesNotMatch(readFileSync(draftPath, 'utf8'), /slice-size:exceeded/);
+    }
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('draft slicer keeps single oversized paragraph and records manual split warning', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const blocks = [
+      normalizedBlock('src_manual_split', 1, 'heading', '超长段落'),
+      normalizedBlock('src_manual_split', 2, 'paragraph', '这是一个无法安全拆开的长段落。'.repeat(40)),
+    ];
+    const result = buildDraftSlices({
+      workspaceRoot: workspace,
+      sourceDocumentId: 'src_manual_split',
+      sourceTitle: '超长白皮书',
+      sourceKind: 'whitepaper_docx',
+      normalizedBlocks: blocks,
+      maxParentChars: 120,
+    });
+    assert.equal(result.draftPaths.length, 1);
+    assert.equal(result.report.warnings.some((warning) => /manual_split_required/.test(warning)), true);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('review approval keeps draft non-active until publish', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const draftsRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_review_semantics');
+    mkdirSync(draftsRoot, { recursive: true });
+    const draftPath = join(draftsRoot, '001-test.md');
+    writeFileSync(draftPath, approvedDraftMarkdown('drf_review_semantics_001', 'draft'), 'utf8');
+    const record = reviewDraftSlices({
+      workspaceRoot: workspace,
+      sourceDocumentId: 'src_review_semantics',
+      action: 'approve',
+      reviewer: 'tester',
+      notes: 'approved',
+    });
+    const parsed = parseMarkdownDocument(readFileSync(draftPath, 'utf8'), draftPath);
+    assert.equal(record.reviewedIds.length, 1);
+    assert.equal(parsed.frontmatter.status, 'draft');
+    assert.equal(parsed.frontmatter.pipeline_status, 'approved');
+    assert.match(parsed.frontmatter.review_id, /^rev_/);
+    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '测试发布' }).results.length, 0);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('publish blocks quality error draft', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const draftsRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_quality_error');
+    mkdirSync(draftsRoot, { recursive: true });
+    writeFileSync(join(draftsRoot, '001-test.md'), approvedDraftMarkdown('drf_quality_error_001', 'approved', 'error'), 'utf8');
+    const report = publishApprovedDraftSlices({ workspaceRoot: workspace, sourceDocumentId: 'src_quality_error' });
+    assert.equal(report.publishedIds.length, 0);
+    assert.deepEqual(report.rejectedIds, ['drf_quality_error_001']);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge eval matches expected document and keywords from source_document and excerpt', () => {
+  const workspace = tempWorkspace();
+  const questions = join(workspace, 'questions.json');
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const whitepaperDir = join(workspace, 'knowledge', 'whitepapers', 'ai-companion');
+    mkdirSync(whitepaperDir, { recursive: true });
+    writeFileSync(
+      join(whitepaperDir, 'reminder.md'),
+      `---
+id: kb_whitepaper_ai_reminder
+title: 督学提醒
+type: whitepaper_slice
+module: ai-companion
+intent: product_rule
+source_type: whitepaper
+confidence: medium
+status: active
+visibility: internal
+product_versions: []
+related_terms:
+  - AI伴学助手
+  - 督学提醒
+related_repos: []
+last_verified_at: 2999-01-01
+owner: product
+source_document: knowledge/_sources/whitepapers/AI伴学助手用户指南.docx
+source_document_id: src_ai
+source_pages: []
+section_path:
+  - 督学提醒
+chunking_strategy: semantic-section-v1
+---
+
+# 督学提醒
+
+## 核心内容
+
+学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。
+`,
+      'utf8',
+    );
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+    writeFileSync(
+      questions,
+      JSON.stringify([
+        {
+          id: 'ai-reminder',
+          question: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
+          shouldHit: true,
+          expectedDocument: 'AI伴学助手用户指南.docx',
+          expectedKeywords: ['APP 通知'],
+        },
+      ]),
+      'utf8',
+    );
+    const report = runKnowledgeEval({ workspaceRoot: workspace, questionsPath: questions });
+    assert.equal(report.failures.length, 0);
+    assert.equal(report.perQuestion[0].topEvidence.sourceDocument, 'knowledge/_sources/whitepapers/AI伴学助手用户指南.docx');
+    assert.match(report.perQuestion[0].topEvidence.excerptPreview, /APP 通知/);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge eval loads YAML question files', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const whitepaperDir = join(workspace, 'knowledge', 'whitepapers', 'edusoho-training');
+    mkdirSync(whitepaperDir, { recursive: true });
+    writeFileSync(
+      join(whitepaperDir, 'course-search.md'),
+      `---
+id: kb_whitepaper_yaml_course_search
+title: 课程搜索规则
+type: whitepaper_slice
+module: edusoho-training
+intent: product_rule
+source_type: whitepaper
+confidence: medium
+status: active
+visibility: internal
+product_versions: []
+related_terms:
+  - EduSoho
+  - 课程搜索
+  - 课程名称
+related_repos: []
+last_verified_at: 2999-01-01
+owner: knowledge-admin
+source_document: knowledge/_sources/whitepapers/EduSoho教培线用户指南.docx
+source_document_id: src_yaml_eval
+source_block_ids:
+  - blk_yaml_00001
+section_path:
+  - 课程搜索
+quality_status: ok
+---
+
+# 课程搜索规则
+
+EduSoho 教培线课程搜索栏支持按课程名称搜索课程，并会返回匹配课程。
+`,
+      'utf8',
+    );
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+    const questionsPath = join(workspace, 'eval-questions.yaml');
+    writeFileSync(
+      questionsPath,
+      `questions:
+  - id: yaml_course_search
+    question: EduSoho 教培线课程搜索栏支持按什么搜索课程？
+    shouldHit: true
+    expectedDocument: EduSoho教培线
+    expectedKeywords:
+      - 课程名称
+`,
+      'utf8',
+    );
+    const report = runKnowledgeEval({ workspaceRoot: workspace, questionsPath });
+    assert.equal(report.questionCount, 1);
+    assert.equal(report.failures.length, 0);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+
+function normalizedBlock(sourceId, order, type, text) {
+  return {
+    block_id: `nrm_${sourceId}_${String(order).padStart(5, '0')}`,
+    source_document_id: sourceId,
+    source_block_id: `blk_${sourceId}_${String(order).padStart(5, '0')}`,
+    order,
+    type,
+    text,
+    normalized_text: text,
+    section_path: ['课程搜索'],
+    included_in_slice: true,
+  };
+}
+
+function approvedDraftMarkdown(id, pipelineStatus, qualityStatus = 'ok') {
+  return `---
+id: ${id}
+title: 测试发布
+type: whitepaper_slice
+module: general
+intent: product_rule
+source_type: whitepaper
+confidence: medium
+status: draft
+visibility: internal
+product_versions: []
+related_terms:
+  - 测试发布
+  - 发布流程
+  - 审核流程
+related_repos: []
+last_verified_at: 2999-01-01
+owner: knowledge-admin
+source_document: knowledge/_sources/whitepapers/test.docx
+source_document_id: src_review_semantics
+source_block_ids:
+  - blk_review_00001
+section_path:
+  - 测试发布
+chunking_strategy: semantic-section-v2
+pipeline_stage: slice
+pipeline_status: ${pipelineStatus}
+quality_status: ${qualityStatus}
+---
+
+# 测试发布
+
+## 核心内容
+
+当审核通过后，知识库发布命令会把通过审核的草稿写入正式知识目录，并保留来源和审核信息。
+`;
+}
+
+function emptyQualityReport(workspace) {
+  return {
+    version: 1,
+    workspaceRoot: workspace,
+    knowledgeRoot: join(workspace, 'knowledge'),
+    generatedAt: '2026-06-14T00:00:00.000Z',
+    thresholds: {
+      minBodyChars: 80,
+      maxParentChars: 2800,
+      maxUnknownBlockRatio: 0.3,
+      minRelatedTerms: 3,
+      maxDuplicateNormalizedHashes: 1,
+      multiTopicHeadingThreshold: 3,
+    },
+    inspected: { sourceDocuments: 0, draftSlices: 1, publishedSlices: 0, chunks: 0 },
+    stageSummaries: {},
+    severityCounts: { info: 0, warn: 0, error: 0 },
+    issueCounts: {},
+    issues: [],
+    recommendedActions: [],
+    gate: 'warn',
+  };
 }

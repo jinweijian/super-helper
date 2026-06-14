@@ -135,6 +135,21 @@ Default behavior:
 - MVP 不阻塞初始化成功，但必须输出 warning、report path 和 issue count。
 - 后续可通过 `--quality-gate strict` 或配置开启 error 阻塞。
 
+Implementation review addendum:
+
+- `knowledge init` must not silently promote unchecked draft slices to `status: active` or `quality_status: ok`.
+- If a one-command compatibility path is kept, it must be explicit, for example `--legacy-active-publish`, and the command output must say that it bypasses normal review. The default path should produce source artifacts, normalized blocks, draft slices, quality reports, and indexes only for already-published formal documents.
+- Review and publish are separate state transitions. `knowledge review --action approve` may set `pipeline_status: approved` on a draft, but it must not set the draft Markdown `status: active`; `status: active` belongs only to formal published knowledge written by `knowledge publish`.
+- `quality_status: ok` can only be assigned after a quality audit has run and no blocking issues apply. String replacement from `unchecked` to `ok` without reading the audit result is forbidden.
+- `knowledge init` and `knowledge update` must accept `--quality-gate warn|strict|off`, default to `warn`, write the report unless `off`, and print issue counts. `warn` exits zero while showing issues; `strict` exits non-zero on error severity.
+- `source-quality-report.json` must be generated from actual extract and normalize artifacts. It cannot depend on a pre-existing report file that no command writes.
+- `chunk-quality-report.json` must audit derived chunks by reading `chunks.jsonl`, not only parent Markdown. It must detect orphan chunks, missing parent slices, and active parents with no chunk.
+- DOCX `table_lost` must be emitted when a DOCX actually contains table XML (`<w:tbl>`), not for every DOCX unconditionally.
+- Oversized draft slices must be split into multiple draft files when safe boundaries exist. Adding a marker comment without splitting is only allowed as a warning when no safe boundary exists.
+- Evidence Judge score must be calibrated with weighted components that sum to a bounded score. Summing seven 0-1 components and clamping to 1.0 is not acceptable because it destroys threshold meaning.
+- Deep Query pivot helpers must be wired into runtime retry orchestration. A pure pivot function alone does not satisfy the retry/pivot requirement.
+- The acceptance command must execute behavior scenarios, not only static config checks. Static checks may be one scenario, but direct whitepaper hit, no-hit escalation, implementation-detail escalation, and solved-case curation smoke must also be represented.
+
 Alternatives considered:
 
 - 在 ingest 时直接丢弃低质量 slice。暂不采用：可能误删有价值内容；先报告、再由人工确认。

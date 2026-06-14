@@ -163,6 +163,13 @@ export interface DiagnosticRequestContext {
     likelyPaths: string[];
     avoidAssumptions: string[];
     correctionActions: string[];
+    attempt?: number;
+    maxAttempts?: number;
+    triedQueries?: string[];
+    failedReasons?: string[];
+    nextPivot?: string;
+    stopReason?: 'max_attempts' | 'sufficient_evidence' | 'needs_user' | 'human_escalation';
+    previousArtifactTargets?: string[];
   };
 }
 

@@ -19,7 +19,7 @@ embedding 不应复用 Agent 模型链路。用户计划优先使用 MiniMax emb
 **Goals:**
 
 - 新增统一 `EmbeddingProvider` 接口，支持 document embedding、query embedding、batch 和 provider metadata。
-- 第一轮实现 MiniMax embedding adapter。
+- 第一轮创建 MiniMax provider 模块和配置入口；真实 MiniMax 网络 adapter 只有在官方 MiniMax embedding API 文档核对完成后才能实现。若官方文档不可得，MiniMax 只能作为 scaffold/fake-contract provider，并用明确 unsupported/docs-required 错误阻止真实调用。
 - 第一轮实现 Gemini embedding adapter 或至少完成同等 adapter contract 和 fake HTTP 测试；若真实 API 细节无法确认，必须在任务中标记需要核对官方文档后再编码。
 - 为千问/Qwen 预留 adapter 文件、provider id、配置形态和测试入口，但不要求真实可调用。
 - 将 Agent model provider 与 embedding provider 配置分离。
@@ -34,6 +34,24 @@ embedding 不应复用 Agent 模型链路。用户计划优先使用 MiniMax emb
 - 不让 embedding provider 调用 product Agent prompt。
 - 不让 embedding provider 生成最终用户答案。
 - 不把 provider secret 写入日志、报告或 knowledge artifact。
+
+## Provider Documentation Baseline
+
+Access date for this design audit: 2026-06-14.
+
+真实 provider adapter 的 request/response shape 不得依赖模型记忆、第三方 SDK 文档或历史博客。实现者必须以 provider 官方文档为准，并在 `implementation-notes.md` 重新记录访问日期和核对结果。
+
+| Provider | Official documentation baseline | Implementation constraint |
+| --- | --- | --- |
+| MiniMax | MiniMax official docs index `https://platform.minimaxi.com/docs/llms.txt`、API overview `https://platform.minimaxi.com/docs/api-reference/api-overview`、rate limits `https://platform.minimaxi.com/docs/guides/rate-limits`、error codes `https://platform.minimaxi.com/docs/api-reference/errorcode` were checked during spec hardening. The current docs index does not expose an embedding-specific API page or embedding OpenAPI spec. | Do not infer `embo-01`, `/embeddings`, dimensions, auth, response vector path, or batch limits from Spring AI, LangChain, old code, or memory. Unless the implementer finds current official MiniMax embedding docs or the user supplies them, MiniMax real network calls must remain unsupported/scaffolded and covered by fake/scaffold tests only. |
+| Gemini | Google Gemini official guide `https://ai.google.dev/gemini-api/docs/embeddings` and API reference `https://ai.google.dev/api/embeddings` document `models.embedContent`, `models.batchEmbedContents`, `x-goog-api-key`, `embedding.values` / `embeddings[]`, task types, output dimensionality, and model names such as `gemini-embedding-2` / `gemini-embedding-001`. | Gemini real adapter may be implemented after the implementer re-verifies the current docs and records endpoint, auth, request body, response vector path, dimensions behavior, task/document-query behavior, batch limits, and error handling. |
+| Qwen / Alibaba Cloud Model Studio | Alibaba Cloud Model Studio official embedding docs `https://www.alibabacloud.com/help/en/model-studio/embedding` document OpenAI-compatible embedding calls, `DASHSCOPE_API_KEY`, regional base URLs, `text-embedding-v4`, custom dimensions, and batch/spec limits. | Qwen remains out of scope for real calls in this change. These docs may inform a future Qwen change, but this change must keep Qwen as scaffold unless the user explicitly expands scope and OpenSpec is updated first. |
+
+Documentation freshness rule:
+
+- If any official provider docs differ from this baseline, update this OpenSpec before coding provider-specific behavior.
+- If official docs are unavailable, provider-specific network code must stop. Implement only shared interfaces, fake provider behavior, scaffold errors, and tests that prove the block is safe.
+- Third-party references may be recorded as clues, but they cannot satisfy the docs gate.
 
 ## Decisions
 
@@ -76,23 +94,25 @@ Decision:
 
 - 在 `SuperHelperConfig` 中新增 `embedding` 节点。
 - 默认 `enabled: false`，避免 `knowledge:init` 或测试无意调用远程 API。
-- 典型配置：
+- MiniMax docs-gated setup template. This is not a ready-to-run default until official MiniMax embedding docs are verified:
 
-```json
+```jsonc
 {
   "embedding": {
     "enabled": false,
     "provider": "minimax",
-    "model": "embo-01",
-    "baseUrl": "https://api.minimaxi.com/v1",
+    "model": "<official-minimax-embedding-model>",
+    "baseUrl": "<official-minimax-embedding-base-url>",
     "apiKeyEnv": "MINIMAX_API_KEY",
-    "dimensions": 1536,
+    "dimensions": 0,
     "distance": "cosine",
     "batchSize": 16,
     "timeoutMs": 60000
   }
 }
 ```
+
+Before `enabled` can become `true`, `model`, `baseUrl` or `endpoint`, and `dimensions` must be replaced with values confirmed from official MiniMax embedding docs.
 
 - Gemini 示例配置使用 provider `gemini`，模型名和 endpoint 必须通过配置提供，不在核心代码中作为不可变常量。
 - Qwen 示例配置使用 provider `qwen`，第一轮可以只保留 unsupported adapter scaffold。
@@ -246,6 +266,57 @@ Rationale:
 - 当前用户仍在研究多路召回，embedding adapter 不应该提前定义 hybrid 检索策略。
 - 先把 provider 和 vector artifact 做稳，后续检索改造风险更低。
 
+### 8. 执行护栏和完成闸门是本设计的一部分
+
+Decision:
+
+- 本 change 不能只按 checklist 勾选完成。实现者必须按下面的执行流留下证据：
+
+```text
+官方文档核对
+  -> 写失败测试 RED
+  -> 实现最小代码 GREEN
+  -> fake provider / fake fetch 验证
+  -> vector fixture build 验证
+  -> 安全/隐私/diff 审计
+  -> fresh verification
+  -> implementation-notes 记录证据
+```
+
+- 如果执行环境有 Superpowers skills，必须在相关阶段使用：
+  - `test-driven-development`: provider adapter、metadata helper、vector builder、CLI dispatch、redaction、compatibility 行为必须先写失败测试。
+  - `systematic-debugging`: provider 文档不一致、维度不一致、timeout、rate limit、malformed response、vector artifact mismatch 等问题必须先定位根因，不能猜修。
+  - `verification-before-completion`: 标记任务完成前必须重新跑本 change 要求的验证命令，并读取输出。
+- 如果执行环境没有这些 skills，必须执行等价纪律，并在 implementation notes 中记录对应证据。
+- MiniMax/Gemini 的真实 request/response shape 不能凭模型记忆实现。实现者必须记录官方文档 URL、访问日期、确认的 endpoint/auth/request/response/dimensions/batch 限制。如果无法访问官方文档，必须停下 provider-specific coding，改为 scaffold/fake contract，并更新 OpenSpec。
+- Qwen 在本 change 默认只允许 scaffold；任何真实 Qwen 网络调用都需要用户显式扩 scope。
+- 默认命令和默认测试不得触发远程 embedding API。真实 smoke test 必须是显式 opt-in。
+
+Completion gates:
+
+- **Gate A: Provider docs gate** - MiniMax/Gemini adapter 编码前，implementation notes 必须列出官方文档核对结果；否则只能提交 unsupported/scaffold。
+- **Gate B: Adapter contract gate** - 每个 provider 必须有 fake fetch 或 fake provider tests 覆盖 success、missing credentials、timeout/provider error、malformed response、dimension mismatch。
+- **Gate C: Vector artifact gate** - `vectors.jsonl`、`vector-manifest.json`、build report 必须由 fake provider fixture 构建并验证 provider/model/dimensions/distance/text hash。
+- **Gate D: Privacy gate** - CLI、errors、reports、manifest、logs 必须证明不包含 API key、headers、cookies、raw chunk text、raw vector values。
+- **Gate E: Compatibility gate** - provider/model/dimensions/distance 任一变化必须让旧 vector index 被拒绝或标记 rebuild-required。
+- **Gate F: No-network default gate** - `pnpm test`、`knowledge update`、普通启动命令必须证明不会调用真实 MiniMax/Gemini/Qwen。
+- **Gate G: Diff boundary gate** - provider 网络逻辑只能在 `src/embedding/`；vector artifact 逻辑只能在 `src/knowledge/`；CLI 只能解析和委托；runtime/gateway/agents 不得混入 embedding 业务决策。
+
+Anti-fake-complete rules:
+
+- 文件存在不等于完成；必须有测试证明 public API 行为。
+- mock/fake happy path 通过不等于 provider 完成；必须覆盖错误、维度、batch、redaction 和 malformed response。
+- provider smoke 命令存在不等于真实验收完成；必须记录是否实际执行、使用哪个 provider/model/dimensions、输出是否脱敏。
+- vector records 写出来不等于可用；必须证明 manifest compatibility 和 text hash stale 检测。
+- task checkbox 勾选不等于完成；必须有 implementation notes 和 fresh verification transcript。
+- MiniMax provider 文件存在不等于 MiniMax adapter 完成；在官方 MiniMax embedding docs 不可得时，完成标准是“安全 scaffold + 明确 docs-required/unsupported 行为 + fake/scaffold 测试”，不是猜一个 endpoint 跑通。
+- Gemini adapter 文件存在不等于 Gemini adapter 完成；必须证明实现与当前 Google Gemini API docs 的 endpoint、auth、task/document-query 行为、response path 和 dimensions 行为一致。
+
+Rationale:
+
+- embedding adapter 的失败模式经常不是编译错误，而是“看似能跑、真实语义错”：用错 endpoint、混用 provider、维度不一致、旧向量误用、无意付费调用、泄露原文或 secret。
+- 把执行纪律写入设计，可以减少不同模型/执行者只做表面实现的概率。
+
 ## Risks / Trade-offs
 
 - [Risk] MiniMax/Gemini API endpoint 或响应格式变化。 -> Mitigation: 任务要求编码前核对官方文档；adapter 测试用 fake HTTP 固定 contract，真实 smoke test 独立运行。
@@ -254,6 +325,7 @@ Rationale:
 - [Risk] 向量索引体积变大。 -> Mitigation: vectors.jsonl 为派生文件，可删除重建；第一阶段不引入外部 DB。
 - [Risk] provider adapter 抽象过度。 -> Mitigation: 只定义 query/document/batch/metadata/error 最小接口，不做复杂插件系统。
 - [Risk] 普通测试触发付费调用。 -> Mitigation: 单测只使用 fake provider；真实调用必须显式 CLI flag。
+- [Risk] 执行者只按文件/接口清单勾选，遗漏真实边界行为。 -> Mitigation: 本 change 增加 red/green、provider docs、fake smoke、vector fixture、privacy、diff boundary 和 implementation-notes 完成闸门。
 
 ## Migration Plan
 
@@ -265,7 +337,7 @@ Phase 1: 配置和类型
 
 Phase 2: Provider adapters
 
-- 实现 MiniMax adapter。
+- 实现 MiniMax docs-gated provider module；只有官方 embedding docs 解锁后才实现真实网络 adapter，否则保持 scaffold/unsupported/docs-required。
 - 实现 Gemini adapter 或完成 adapter scaffold 并标记需要官方 API 确认的任务。
 - 新增 Qwen scaffold，返回明确 unsupported error，避免误以为已可用。
 
@@ -294,7 +366,7 @@ Rollback strategy:
 
 ## Open Questions
 
-- MiniMax embedding 的默认模型名、维度和 endpoint 需要实现前按官方文档确认，不能只依赖历史记忆。
+- MiniMax embedding 的默认模型名、维度和 endpoint 需要实现前按官方文档确认，不能只依赖历史记忆；截至 2026-06-14 的 spec hardening 审核未在 MiniMax 当前官方 docs index 中找到 embedding-specific API 页面，因此真实 MiniMax adapter 默认被 docs gate 阻塞。
 - Gemini embedding 的默认模型名、维度和 endpoint 需要实现前按官方文档确认。
 - restricted 文档是否允许发送到远程 embedding API，需要后续产品策略明确；第一版至少要支持跳过 restricted 文档。
 - Qwen adapter 是只保留 scaffold，还是在本 change 一并实现真实调用，取决于用户后续是否准备好 API key 和选型。

@@ -1,15 +1,33 @@
 #!/usr/bin/env node
 
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { configPath, defaultConfig, ensureConfig, saveConfig, type SuperHelperConfig } from './config.js';
 import { startServer } from './server.js';
 import {
+  applyKnowledgeRepairPlan,
+  auditKnowledgeQuality,
+  buildDraftSlices,
   defaultSourceDirectory,
+  evaluateQualityGate,
+  extractSourceBlocks,
+  generateKnowledgeRepairPlan,
   initKnowledgeWorkspace,
+  loadSourceDocuments,
+  normalizeSourceBlocks,
+  publishApprovedDraftSlices,
+  readKnowledgeRepairPlan,
+  readSourceBlocks,
   resolveKnowledgeWorkspaceRoot,
+  reviewDraftSlices,
+  runKnowledgeEval,
   searchKnowledge,
   updateKnowledgeIndex,
+  updateKnowledgeIndexWithQuality,
+  writeKnowledgeQualityReport,
+  writeKnowledgeRepairPlan,
+  writeSourceQualityReport,
 } from './knowledge/index.js';
 
 async function main(): Promise<void> {
@@ -36,6 +54,11 @@ async function main(): Promise<void> {
 
   if (command === 'knowledge') {
     await handleKnowledgeCommand();
+    return;
+  }
+
+  if (command === 'accept') {
+    await handleAcceptCommand();
     return;
   }
 
@@ -159,10 +182,14 @@ async function handleKnowledgeCommand(): Promise<void> {
 
   if (subcommand === 'init') {
     const sourceDir = readArg('--source-dir') ?? readArg('--source') ?? defaultSourceDirectory();
+    const gate = readQualityGateArg('warn');
+    const legacyActivePublish = process.argv.includes('--legacy-active-publish');
     const result = initKnowledgeWorkspace({
       workspaceRoot,
       sourceDir,
       force: process.argv.includes('--force'),
+      legacyActivePublish,
+      qualityGate: gate,
     });
     console.log('knowledge workspace ready');
     console.log(`workspace: ${projectWorkspaceRoot}`);
@@ -176,12 +203,23 @@ async function handleKnowledgeCommand(): Promise<void> {
     if (result.ingestReportPath) {
       console.log(`ingest report: ${result.ingestReportPath}`);
     }
+    if (legacyActivePublish) {
+      console.log('warning: legacy active publish enabled; normal review/publish gate was bypassed.');
+    }
+    printQualitySummary(result);
+    if (result.qualityGateResult && !result.qualityGateResult.passed) {
+      console.error(`gate failed: ${result.qualityGateResult.reason}`);
+      process.exit(result.qualityGateResult.exitCode);
+    }
     console.log('next: super-helper knowledge update --workspace <workspace> [--knowledge-root <path>]');
     return;
   }
 
   if (subcommand === 'update') {
-    const result = updateKnowledgeIndex({ workspaceRoot });
+    const gate = readQualityGateArg('warn');
+    const result = gate === 'off'
+      ? updateKnowledgeIndexWithQuality({ workspaceRoot, qualityGate: 'off' })
+      : updateKnowledgeIndexWithQuality({ workspaceRoot, qualityGate: gate });
     console.log('knowledge index updated');
     console.log(`workspace: ${projectWorkspaceRoot}`);
     console.log(`knowledge workspace: ${workspaceRoot}`);
@@ -191,6 +229,11 @@ async function handleKnowledgeCommand(): Promise<void> {
     console.log(`source documents: ${result.sourceDocumentCount}`);
     console.log(`manifest: ${result.manifestPath}`);
     console.log(`chunks path: ${result.chunksPath}`);
+    printQualitySummary(result);
+    if (result.qualityGateResult && !result.qualityGateResult.passed) {
+      console.error(`gate failed: ${result.qualityGateResult.reason}`);
+      process.exit(result.qualityGateResult.exitCode);
+    }
     return;
   }
 
@@ -206,7 +249,143 @@ async function handleKnowledgeCommand(): Promise<void> {
     return;
   }
 
-  console.error('Usage: super-helper knowledge <init|update|search> [--workspace <path>] [--knowledge-root <path>]');
+  if (subcommand === 'extract') {
+    const sourceId = readArg('--source-id');
+    const sources = sourceId ? [sourceId] : loadSourceDocuments(workspaceRoot).map((s) => s.id);
+    let totalBlocks = 0;
+    for (const id of sources) {
+      const sourceMeta = loadSourceDocuments(workspaceRoot).find((s) => s.id === id);
+      if (!sourceMeta?.path) continue;
+      const absolutePath = resolveSourcePath(workspaceRoot, sourceMeta.path);
+      const { report } = extractSourceBlocks({ workspaceRoot, sourceDocumentId: id, sourcePath: absolutePath });
+      console.log(`extracted: ${id} -> ${Object.values(report.blockCounts).reduce((a, b) => a + b, 0)} blocks (parser=${report.parserStrategy})`);
+      totalBlocks += Object.values(report.blockCounts).reduce((a, b) => a + b, 0);
+    }
+    console.log(`total blocks: ${totalBlocks}`);
+    return;
+  }
+
+  if (subcommand === 'normalize') {
+    const sourceId = readArg('--source-id');
+    const sources = sourceId ? [sourceId] : loadSourceDocuments(workspaceRoot).map((s) => s.id);
+    let totalBlocks = 0;
+    for (const id of sources) {
+      const blocks = readSourceBlocks(workspaceRoot, id);
+      if (blocks.length === 0) {
+        console.log(`normalized: ${id} skipped (no extracted blocks)`);
+        continue;
+      }
+      const { report } = normalizeSourceBlocks({ workspaceRoot, sourceDocumentId: id, blocks });
+      console.log(`normalized: ${id} -> ${report.outputBlockCount} blocks`);
+      totalBlocks += report.outputBlockCount;
+    }
+    console.log(`total normalized blocks: ${totalBlocks}`);
+    console.log('next: super-helper knowledge slice --workspace <workspace> [--knowledge-root <path>]');
+    return;
+  }
+
+  if (subcommand === 'slice') {
+    const sources = loadSourceDocuments(workspaceRoot);
+    for (const source of sources) {
+      if (!source.path) continue;
+      const absolutePath = resolveSourcePath(workspaceRoot, source.path);
+      const { blocks: extractedBlocks } = extractSourceBlocks({ workspaceRoot, sourceDocumentId: source.id, sourcePath: absolutePath });
+      const { blocks: normalized } = normalizeSourceBlocks({ workspaceRoot, sourceDocumentId: source.id, blocks: extractedBlocks });
+      const report = buildDraftSlices({ workspaceRoot, sourceDocumentId: source.id, sourceTitle: source.title, sourceKind: source.source_kind ?? 'whitepaper', sourceDocumentPath: source.path, normalizedBlocks: normalized });
+      console.log(`sliced: ${source.id} -> ${report.draftIds.length} draft slices`);
+    }
+    return;
+  }
+
+  if (subcommand === 'audit') {
+    const gate = readQualityGateArg('warn');
+    if (gate === 'off') {
+      console.log('quality audit skipped (gate=off)');
+      return;
+    }
+    const report = auditKnowledgeQuality({ workspaceRoot, gate });
+    const path = writeKnowledgeQualityReport({ workspaceRoot, report });
+    const sourcePath = writeSourceQualityReport({ workspaceRoot, report });
+    const gateResult = evaluateQualityGate(report, gate);
+    console.log(`quality report: ${path}`);
+    console.log(`source quality report: ${sourcePath}`);
+    console.log(`severity: error=${report.severityCounts.error} warn=${report.severityCounts.warn} info=${report.severityCounts.info}`);
+    console.log(`top issues: ${Object.entries(report.issueCounts).slice(0, 5).map(([k, v]) => `${k}=${v}`).join(', ')}`);
+    if (!gateResult.passed) {
+      console.error(`gate failed: ${gateResult.reason}`);
+      process.exit(gateResult.exitCode);
+    }
+    return;
+  }
+
+  if (subcommand === 'repair') {
+    if (process.argv.includes('--plan')) {
+      const plan = generateKnowledgeRepairPlan({ workspaceRoot });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const path = writeKnowledgeRepairPlan({ workspaceRoot, plan, timestamp });
+      console.log(`repair plan: ${path}`);
+      console.log(`actions: total=${plan.summary.total} safe=${plan.summary.safe} review_required=${plan.summary.reviewRequired}`);
+      return;
+    }
+    const planPath = readArg('--apply');
+    if (!planPath) {
+      console.error('Usage: super-helper knowledge repair --plan | --apply <plan-path>');
+      process.exit(1);
+    }
+    const plan = readKnowledgeRepairPlan(planPath);
+    if (!plan) {
+      console.error(`repair plan not found or malformed: ${planPath}`);
+      process.exit(1);
+    }
+    const result = applyKnowledgeRepairPlan({ workspaceRoot, planPath });
+    console.log(`repair applied: ${result.appliedActions.length} applied, ${result.skippedActions.length} skipped`);
+    if (result.changedFiles.length > 0) {
+      console.log(`changed files: ${result.changedFiles.length}`);
+    }
+    return;
+  }
+
+  if (subcommand === 'review') {
+    const action = (readArg('--action') ?? process.argv[4]) as 'approve' | 'reject' | 'request_edits' | 'accept_warnings';
+    const reviewer = readArg('--reviewer') ?? 'local-user';
+    const notes = readArg('--notes') ?? '';
+    const sourceId = readArg('--source-id');
+    if (!sourceId || !['approve', 'reject', 'request_edits', 'accept_warnings'].includes(action)) {
+      console.error('Usage: super-helper knowledge review --source-id <id> --action <approve|reject|request_edits|accept_warnings> --reviewer <name> [--notes <text>]');
+      process.exit(1);
+    }
+    const record = reviewDraftSlices({ workspaceRoot, sourceDocumentId: sourceId, action, reviewer, notes });
+    console.log(`review ${record.action}: ${record.reviewedIds.length} slices, reviewer=${record.reviewer}`);
+    return;
+  }
+
+  if (subcommand === 'publish') {
+    const gate = readQualityGateArg('warn');
+    const sourceId = readArg('--source-id');
+    const report = publishApprovedDraftSlices({ workspaceRoot, sourceDocumentId: sourceId, qualityGate: gate });
+    console.log(`publish: ${report.publishedIds.length} published, ${report.rejectedIds.length} rejected, dirty=${report.indexDirty}`);
+    if (report.qualityReportPath) {
+      console.log(`quality report used: ${report.qualityReportPath}`);
+    }
+    return;
+  }
+
+  if (subcommand === 'eval') {
+    const questionsPath = readArg('--questions');
+    if (!questionsPath) {
+      console.error('Usage: super-helper knowledge eval --questions <file> [--workspace <path>]');
+      process.exit(1);
+    }
+    const report = runKnowledgeEval({ workspaceRoot, questionsPath });
+    console.log(`eval: ${report.questionCount} questions, hit@1=${report.hitAt1}, hit@3=${report.hitAt3}, hit@5=${report.hitAt5}, answerBearingRate=${report.answerBearingRate.toFixed(2)}, falsePositives=${report.falsePositiveCount}`);
+    if (report.failures.length > 0) {
+      console.log(`failures: ${report.failures.length}`);
+      process.exit(2);
+    }
+    return;
+  }
+
+  console.error('Usage: super-helper knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval> [--workspace <path>] [--knowledge-root <path>]');
   process.exit(1);
 }
 
@@ -228,7 +407,10 @@ function resolveKnowledgeCommandContext(): {
     };
   }
   if (explicitKnowledgeRoot) {
+    // When the user passes --knowledge-root explicitly, treat it as the absolute knowledge root
+    // and disable per-workspace isolation so the CLI does not nest under workspaces/<key>/.
     config.knowledge.rootDir = explicitKnowledgeRoot;
+    config.knowledge.isolateByWorkspace = false;
   }
 
   return {
@@ -238,6 +420,14 @@ function resolveKnowledgeCommandContext(): {
   };
 }
 
+function resolveSourcePath(workspaceRoot: string, relativeOrAbsolute: string): string {
+  // If it's an absolute path, return it; otherwise resolve against the knowledge workspace root.
+  if (relativeOrAbsolute.startsWith('/')) {
+    return relativeOrAbsolute;
+  }
+  return join(workspaceRoot, relativeOrAbsolute);
+}
+
 function readArg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   if (index === -1) {
@@ -245,6 +435,99 @@ function readArg(name: string): string | undefined {
   }
 
   return process.argv[index + 1];
+}
+
+function readQualityGateArg(defaultGate: 'warn' | 'strict' | 'off'): 'warn' | 'strict' | 'off' {
+  const value = readArg('--quality-gate') ?? defaultGate;
+  if (value !== 'warn' && value !== 'strict' && value !== 'off') {
+    console.error('Invalid --quality-gate. Expected warn|strict|off.');
+    process.exit(1);
+  }
+  return value;
+}
+
+function printQualitySummary(result: {
+  qualityReportPath?: string;
+  sourceQualityReportPath?: string;
+  qualityGateResult?: { passed: boolean; reason?: string };
+  qualitySeverityCounts?: Record<string, number>;
+  qualityIssueCounts?: Record<string, number>;
+}): void {
+  if (result.qualityGateResult?.reason === 'quality gate disabled') {
+    console.log('quality audit skipped (gate=off)');
+    return;
+  }
+  if (result.qualityReportPath) {
+    console.log(`quality report: ${result.qualityReportPath}`);
+  }
+  if (result.sourceQualityReportPath) {
+    console.log(`source quality report: ${result.sourceQualityReportPath}`);
+  }
+  if (result.qualitySeverityCounts) {
+    console.log(`severity: error=${result.qualitySeverityCounts.error ?? 0} warn=${result.qualitySeverityCounts.warn ?? 0} info=${result.qualitySeverityCounts.info ?? 0}`);
+  }
+  if (result.qualityIssueCounts) {
+    const topIssues = Object.entries(result.qualityIssueCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([code, count]) => `${code}=${count}`)
+      .join(', ');
+    if (topIssues) {
+      console.log(`top issues: ${topIssues}`);
+    }
+  }
+}
+
+async function handleAcceptCommand(): Promise<void> {
+  const subcommand = process.argv[3];
+  if (subcommand !== 'knowledge') {
+    console.error('Usage: super-helper accept knowledge --workspace <path> [--knowledge-root <path>] [--mock-worker|--real-worker] [--report-dir <path>]');
+    process.exit(1);
+  }
+
+  const projectWorkspaceRoot = readArg('--workspace') ?? process.cwd();
+  const explicitKnowledgeRoot = readArg('--knowledge-root');
+  const config = explicitKnowledgeRoot ? defaultConfig() : ensureConfig();
+  if (explicitKnowledgeRoot) {
+    config.knowledge.rootDir = explicitKnowledgeRoot;
+    config.knowledge.isolateByWorkspace = false;
+  }
+  config.workspaces[0] = {
+    ...config.workspaces[0],
+    id: config.workspaces[0]?.id ?? 'current',
+    name: config.workspaces[0]?.name ?? 'Current Project',
+    rootPath: projectWorkspaceRoot,
+    mcpToolIds: config.workspaces[0]?.mcpToolIds ?? [],
+  };
+  const knowledgeWorkspaceRoot = resolveKnowledgeWorkspaceRoot(config, config.workspaces[0]?.id);
+  const reportDir = readArg('--report-dir') ?? join(knowledgeWorkspaceRoot, 'reports');
+  const timeoutMs = Number(readArg('--timeout-ms') ?? config.claude.timeoutMs ?? 5000);
+  const realWorker = process.argv.includes('--real-worker');
+  const mockWorker = process.argv.includes('--mock-worker') || !realWorker;
+  const keepCases = process.argv.includes('--keep-cases');
+  const redact = !process.argv.includes('--no-redact');
+
+  const { runKnowledgeAcceptance } = await import('./runtime/knowledge-acceptance.js');
+  const result = runKnowledgeAcceptance({
+    config,
+    projectWorkspaceRoot,
+    knowledgeWorkspaceRoot,
+    reportDir,
+    mockWorker,
+    realWorker,
+    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 5000,
+    redact,
+    keepCases,
+  });
+
+  console.log(`acceptance report: ${result.reportPath}`);
+  console.log(`overall: ${result.report.overallPassed ? 'passed' : 'failed'}`);
+  for (const scenario of result.report.scenarios) {
+    console.log(`  ${scenario.passed ? 'PASS' : 'FAIL'} ${scenario.id}: ${scenario.reason}`);
+  }
+  if (!result.report.overallPassed) {
+    process.exit(2);
+  }
 }
 
 function readJsonArg(name: string): unknown {
@@ -257,7 +540,7 @@ function readJsonArg(name: string): unknown {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [init|doctor|dev|knowledge init|knowledge update|knowledge search|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [init|doctor|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval>|model set|workspace set|mcp add]');
 }
 
 main().catch((error) => {

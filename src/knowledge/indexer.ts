@@ -2,6 +2,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { basename, join } from 'node:path';
 import { parseMarkdownDocument } from './frontmatter.js';
 import { chunksPath, dirtyFlagPath, keywordIndexPath, knowledgeRoot, manifestPath, relativeKnowledgePath } from './paths.js';
+import {
+  auditKnowledgeQuality,
+  evaluateQualityGate,
+  loadChunkQualityMap,
+  type KnowledgeQualityGate,
+  writeKnowledgeQualityReport,
+  writeSourceQualityReport,
+} from './quality.js';
 import type {
   KnowledgeChunk,
   KnowledgeDocument,
@@ -73,6 +81,31 @@ export function updateKnowledgeIndex(input: { workspaceRoot: string }): Knowledg
   };
 }
 
+export function updateKnowledgeIndexWithQuality(input: {
+  workspaceRoot: string;
+  qualityGate?: KnowledgeQualityGate;
+}): KnowledgeUpdateResult {
+  const gate = input.qualityGate ?? 'warn';
+  const result = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot });
+  if (gate === 'off') {
+    return {
+      ...result,
+      qualityGateResult: { passed: true, exitCode: 0, reason: 'quality gate disabled' },
+    };
+  }
+  const report = auditKnowledgeQuality({ workspaceRoot: input.workspaceRoot, gate });
+  const qualityReportPath = writeKnowledgeQualityReport({ workspaceRoot: input.workspaceRoot, report });
+  const sourceQualityReportPath = writeSourceQualityReport({ workspaceRoot: input.workspaceRoot, report });
+  return {
+    ...result,
+    qualityReportPath,
+    sourceQualityReportPath,
+    qualityGateResult: evaluateQualityGate(report, gate),
+    qualitySeverityCounts: report.severityCounts,
+    qualityIssueCounts: report.issueCounts,
+  };
+}
+
 export function searchKnowledge(input: KnowledgeSearchQuery): KnowledgeEvidencePack {
   const docs = discoverKnowledgeDocuments(input.workspaceRoot);
   const docById = new Map(docs.map((document) => [document.frontmatter.id, document]));
@@ -82,6 +115,7 @@ export function searchKnowledge(input: KnowledgeSearchQuery): KnowledgeEvidenceP
   const moduleCandidates = input.moduleCandidates?.length ? input.moduleCandidates : inferModules(queryKeywords, docs);
   const intentCandidates = input.intentCandidates ?? [];
   const filteredOut = new Map<string, number>();
+  const qualityMap = loadChunkQualityMap(input.workspaceRoot);
 
   const results = chunks
     .map((chunk) => {
@@ -103,7 +137,7 @@ export function searchKnowledge(input: KnowledgeSearchQuery): KnowledgeEvidenceP
       if (scoreInfo.score <= 0) {
         return undefined;
       }
-      return toEvidenceResult(chunk, parent, scoreInfo.score, scoreInfo.matchedTerms);
+      return toEvidenceResult(chunk, parent, scoreInfo.score, scoreInfo.matchedTerms, qualityMap);
     })
     .filter((item): item is KnowledgeEvidenceResult => Boolean(item))
     .sort((a, b) => b.score - a.score)
@@ -231,7 +265,9 @@ function toEvidenceResult(
   parent: KnowledgeDocument,
   score: number,
   matchedTerms: string[],
+  qualityMap: Map<string, { severity: 'ok' | 'info' | 'warn' | 'error'; issues: string[] }>,
 ): KnowledgeEvidenceResult {
+  const quality = qualityMap.get(parent.frontmatter.id);
   return {
     evidence_id: `ev_kb_${chunk.chunk_id.replace(/^chk_/, '')}`,
     document_id: parent.frontmatter.id,
@@ -254,6 +290,7 @@ function toEvidenceResult(
     summary: `${parent.frontmatter.title} 命中：${matchedTerms.join('、') || parent.frontmatter.module}`,
     excerpt: excerptFor(parent.body, matchedTerms),
     score,
+    quality,
   };
 }
 
@@ -354,9 +391,11 @@ function shouldSkipMarkdown(root: string, path: string): boolean {
   const relative = path.slice(root.length + 1).replaceAll('\\', '/');
   return (
     basename(path).toLowerCase() === 'readme.md' ||
+    relative.startsWith('_pipeline/') ||
     relative.startsWith('_taxonomy/') ||
     relative.startsWith('_sources/') ||
-    relative.startsWith('indexes/')
+    relative.startsWith('indexes/') ||
+    relative.startsWith('reports/')
   );
 }
 

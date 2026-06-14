@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,6 +29,7 @@ import { listPublicAgentConfigs, loadAgentRegistry, resolveAgentConfig } from '.
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
+import { runKnowledgeAcceptance } from '../dist/runtime/knowledge-acceptance.js';
 
 function baseConfig(rootDir) {
   return {
@@ -1059,6 +1061,93 @@ test('runtime escalates no-hit or implementation-detail knowledge questions with
   }
 });
 
+test('runtime applies deep query pivot on one retry after insufficient code evidence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      if (workerRequests.length === 1) {
+        return {
+          result: {
+            status: 'partial',
+            summary: '只找到 route 定义，尚未找到 controller/service 实现证据。',
+            missingInfo: [],
+            evidence: [{ id: 'ev_route', kind: 'workspace', source: 'routes.ts', summary: '只找到路由入口', confidence: 'medium' }],
+            claims: [{ type: 'unknown', text: '还缺少实现层证据', evidenceIds: ['ev_route'] }],
+            recommendedNextAction: 'continue_diagnosis',
+          },
+          trace: {
+            command: 'worker',
+            cwd: workspace,
+            stdout: '',
+            stderr: '',
+            exitCode: 0,
+            startedAt: new Date().toISOString(),
+            finishedAt: new Date().toISOString(),
+          },
+        };
+      }
+      return {
+        result: {
+          status: 'concluded',
+          summary: '第二轮 pivot 到 controller/service 后找到实现证据。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_controller', kind: 'workspace', source: 'src/controller.ts', summary: 'controller 调用 service。', confidence: 'high' }],
+          claims: [{ type: 'fact', text: '实现证据已找到。', evidenceIds: ['ev_controller'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
+      module: 'ai-study',
+      intent: 'how_to',
+      title: 'AI伴学助手如何制定学习计划',
+      body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
+      terms: ['AI伴学助手', '制定学习计划'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new SuperHelperAgent(config, store, worker);
+    const response = await agent.handleUserMessage({
+      message: '接口 /api/orders 返回 500，帮我看当前 route 和 controller 实现',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 2);
+    assert.equal(workerRequests[1].claudeSessionId, workerRequests[0].claudeSessionId);
+    assert.equal(workerRequests[1].context.deepQuery.attempt, 2);
+    assert.equal(workerRequests[1].context.deepQuery.previousArtifactTargets.includes('route'), true);
+    assert.equal(workerRequests[1].context.deepQuery.artifactTargets.includes('controller'), true);
+    assert.match(workerRequests[1].constraints.join('\n'), /Deep Query retry/);
+    assert.equal(response.caseSession.logs.some((event) => event.phase === 'deep_query_retry_requested'), true);
+    assert.equal(response.caseSession.logs.some((event) => event.phase === 'deep_query_pivot_selected'), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test('runtime does not expose restricted knowledge directly to customer persona', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
@@ -1148,6 +1237,26 @@ test('evidence judge handles direct answers, stale or conflicting evidence, high
   assert.equal(direct.answerable, true);
   assert.equal(direct.need_code_escalation, false);
   assert.equal(direct.recommended_next_action, 'final_answer');
+
+  const generic = judgeKnowledgeEvidence({
+    route: {
+      ...route,
+      keywords: ['课程', '功能', '怎么', '支持'],
+    },
+    evidencePack: knowledgePack([
+      knowledgeEvidence({
+        id: 'ev_generic',
+        status: 'active',
+        sourceType: 'faq',
+        matchedTerms: ['课程', '功能', '怎么', '支持'],
+        verifiedAt: '2999-01-01',
+      }),
+    ]),
+    question: '课程功能怎么支持',
+  });
+  assert.equal(generic.answerable, false);
+  assert.equal(generic.blockers.includes('generic_keyword_only'), true);
+  assert.equal(generic.answer_score < 0.7, true);
 
   const directRunbook = judgeKnowledgeEvidence({
     route,
@@ -1294,6 +1403,39 @@ test('runtime curates a review-required solved case after user confirms resoluti
     rmSync(workspace, { recursive: true, force: true });
   }
 });
+
+test('knowledge acceptance smoke does not write solved-case drafts into the real knowledge workspace by default', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-acceptance-clean-'));
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForPreflight = false;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+
+    runKnowledgeAcceptance({
+      config,
+      projectWorkspaceRoot: process.cwd(),
+      knowledgeWorkspaceRoot: knowledgeWorkspace,
+      reportDir: join(knowledgeWorkspace, 'reports'),
+      mockWorker: true,
+      realWorker: false,
+      keepCases: false,
+    });
+
+    const solvedRoot = join(knowledgeWorkspace, 'knowledge', 'tickets', 'solved-cases');
+    const files = existsSync(solvedRoot)
+      ? execFileSync('find', [solvedRoot, '-type', 'f', '-name', '*.md'], { encoding: 'utf8' }).trim()
+        .split('\n')
+        .filter(Boolean)
+        .filter((file) => !file.endsWith('/README.md'))
+        .join('\n')
+      : '';
+    assert.equal(files, '');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 
 test('case curator keeps high-risk drafts restricted and refuses unsupported facts', () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));

@@ -447,6 +447,106 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     });
   }
 
+  deepQueryRetryRequested(caseSession: StoredCase, detail: {
+    attempt: number;
+    maxAttempts: number;
+    previousArtifactTargets: string[];
+    nextArtifactTargets: string[];
+    failedReasons: string[];
+    correctionActions?: string[];
+    stopReason?: string;
+  }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'deep_query_retry_requested',
+      label: 'Deep Query 重试',
+      severity: 'warn',
+      summary: `Deep Query 触发第 ${detail.attempt} 次重试`,
+      detail,
+    });
+  }
+
+  deepQueryPivotSelected(caseSession: StoredCase, detail: {
+    attempt: number;
+    previousArtifactTargets: string[];
+    nextArtifactTargets: string[];
+    correctionActions: string[];
+  }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'deep_query_pivot_selected',
+      label: 'Deep Query Pivot',
+      severity: 'info',
+      summary: 'Deep Query 选择新的 pivot 目标',
+      detail,
+    });
+  }
+
+  deepQueryStopped(caseSession: StoredCase, detail: {
+    reason: string;
+    attempt: number;
+    maxAttempts?: number;
+    previousArtifactTargets?: string[];
+    nextArtifactTargets?: string[];
+    failedReasons?: string[];
+    correctionActions?: string[];
+  }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
+      actor: 'agent',
+      phase: 'deep_query_stopped',
+      label: 'Deep Query 停止',
+      severity: 'info',
+      summary: `Deep Query 停止: ${detail.reason}`,
+      detail,
+    });
+  }
+
+  caseReviewStarted(caseSession: StoredCase, detail: {
+    documentId: string;
+    action: string;
+    reviewer: string;
+  }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
+      actor: 'agent',
+      phase: 'case_review_started',
+      label: 'Case 审核',
+      severity: 'info',
+      summary: `审核 ${detail.documentId} (${detail.action})`,
+      detail,
+    });
+  }
+
+  caseReviewResult(caseSession: StoredCase, detail: {
+    documentId: string;
+    action: string;
+    reviewer: string;
+    nextStatus: string;
+    targetPath?: string;
+  }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
+      actor: 'agent',
+      phase: 'case_review_result',
+      label: 'Case 审核结果',
+      severity: 'ok',
+      summary: `${detail.documentId} 审核完成: ${detail.nextStatus}`,
+      detail,
+    });
+  }
+
+  caseReviewFailed(caseSession: StoredCase, detail: {
+    documentId: string;
+    reason: string;
+  }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
+      actor: 'agent',
+      phase: 'case_review_failed',
+      label: 'Case 审核失败',
+      severity: 'error',
+      summary: `${detail.documentId} 审核失败: ${detail.reason}`,
+      detail,
+    });
+  }
+
   caseResolutionConfirmed(caseSession: StoredCase, message: string): DiagnosticLogEvent {
     return this.recordAgent(caseSession, agentIdentities.caseCurator, {
       actor: 'agent',
