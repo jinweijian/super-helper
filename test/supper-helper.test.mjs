@@ -142,6 +142,22 @@ test('app surfaces interrupted requests and exposes session controls', () => {
   assert.match(html, /escapeHtml\(raw\)/);
 });
 
+test('in-progress card shows live motion and activity-based copy', () => {
+  const html = renderApp();
+
+  assert.match(html, /progressActivityCopy/);
+  assert.match(html, /latestProgressActivity/);
+  assert.match(html, /latestActiveRun/);
+  assert.match(html, /progress-live-dot/);
+  assert.match(html, /progress-running/);
+  assert.match(html, /运行中/);
+  assert.match(html, /progress-sweep/);
+  assert.match(html, /正在运行只读代码排查/);
+  assert.match(html, /正在判断证据是否足够/);
+  assert.match(html, /正在整理可执行答复/);
+  assert.match(html, /normalizeProgressSummary/);
+});
+
 test('chat messages keep pasted code and long commands inside the viewport', () => {
   const html = renderApp();
 

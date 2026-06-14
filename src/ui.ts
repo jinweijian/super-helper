@@ -1286,6 +1286,126 @@ export function renderApp(): string {
       border-radius: 10px;
       box-shadow: none;
     }
+    .progress-card {
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-card.is-active {
+      border-color: #bad5ff;
+      box-shadow: inset 0 0 0 1px rgba(47, 111, 237, .06);
+    }
+    .progress-card.is-active::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 -34%;
+      width: 32%;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(47, 111, 237, 0), rgba(47, 111, 237, .12), rgba(47, 111, 237, 0));
+      opacity: .72;
+      transform: translateX(-120%);
+      animation: progress-sweep 2.7s cubic-bezier(.22, 1, .36, 1) infinite;
+    }
+    .progress-card.is-active > * {
+      position: relative;
+      z-index: 1;
+    }
+    .progress-title strong {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .progress-title-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .progress-live-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: #2f6fed;
+      box-shadow: 0 0 0 4px rgba(47, 111, 237, .12);
+      animation: progress-dot-pulse 1.35s ease-in-out infinite;
+    }
+    .progress-meter {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      color: #245fcf;
+    }
+    .progress-running {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: #245fcf;
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .progress-running-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #2f6fed;
+      animation: progress-running-pulse 1.1s ease-in-out infinite;
+    }
+    .progress-card.is-active .progress-track {
+      position: relative;
+    }
+    .progress-card.is-active .progress-track::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 34%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, .72), rgba(255, 255, 255, 0));
+      opacity: .7;
+      transform: translateX(-130%);
+      animation: progress-track-scan 1.65s ease-in-out infinite;
+    }
+    .progress-step.current {
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-step.current::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border: 1px solid rgba(47, 111, 237, .24);
+      border-radius: inherit;
+      opacity: .8;
+      transform: scale(.96);
+      animation: progress-step-pulse 1.45s ease-in-out infinite;
+    }
+    @keyframes progress-sweep {
+      0% { transform: translateX(-120%); opacity: 0; }
+      18% { opacity: .72; }
+      62% { opacity: .42; }
+      100% { transform: translateX(430%); opacity: 0; }
+    }
+    @keyframes progress-dot-pulse {
+      0%, 100% { transform: scale(.86); opacity: .64; }
+      45% { transform: scale(1.18); opacity: 1; }
+    }
+    @keyframes progress-running-pulse {
+      0%, 100% { transform: scale(.82); opacity: .48; }
+      50% { transform: scale(1.15); opacity: 1; }
+    }
+    @keyframes progress-track-scan {
+      0% { transform: translateX(-130%); opacity: 0; }
+      18% { opacity: .72; }
+      100% { transform: translateX(330%); opacity: 0; }
+    }
+    @keyframes progress-step-pulse {
+      0%, 100% { transform: scale(.96); opacity: .18; }
+      50% { transform: scale(1.02); opacity: .72; }
+    }
     .composer {
       margin-bottom: 0;
       padding: 12px;
@@ -1971,23 +2091,93 @@ export function renderApp(): string {
 
     function renderProgressActivity(session) {
       const profile = progressProfile(session?.userPersona || personaSelect.value);
+      const activity = session?.agentActivity || [];
+      const activeRun = latestActiveRun(session?.runs || []);
       const percent = estimateProgressPercent(session || {});
       const activeIndex = progressStepIndex(profile.steps.length, percent);
+      const copy = progressActivityCopy(profile, activeIndex, activity, session?.status, activeRun);
       const steps = profile.steps.map((step, index) => {
         const state = index < activeIndex ? 'done' : index === activeIndex ? 'current' : 'pending';
         return '<span class="progress-step ' + state + '">' + escapeHtml(step) + '</span>';
       }).join('');
       const detail = profile.mode === 'technical'
-        ? renderTechnicalProgressDetail(session?.agentActivity || [])
+        ? renderTechnicalProgressDetail(activity)
         : renderPlainProgressDetail(profile, activeIndex);
-      return '<div class="progress-card progress-' + escapeHtml(profile.mode) + '" role="status" aria-live="polite" aria-label="' + escapeHtml(profile.title + '，进度 ' + percent + '%') + '">'
-        + '<div class="progress-card-head"><span class="progress-title"><strong>' + escapeHtml(profile.title) + '</strong><span>' + escapeHtml(profile.summary) + '</span></span><span class="progress-percent">' + percent + '%</span></div>'
+      return '<div class="progress-card progress-' + escapeHtml(profile.mode) + ' is-active" role="status" aria-live="polite" aria-label="' + escapeHtml(copy.title + '，' + copy.summary + '，进度 ' + percent + '%') + '">'
+        + '<div class="progress-card-head"><span class="progress-title"><strong><span class="progress-live-dot" aria-hidden="true"></span><span class="progress-title-text">' + escapeHtml(copy.title) + '</span></strong><span class="progress-summary">' + escapeHtml(copy.summary) + '</span></span><span class="progress-meter"><span class="progress-running"><span class="progress-running-dot" aria-hidden="true"></span>运行中</span><span class="progress-percent">' + percent + '%</span></span></div>'
         + '<span class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percent + '"><span class="progress-bar" style="width: ' + percent + '%"></span></span>'
         + '<div class="progress-steps">' + steps + '</div>'
         + detail
         + '<div class="progress-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>'
         + '<div class="progress-actions"><button type="button" onclick="noopWait()">继续等待</button><button type="button" onclick="openTicketDraft()">升级工单</button></div>'
         + '</div>';
+    }
+
+    function progressActivityCopy(profile, activeIndex, activity, status, activeRun) {
+      const current = profile.steps[Math.min(profile.steps.length - 1, Math.max(0, activeIndex))];
+      const fallbackTitle = status === 'ready_for_diagnosis' ? '正在进入诊断队列' : '正在推进' + current;
+      const fallback = {
+        title: fallbackTitle,
+        summary: profile.summary
+      };
+      const latest = latestProgressActivity(activity);
+      if (activeRun?.status === 'queued') {
+        return { title: '正在排队等待只读诊断', summary: '已接收问题，正在等待诊断任务开始执行。' };
+      }
+      if (activeRun?.status === 'running') {
+        return { title: '正在运行只读代码排查', summary: '诊断工具正在读取项目文件，并准备结构化证据。' };
+      }
+      if (!latest) {
+        return fallback;
+      }
+      const phase = String(latest.phase || '');
+      const agentId = String(latest.agentId || '');
+      const latestSummary = normalizeProgressSummary(latest.summary || fallback.summary);
+      if (/input_received|persona_agent_result/.test(phase)) {
+        return { title: '正在整理你的问题', summary: '会提取业务对象、症状和本轮未知项。' };
+      }
+      if (/experience/.test(phase) || agentId === 'experience') {
+        return { title: '正在核对同案上下文', summary: '会确认是否有可安全复用的历史答案。' };
+      }
+      if (/input_review|preflight|local_preflight|model_preflight/.test(phase) || agentId === 'input-review') {
+        return { title: '正在判断是否需要追问', summary: '会检查现有信息是否足够进入只读诊断。' };
+      }
+      if (/knowledge_router/.test(phase) || agentId === 'knowledge-router') {
+        return { title: '正在识别知识路径', summary: '会把问题归一化为模块、意图和关键词。' };
+      }
+      if (/evidence_judge|knowledge_answer|code_escalation|deep_query/.test(phase) || agentId === 'evidence-judge') {
+        return { title: '正在判断证据是否足够', summary: '会决定直接回答、继续检索，还是升级代码排查。' };
+      }
+      if (/diagnostic_request|follow_up_diagnostic/.test(phase)) {
+        return { title: '正在准备只读诊断请求', summary: '会整理已知事实、未知项和排查约束。' };
+      }
+      if (/review/.test(phase) || agentId === 'output-review') {
+        return { title: '正在审核证据和结论', summary: '会检查每个结论是否有证据支撑。' };
+      }
+      if (/presentation|user_reply/.test(phase) || agentId === 'presentation') {
+        return { title: '正在整理可执行答复', summary: '会按当前用户视角组织结论、证据和下一步。' };
+      }
+      const label = String(latest.label || latest.phase || current || '').trim();
+      return {
+        title: label ? '正在处理：' + label : fallback.title,
+        summary: latestSummary
+      };
+    }
+
+    function latestProgressActivity(activity) {
+      return (activity || []).find((item) => item && (item.phase || item.label || item.summary)) || null;
+    }
+
+    function latestActiveRun(runs) {
+      return [...(runs || [])].reverse().find((run) => ['queued', 'running'].includes(run.status)) || null;
+    }
+
+    function normalizeProgressSummary(summary) {
+      return String(summary || '')
+        .replace(/Preflight Gate/g, '预检')
+        .replace(/Claude Code/g, '只读诊断工具')
+        .replace(/DiagnosticRequest/g, '诊断请求')
+        .replace(/agent/gi, 'Agent');
     }
 
     function progressProfile(persona) {
