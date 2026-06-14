@@ -15,22 +15,201 @@
 - [ ] 2.4 Add a documentation section for quality reports: expected path `knowledge/indexes/chunk-quality-report.json`, report fields, severity meanings, and default warn-vs-strict behavior.
 - [ ] 2.5 Add a documentation section for live acceptance: command name, expected prerequisites, report output path, redaction guarantees, and how to interpret failures.
 - [ ] 2.6 Add a documentation section for solved case review lifecycle: `review_required`, `active`, rejected/request-edits states, unresolved conversion, dirty flag behavior, and reviewer metadata.
-- [ ] 2.7 Run `pnpm lint` after documentation-only edits and fix doc lint failures before coding further.
+- [ ] 2.7 Add a documentation section for the knowledge processing pipeline: intake -> extract -> normalize -> draft slice -> audit -> repair -> review -> publish -> index -> eval.
+- [ ] 2.8 Document every pipeline artifact path: `_sources`, `_pipeline/extracts`, `_pipeline/normalized`, `_pipeline/drafts`, `_pipeline/repair-plans`, `_pipeline/review`, `_pipeline/publish`, `indexes`, and `reports`.
+- [ ] 2.9 Document that one-shot `knowledge init` is a compatibility wrapper and must still leave intermediate artifacts for review and re-run.
+- [ ] 2.10 Document that only published/active formal knowledge documents can support high-confidence direct answers; draft/review/error/rejected artifacts cannot.
+- [ ] 2.11 Run `pnpm lint` after documentation-only edits and fix doc lint failures before coding further.
+
+## 2A. Pipeline Directory and Path Contracts
+
+- [ ] 2A.1 Update `src/knowledge/paths.ts` to add `pipelineRoot(workspaceRoot)`, returning `knowledge/_pipeline`.
+- [ ] 2A.2 Add `pipelineExtractsRoot(workspaceRoot)` returning `knowledge/_pipeline/extracts`.
+- [ ] 2A.3 Add `pipelineNormalizedRoot(workspaceRoot)` returning `knowledge/_pipeline/normalized`.
+- [ ] 2A.4 Add `pipelineDraftsRoot(workspaceRoot)` returning `knowledge/_pipeline/drafts`.
+- [ ] 2A.5 Add `pipelineRepairPlansRoot(workspaceRoot)` returning `knowledge/_pipeline/repair-plans`.
+- [ ] 2A.6 Add `pipelineReviewRoot(workspaceRoot)` returning `knowledge/_pipeline/review`.
+- [ ] 2A.7 Add `pipelinePublishRoot(workspaceRoot)` returning `knowledge/_pipeline/publish`.
+- [ ] 2A.8 Add `knowledgeReportsRoot(workspaceRoot)` returning `knowledge/reports`.
+- [ ] 2A.9 Add path helpers for source-specific files: `sourceBlocksPath(workspaceRoot, sourceDocumentId)`, `sourceExtractReportPath(...)`, `normalizedBlocksPath(...)`, and `sourceDraftRoot(...)`.
+- [ ] 2A.10 Add path helpers for reports: `sourceQualityReportPath(workspaceRoot)`, `publishReportPath(workspaceRoot)`, `knowledgeEvalReportPath(workspaceRoot)`, and timestamped `repairPlanPath(workspaceRoot, timestamp)`.
+- [ ] 2A.11 Update `src/knowledge/templates.ts` `KNOWLEDGE_DIRECTORIES` so `knowledge init` creates `_pipeline/extracts`, `_pipeline/normalized`, `_pipeline/drafts`, `_pipeline/repair-plans`, `_pipeline/review`, `_pipeline/publish`, and `reports`.
+- [ ] 2A.12 Keep `src/knowledge/indexer.ts` `shouldSkipMarkdown` excluding `_pipeline/`, `_sources/`, `_taxonomy/`, and `indexes/`; add tests if needed so draft Markdown is never indexed.
+- [ ] 2A.13 Add a path safety helper in `src/knowledge/paths.ts` or a new `src/knowledge/path-safety.ts` that verifies every write target stays under `knowledge/`.
+- [ ] 2A.14 Export all new path helpers through `src/knowledge/index.ts` only if tests or CLI need them; avoid leaking internal helpers unnecessarily.
+
+## 2B. Pipeline Type Contracts
+
+- [ ] 2B.1 Extend `src/knowledge/types.ts` with `KnowledgePipelineStage = 'intake' | 'extract' | 'normalize' | 'slice' | 'audit' | 'repair' | 'review' | 'publish' | 'index' | 'eval'`.
+- [ ] 2B.2 Add `KnowledgePipelineStatus = 'imported' | 'extracted' | 'normalized' | 'draft' | 'quality_warn' | 'quality_error' | 'review_required' | 'approved' | 'rejected' | 'published'`.
+- [ ] 2B.3 Add `KnowledgeSourceBlockType = 'heading' | 'paragraph' | 'list_item' | 'table' | 'toc' | 'header_footer' | 'image_caption' | 'unknown'`.
+- [ ] 2B.4 Add `KnowledgeSourceBlock` with fields `block_id`, `source_document_id`, `order`, `type`, `text`, `heading_level?`, `section_path`, `raw?`, `parser?`, and `metadata?`.
+- [ ] 2B.5 Add `KnowledgeNormalizedBlock` with fields `block_id`, `source_document_id`, `order`, `type`, `text`, `normalized_text`, `section_path`, `included_in_slice`, `excluded_reason?`, and `source_block_id`.
+- [ ] 2B.6 Extend `KnowledgeFrontmatter` with optional `quality_status`, `source_block_ids`, `pipeline_stage`, `pipeline_status`, `review_id`, `publish_id`, and `repair_plan_ids`; all fields must be optional to preserve old Markdown compatibility.
+- [ ] 2B.7 Add `KnowledgeExtractReport` with version, sourceDocumentId, generatedAt, parserStrategy, blockCounts, unknownBlockCount, skippedTocCount, warnings, errors, and fatal flag.
+- [ ] 2B.8 Add `KnowledgeNormalizeReport` with sourceDocumentId, inputBlockCount, outputBlockCount, excludedBlockCounts, headingStructureWarnings, and generatedAt.
+- [ ] 2B.9 Add `KnowledgeDraftSliceReport` with sourceDocumentId, draftSliceCount, draftPaths, sourceBlockCoverage, warnings, and generatedAt.
+- [ ] 2B.10 Add `KnowledgeRepairActionType` including `merge_adjacent_short_slices`, `split_oversized_slice`, `remove_duplicate_draft`, `add_section_path`, `add_related_terms`, `mark_review_required`, `mark_quality_error`, and `manual_review_required`.
+- [ ] 2B.11 Add `KnowledgeRepairPlan` with version, planId, generatedAt, sourceReportPaths, qualityReportPath, actions, summary, and safetySummary.
+- [ ] 2B.12 Add `KnowledgeRepairAction` with actionId, issueIds, actionType, targetPaths, targetIds, beforeSummary, afterSummary, safety, requiresHumanReview, and details.
+- [ ] 2B.13 Add `KnowledgeRepairResult` with planId, appliedActions, skippedActions, changedFiles, previousHashes, newHashes, rollbackNotes, and generatedAt.
+- [ ] 2B.14 Add `KnowledgeSliceReviewRecord` for draft slice review with reviewId, sourceDocumentId, reviewer, action, notes, reviewedIds, previousStatuses, nextStatuses, qualityIssueIds, and reviewedAt.
+- [ ] 2B.15 Add `KnowledgePublishReport` with publishId, generatedAt, publishedIds, rejectedIds, warningOverrides, sourceDocumentIds, outputPaths, and indexDirty.
+- [ ] 2B.16 Add `KnowledgeEvalQuestion` with id, question, shouldHit, expectedDocument?, expectedSection?, expectedKeywords?, expectedSourceType?, and expectedEscalation?.
+- [ ] 2B.17 Add `KnowledgeEvalReport` with generatedAt, questionCount, hitAt1, hitAt3, hitAt5, answerBearingRate, falsePositiveCount, escalationResults, failures, and perQuestion results.
+- [ ] 2B.18 Export stable public types from `src/knowledge/index.ts`; keep deeply internal implementation-only types unexported.
+
+## 2C. Source Intake Refactor
+
+- [ ] 2C.1 In `src/knowledge/ingest.ts`, split `ingestOneSource` into `intakeSourceDocument`, `extractSourceBlocks`, `normalizeSourceBlocks`, `buildDraftSlices`, and `publishDraftSlices` or equivalent helpers.
+- [ ] 2C.2 Keep `ingestSourceDocuments` public API compatible while internally calling the new pipeline functions.
+- [ ] 2C.3 Implement `intakeSourceDocument({ workspaceRoot, sourcePath, force })` so it copies the source file, computes sha256, infers sourceDocumentId, writes source metadata, and returns a typed source intake result.
+- [ ] 2C.4 Extend source metadata JSON with `original_path`, `stored_path`, `pipeline_status: imported`, `parser`, `imported_at`, and `source_kind`; keep existing fields so old ingest reports remain understandable.
+- [ ] 2C.5 Ensure source ids stay deterministic by keeping the existing sha256-based id strategy unless a collision is detected.
+- [ ] 2C.6 When `force` is false and a source file already exists with the same hash, reuse existing source metadata and do not duplicate source files.
+- [ ] 2C.7 When the same filename has different content, keep deterministic behavior by source hash, not filename alone.
+- [ ] 2C.8 Add a structured skip result when a source extension is unsupported; do not throw raw parser exceptions to the CLI.
+- [ ] 2C.9 Update `KnowledgeIngestReport.imported[]` to optionally include pipeline artifact paths: sourceMetaPath, blocksPath, normalizedBlocksPath, draftRoot, publishReportPath.
+- [ ] 2C.10 Add tests for id stability, duplicate source handling, changed file handling, unsupported file skip, and metadata field compatibility.
+
+## 2D. Source Block Extraction
+
+- [ ] 2D.1 Move existing DOCX paragraph parsing logic from `parseDocx` into a new extraction helper in `src/knowledge/ingest.ts` or `src/knowledge/extract.ts`.
+- [ ] 2D.2 Change extraction output from `ParsedParagraph[]` to `KnowledgeSourceBlock[]`; preserve heading level and section path.
+- [ ] 2D.3 For DOCX styles with TOC names, emit block type `toc` or skip with extract-report count; choose one approach and document it in design notes.
+- [ ] 2D.4 Preserve list-like paragraphs as `list_item` when the text or DOCX paragraph style clearly indicates list numbering/bullets; otherwise keep as `paragraph`.
+- [ ] 2D.5 Detect repeated document titles, page headers, and likely footers as `header_footer` when they recur with low content variety.
+- [ ] 2D.6 If table XML extraction is not implemented in this round, detect table presence from DOCX XML and add an extract warning `table_lost`; do not pretend table structure is preserved.
+- [ ] 2D.7 For Markdown sources, parse headings into `heading` blocks and non-empty text into paragraph/list blocks.
+- [ ] 2D.8 Generate deterministic `block_id` values such as `blk_<source-id>_<order padded>`; do not use random ids.
+- [ ] 2D.9 Write `blocks.jsonl` using one valid JSON object per line and stable ordering by source order.
+- [ ] 2D.10 Write `extract-report.json` after every extraction, including zero-block and parser-warning cases.
+- [ ] 2D.11 Add `readSourceBlocks(workspaceRoot, sourceDocumentId)` and `writeSourceBlocks(...)` helpers in `src/knowledge/extract.ts` or `src/knowledge/pipeline-storage.ts`.
+- [ ] 2D.12 Add tests for DOCX heading extraction, Markdown heading extraction, TOC detection, zero-block report, deterministic block ids, and JSONL read/write round trip.
+
+## 2E. Block Normalization
+
+- [ ] 2E.1 Add `src/knowledge/normalize.ts` or a similarly owned knowledge module; it must not import runtime, gateway, worker, or model code.
+- [ ] 2E.2 Implement `normalizeSourceBlocks({ workspaceRoot, sourceDocumentId, blocks })` returning normalized blocks and a normalize report.
+- [ ] 2E.3 Strip empty text, repeated whitespace, hidden control characters, and Markdown-only boilerplate from normalized text.
+- [ ] 2E.4 Preserve original `block_id` through `source_block_id`; do not lose source provenance when changing text.
+- [ ] 2E.5 Build and attach `section_path` by walking heading blocks; paragraph/list/table blocks inherit the nearest heading path.
+- [ ] 2E.6 Label TOC/header/footer/navigation-only blocks with `included_in_slice: false` and an `excluded_reason`.
+- [ ] 2E.7 Detect title-only repetitions and exclude them when they do not add business content.
+- [ ] 2E.8 Keep excluded blocks in normalized output for audit visibility; slicing should skip them by `included_in_slice`.
+- [ ] 2E.9 Write normalized blocks to `knowledge/_pipeline/normalized/<source-id>.blocks.jsonl`.
+- [ ] 2E.10 Write a normalize report with excluded counts and heading structure warnings.
+- [ ] 2E.11 Add tests for heading inheritance, TOC exclusion, repeated title exclusion, whitespace cleanup, provenance preservation, and JSONL round trip.
+
+## 2F. Draft Slice Generation
+
+- [ ] 2F.1 Add `src/knowledge/slicer.ts` or refactor `buildParentSlices` into a dedicated knowledge slicer module.
+- [ ] 2F.2 Implement `buildDraftSlices({ workspaceRoot, sourceDocumentId, normalizedBlocks, thresholds? })` returning draft slice descriptors and report.
+- [ ] 2F.3 Generate draft slice Markdown under `knowledge/_pipeline/drafts/<source-id>/`, not under `knowledge/whitepapers/`.
+- [ ] 2F.4 Draft frontmatter must set `status: draft`, `quality_status: unchecked`, `pipeline_stage: slice`, `pipeline_status: draft`, `source_document_id`, `source_document`, `source_block_ids`, `section_path`, `chunking_strategy`, and `related_terms`.
+- [ ] 2F.5 Draft body must include inherited heading context and a `## 核心内容` section; avoid adding generic boilerplate that can dominate retrieval.
+- [ ] 2F.6 Preserve source block order and record the first/last block id in draft metadata or report.
+- [ ] 2F.7 Keep parent slice target size configurable; default can retain current approximate 2800 character parent maximum until tuned.
+- [ ] 2F.8 Split on heading boundaries first, then list/table boundaries, then size thresholds; do not split in the middle of a short coherent paragraph.
+- [ ] 2F.9 Merge tiny adjacent blocks into a nearby draft slice when they share the same section path and business topic.
+- [ ] 2F.10 Mark ambiguous or multi-topic candidates for review instead of forcing a confident split.
+- [ ] 2F.11 Implement stable filenames using order and slug; preserve current safe slug behavior where possible.
+- [ ] 2F.12 Write a draft slice report listing draft ids, paths, source block coverage, uncovered included blocks, and warnings.
+- [ ] 2F.13 Add tests for draft location, frontmatter fields, source block ids, heading-context preservation, threshold split, short-block merge, and uncovered block reporting.
+
+## 2G. Pipeline CLI Commands
+
+- [ ] 2G.1 Update `src/cli.ts` `handleKnowledgeCommand` to route new subcommands without embedding pipeline business logic in CLI parsing.
+- [ ] 2G.2 Add a `src/knowledge/pipeline.ts` facade with functions for `runKnowledgeExtract`, `runKnowledgeNormalize`, `runKnowledgeSlice`, `runKnowledgeAudit`, `runKnowledgeRepairPlan`, `runKnowledgeRepairApply`, `runKnowledgeReview`, `runKnowledgePublish`, and `runKnowledgeEval`.
+- [ ] 2G.3 Add CLI command `knowledge extract --workspace <path> [--source-id <id>]` that reads source metadata and writes blocks/extract reports.
+- [ ] 2G.4 Add CLI command `knowledge normalize --workspace <path> [--source-id <id>]` that reads blocks and writes normalized blocks/reports.
+- [ ] 2G.5 Add CLI command `knowledge slice --workspace <path> [--source-id <id>]` that reads normalized blocks and writes draft slices/reports.
+- [ ] 2G.6 Add CLI command `knowledge audit --workspace <path> [--quality-gate warn|strict|off]` that runs source and slice quality audit without rebuilding indexes unless required.
+- [ ] 2G.7 Add CLI command `knowledge repair --plan --workspace <path>` that writes a repair plan and prints its path.
+- [ ] 2G.8 Add CLI command `knowledge repair --apply <plan-path> --workspace <path>` that applies deterministic safe actions and prints a repair result path.
+- [ ] 2G.9 Add CLI command `knowledge review --source-id <id> --action approve|reject|request_edits|accept_warnings --reviewer <name> [--notes <text>]`.
+- [ ] 2G.10 Add CLI command `knowledge publish --workspace <path> [--source-id <id>] [--quality-gate warn|strict]` that writes formal active documents and marks dirty flag.
+- [ ] 2G.11 Add CLI command `knowledge eval --workspace <path> --questions <file> [--report-dir <path>]`.
+- [ ] 2G.12 Update `printUsage` in `src/cli.ts` to list the new commands and the existing compatibility commands.
+- [ ] 2G.13 Update `package.json` npm scripts if appropriate: `knowledge:extract`, `knowledge:slice`, `knowledge:audit`, `knowledge:repair`, `knowledge:publish`, `knowledge:eval`; each must call the same CLI implementation.
+- [ ] 2G.14 Each CLI command must print artifact paths, counts, warnings/errors, and next recommended command; do not print raw source document content.
+- [ ] 2G.15 Add CLI tests for command dispatch, missing required args, invalid action, path safety, and zero-source friendly output.
+
+## 2H. Repair Plan Implementation
+
+- [ ] 2H.1 Add `src/knowledge/repair.ts` owned by the knowledge module.
+- [ ] 2H.2 Implement `generateKnowledgeRepairPlan({ workspaceRoot, qualityReportPath? })` that reads quality reports and returns a `KnowledgeRepairPlan`.
+- [ ] 2H.3 Map `too_short` on adjacent same-section draft slices to `merge_adjacent_short_slices` when merge can preserve source block order.
+- [ ] 2H.4 Map `too_long` to `split_oversized_slice` only when there are heading/list/table boundaries; otherwise mark manual review.
+- [ ] 2H.5 Map `duplicate_content` on draft slices to `remove_duplicate_draft` for non-canonical duplicates; published duplicates require manual review.
+- [ ] 2H.6 Map `missing_section_path` to `add_section_path` only when all source blocks have a consistent inherited path.
+- [ ] 2H.7 Map `low_signal_terms` to `add_related_terms` using title, section path, source title, module aliases, and high-signal Chinese terms.
+- [ ] 2H.8 Map `missing_source_block_ids`, `multi_topic_slice`, `broken_coreference`, `table_lost`, and conflict issues to `manual_review_required`.
+- [ ] 2H.9 Implement `writeKnowledgeRepairPlan` and `readKnowledgeRepairPlan` with malformed-plan handling that fails gracefully.
+- [ ] 2H.10 Implement `applyKnowledgeRepairPlan({ workspaceRoot, planPath })` for safe deterministic actions only.
+- [ ] 2H.11 Before modifying any Markdown file, compute and record previous sha256; after writing, compute new sha256.
+- [ ] 2H.12 Reject repair plans that point outside `knowledge/`, refer to missing files, or were generated for another workspace.
+- [ ] 2H.13 Write `repair-result-<timestamp>.json` next to the plan with applied/skipped actions and rollback notes.
+- [ ] 2H.14 Add tests for each mapping rule, safe apply, manual-review skip, path traversal rejection, stale/malformed plan rejection, and repair result hashes.
+
+## 2I. Review and Publish Pipeline
+
+- [ ] 2I.1 Add `src/knowledge/publish.ts` or include publish helpers in a focused knowledge pipeline module.
+- [ ] 2I.2 Implement `reviewDraftSlices({ workspaceRoot, sourceDocumentId, action, reviewer, notes, ids? })` that writes review records without directly publishing.
+- [ ] 2I.3 Review actions must update draft frontmatter status consistently: approve -> `approved`, reject -> `rejected`, request_edits -> `review_required`, accept_warnings -> `approved` with warning override.
+- [ ] 2I.4 Review records must preserve previous status, next status, reviewer, notes, quality issue ids, and timestamp.
+- [ ] 2I.5 Implement `publishApprovedDraftSlices({ workspaceRoot, sourceDocumentId?, qualityGate })`.
+- [ ] 2I.6 Publish must refuse `quality_error` or `rejected` drafts unless an explicit accepted warning override exists and the issue is not fatal.
+- [ ] 2I.7 Publish must copy or render approved draft Markdown into the formal knowledge tree such as `knowledge/whitepapers/<module>/<source-slug>/...md`.
+- [ ] 2I.8 Published frontmatter must set `status: active`, `pipeline_status: published`, `quality_status`, `review_id`, `publish_id`, and preserve source provenance.
+- [ ] 2I.9 Publish must not delete draft files or review records; drafts remain the audit trail.
+- [ ] 2I.10 Publish must mark the dirty flag so the next `knowledge update` rebuilds indexes.
+- [ ] 2I.11 Publish must write `knowledge/_pipeline/publish/publish-report.json` with counts and paths.
+- [ ] 2I.12 Update `src/knowledge/indexer.ts` so formal published documents are indexed and `_pipeline` Markdown remains excluded.
+- [ ] 2I.13 Add tests for approve/reject/request_edits/accept_warnings, fatal quality block, publish output path, provenance preservation, dirty flag, and index exclusion of drafts.
+
+## 2J. Golden Question Evaluation
+
+- [ ] 2J.1 Add `src/knowledge/eval.ts` owned by the knowledge module; it can call `searchKnowledge` but must not call runtime or models in the first implementation.
+- [ ] 2J.2 Support JSON and YAML question files if a YAML parser already exists; if no YAML dependency exists, support JSON first and document YAML as follow-up.
+- [ ] 2J.3 Define default eval question fixture under `test/fixtures/knowledge/eval-questions.json` with at least AI companion 8 PM reminder, EduSoho course search, and one no-hit question.
+- [ ] 2J.4 Implement `runKnowledgeEval({ workspaceRoot, questionsPath, limit })` returning a `KnowledgeEvalReport`.
+- [ ] 2J.5 For each should-hit question, evaluate whether expected keywords/source appear in Top 1, Top 3, and Top 5 evidence.
+- [ ] 2J.6 Implement answer-bearing check using the same deterministic helper planned for Evidence Judge when available; before that helper exists, use a local interim rule and replace it later.
+- [ ] 2J.7 For should-not-hit questions, count any direct high-confidence knowledge hit as a false positive.
+- [ ] 2J.8 Attribute failures to source extraction, normalization, slicing, retrieval, judge, missing source knowledge, or escalation based on available reports and evidence.
+- [ ] 2J.9 Write eval reports to `knowledge/reports/eval-report.json` by default and support timestamped report output if requested.
+- [ ] 2J.10 Add tests for Hit@ metrics, false positive, per-question failure attribution, malformed question file, and missing knowledge directory.
+
+## 2K. Pipeline Compatibility and Migration
+
+- [ ] 2K.1 Keep existing `knowledge init --source-dir ...` behavior usable for the user, but internally make it call pipeline stages and then publish/index when compatibility mode is selected.
+- [ ] 2K.2 Add a `--pipeline step|full|legacy` or equivalent option only if needed; default should be documented and not surprise existing users.
+- [ ] 2K.3 If current formal whitepaper slices already exist, `knowledge init` must not silently delete them; it should either reuse, supersede with published output, or report a conflict.
+- [ ] 2K.4 Provide migration behavior for existing whitepaper slices that lack `source_block_ids`: audit should warn, repair should mark manual review or backfill only when source blocks can be matched safely.
+- [ ] 2K.5 Ensure old `chunks.jsonl`, `manifest.json`, and `keyword-index.json` formats remain readable until rebuilt.
+- [ ] 2K.6 Ensure old `KnowledgeIngestReport` JSON remains readable even if new optional pipeline fields are absent.
+- [ ] 2K.7 Update tests that previously expected immediate active whitepaper slices after init; new tests should assert both compatibility output and pipeline artifacts.
+- [ ] 2K.8 Add an end-to-end pipeline test using fixture documents: init/intake -> extract -> normalize -> slice -> audit -> repair plan -> review approve -> publish -> update -> search -> eval.
+- [ ] 2K.9 Add a real-whitepaper manual verification task after implementation: run against `/Users/king/Documents/knowledge/`, record source counts, draft counts, quality issue counts, published counts, and eval summary in implementation notes.
+- [ ] 2K.10 Confirm `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm test` still pass after pipeline migration.
 
 ## 3. Quality Report Type Contract
 
 - [ ] 3.1 Add `src/knowledge/quality.ts` or equivalent module owned by `src/knowledge/`; it must not import runtime, gateway, worker, or model modules.
 - [ ] 3.2 Define `KnowledgeQualitySeverity = 'info' | 'warn' | 'error'` in `src/knowledge/types.ts` or `quality.ts`.
-- [ ] 3.3 Define `KnowledgeQualityIssueCode` enum/string union with at least `empty_body`, `heading_only`, `toc_like`, `too_short`, `too_long`, `duplicate_content`, `missing_source_document`, `missing_source_document_id`, `missing_section_path`, `missing_parent`, `orphan_chunk`, and `low_signal_terms`.
+- [ ] 3.3 Define `KnowledgeQualityIssueCode` enum/string union with at least `parser_empty`, `too_many_unknown_blocks`, `toc_not_removed`, `header_footer_noise`, `table_lost`, `list_structure_lost`, `heading_structure_broken`, `duplicate_paragraphs`, `source_provenance_missing`, `empty_body`, `heading_only`, `toc_like`, `too_short`, `too_long`, `duplicate_content`, `multi_topic_slice`, `broken_coreference`, `not_answer_bearing`, `missing_source_document`, `missing_source_document_id`, `missing_source_block_ids`, `missing_source_blocks`, `missing_section_path`, `missing_parent`, `orphan_chunk`, and `low_signal_terms`.
 - [ ] 3.4 Define `KnowledgeQualityIssue` with fields: `code`, `severity`, `message`, `documentId?`, `chunkId?`, `source?`, `sourceDocument?`, `sectionPath?`, `contentHash?`, `details?`.
-- [ ] 3.5 Define `KnowledgeQualityThresholds` with defaults: minimum meaningful body characters, maximum parent slice characters, duplicate normalized hash policy, minimum related term count, and toc-like detection thresholds.
-- [ ] 3.6 Define `KnowledgeQualityReport` with fields: `version: 1`, `workspaceRoot`, `knowledgeRoot`, `generatedAt`, `thresholds`, `inspected`, `severityCounts`, `issueCounts`, `issues`, `recommendedActions`, and `gate`.
+- [ ] 3.5 Define `KnowledgeQualityThresholds` with defaults: minimum meaningful body characters, maximum parent slice characters, maximum unknown block ratio, duplicate normalized hash policy, minimum related term count, toc-like detection thresholds, answer-bearing minimums, and multi-topic heading thresholds.
+- [ ] 3.6 Define `KnowledgeQualityReport` with fields: `version: 1`, `workspaceRoot`, `knowledgeRoot`, `generatedAt`, `thresholds`, `inspected`, `stageSummaries`, `severityCounts`, `issueCounts`, `issues`, `recommendedActions`, and `gate`.
 - [ ] 3.7 Export quality report types from `src/knowledge/index.ts` so tests and future runtime integration can import them through the knowledge public surface.
 - [ ] 3.8 Add `qualityReportPath(workspaceRoot)` to `src/knowledge/paths.ts`, returning `knowledge/indexes/chunk-quality-report.json`.
+- [ ] 3.9 Add `sourceQualityReportPath(workspaceRoot)` to `src/knowledge/paths.ts`, returning `knowledge/reports/source-quality-report.json`.
+- [ ] 3.10 Ensure quality types can reference source blocks, draft slices, published documents, and chunks without forcing all fields to be present.
 
 ## 4. Quality Audit Implementation
 
-- [ ] 4.1 Implement `auditKnowledgeQuality({ workspaceRoot, thresholds?, gate? })` in `src/knowledge/quality.ts`; it must load discovered Markdown documents and derived chunks using existing knowledge module helpers.
+- [ ] 4.1 Implement `auditKnowledgeQuality({ workspaceRoot, thresholds?, gate? })` in `src/knowledge/quality.ts`; it must load source metadata, extracted blocks, normalized blocks, draft slices, published Markdown documents, and derived chunks using knowledge module helpers.
 - [ ] 4.2 Implement meaningful body extraction that strips YAML frontmatter, Markdown headings, boilerplate sections such as `## 可回答的问题` and `## 原文来源`, list-only source references, and repeated title-only lines before measuring content.
 - [ ] 4.3 Implement `empty_body`: emit `warn` when meaningful body is empty after boilerplate stripping.
 - [ ] 4.4 Implement `heading_only`: emit `warn` when meaningful content contains only headings or near-identical title repetitions.
@@ -42,23 +221,30 @@
 - [ ] 4.10 Implement provenance checks: emit `error` if a whitepaper slice lacks `source_document` or `source_document_id`; emit `warn` if `section_path` is missing or empty.
 - [ ] 4.11 Implement chunk-parent checks: emit `error` when `chunks.jsonl` contains a chunk whose `parent_id` cannot be found among parsed parent slice documents.
 - [ ] 4.12 Implement parent-without-chunk checks: emit `warn` when an active parent slice has no derived chunk after index generation.
-- [ ] 4.13 Implement issue aggregation so `severityCounts` and `issueCounts` are deterministic and sorted.
-- [ ] 4.14 Implement recommended actions, for example: re-run ingest, review duplicate slices, merge title-only slices, add provenance, or convert low-quality slices to draft.
-- [ ] 4.15 Ensure `auditKnowledgeQuality` never mutates Markdown source files; it only reads knowledge files and writes the report when explicitly asked.
+- [ ] 4.13 Implement source/block quality checks: `parser_empty`, `too_many_unknown_blocks`, `toc_not_removed`, `header_footer_noise`, `table_lost`, `list_structure_lost`, `heading_structure_broken`, `duplicate_paragraphs`, and `source_provenance_missing`.
+- [ ] 4.14 Implement source block provenance checks: emit `warn` or `error` when draft/published slices lack `source_block_ids` or reference block ids missing from extracted/normalized block files.
+- [ ] 4.15 Implement `not_answer_bearing`: detect slices with no product rule, condition, step, outcome, definition, or answer-bearing sentence.
+- [ ] 4.16 Implement `multi_topic_slice`: detect slices with unrelated headings/modules/intents or multiple disconnected business entities.
+- [ ] 4.17 Implement `broken_coreference`: detect slices dominated by references such as `该功能`, `上述`, `如下图`, `该配置`, or `该流程` without enough local context.
+- [ ] 4.18 Implement issue aggregation so `severityCounts` and `issueCounts` are deterministic and sorted.
+- [ ] 4.19 Implement recommended actions, for example: re-run extraction, normalize again, review duplicate slices, merge title-only slices, split multi-topic slice, add provenance, generate repair plan, or convert low-quality slices to draft.
+- [ ] 4.20 Ensure `auditKnowledgeQuality` never mutates Markdown source files; it only reads knowledge files and writes reports when explicitly asked.
 
 ## 5. Quality Report Persistence and CLI Output
 
 - [ ] 5.1 Implement `writeKnowledgeQualityReport({ workspaceRoot, report })` and ensure `knowledge/indexes/` is created before writing.
 - [ ] 5.2 Implement `readKnowledgeQualityReport(workspaceRoot)` returning `undefined` when the report is absent or malformed; malformed reports must not crash normal search.
-- [ ] 5.3 Add `--quality-gate warn|strict|off` option to `knowledge init`; default must be `warn`.
-- [ ] 5.4 Add `--quality-gate warn|strict|off` option to `knowledge update`; default must be `warn`.
-- [ ] 5.5 Wire `knowledge init` so after source ingest and index update it runs quality audit unless `--quality-gate off` is provided.
-- [ ] 5.6 Wire `knowledge update` so after rebuilding manifest/chunks it runs quality audit unless `--quality-gate off` is provided.
-- [ ] 5.7 CLI output must include quality report path, total issue count, error/warn/info counts, and top issue codes.
-- [ ] 5.8 Strict gate behavior: if any `error` issue exists and gate is `strict`, command exits non-zero after writing the report and printing a short remediation message.
-- [ ] 5.9 Warn gate behavior: warnings/errors must be visible in output, but command exits zero unless existing ingest/update fails.
-- [ ] 5.10 Off gate behavior: quality audit is skipped and output must explicitly say quality audit was skipped.
-- [ ] 5.11 Add npm script if needed, for example `knowledge:audit`, only if it maps to the same CLI implementation and does not duplicate logic.
+- [ ] 5.3 Implement `writeSourceQualityReport({ workspaceRoot, report })` and `readSourceQualityReport(workspaceRoot)` with absent/malformed handling.
+- [ ] 5.4 Add `--quality-gate warn|strict|off` option to `knowledge init`; default must be `warn`.
+- [ ] 5.5 Add `--quality-gate warn|strict|off` option to `knowledge update`; default must be `warn`.
+- [ ] 5.6 Wire `knowledge init` so after source ingest and index update it runs quality audit unless `--quality-gate off` is provided.
+- [ ] 5.7 Wire `knowledge update` so after rebuilding manifest/chunks it runs quality audit unless `--quality-gate off` is provided.
+- [ ] 5.8 Wire `knowledge audit` so it can audit pipeline artifacts without requiring a full init/update.
+- [ ] 5.9 CLI output must include quality report path, source quality report path when present, total issue count, error/warn/info counts, and top issue codes.
+- [ ] 5.10 Strict gate behavior: if any `error` issue exists and gate is `strict`, command exits non-zero after writing the report and printing a short remediation message.
+- [ ] 5.11 Warn gate behavior: warnings/errors must be visible in output, but command exits zero unless existing ingest/update fails.
+- [ ] 5.12 Off gate behavior: quality audit is skipped and output must explicitly say quality audit was skipped.
+- [ ] 5.13 Add npm script if needed, for example `knowledge:audit`, only if it maps to the same CLI implementation and does not duplicate logic.
 
 ## 6. Quality-Aware Search and Evidence
 
@@ -77,9 +263,17 @@
 - [ ] 7.5 Add fixture whitepaper slice without `source_document` and assert `missing_source_document` error.
 - [ ] 7.6 Add fixture whitepaper slice without `source_document_id` and assert `missing_source_document_id` error.
 - [ ] 7.7 Add fixture chunk with unknown `parent_id` in `chunks.jsonl` and assert `orphan_chunk` error.
-- [ ] 7.8 Add CLI test for warn gate: command exits zero and writes report.
-- [ ] 7.9 Add CLI test for strict gate: command exits non-zero when error issue exists and report still exists.
-- [ ] 7.10 Add regression test against the real-style DOCX ingest fixture to ensure quality audit returns deterministic issue counts.
+- [ ] 7.8 Add fixture draft slice without `source_block_ids` and assert `missing_source_block_ids`.
+- [ ] 7.9 Add fixture slice referencing a missing block id and assert `missing_source_blocks`.
+- [ ] 7.10 Add fixture slice that contains multiple unrelated topics and assert `multi_topic_slice`.
+- [ ] 7.11 Add fixture slice dominated by unresolved references such as `该功能` / `上述` and assert `broken_coreference`.
+- [ ] 7.12 Add fixture slice with descriptive context but no rule/step/outcome and assert `not_answer_bearing`.
+- [ ] 7.13 Add fixture source extract report with too many unknown blocks and assert `too_many_unknown_blocks`.
+- [ ] 7.14 Add fixture source report with table loss and assert `table_lost`.
+- [ ] 7.15 Add CLI test for warn gate: command exits zero and writes report.
+- [ ] 7.16 Add CLI test for strict gate: command exits non-zero when error issue exists and report still exists.
+- [ ] 7.17 Add regression test against the real-style DOCX ingest fixture to ensure quality audit returns deterministic issue counts.
+- [ ] 7.18 Add regression test proving `_pipeline/drafts/**/*.md` is ignored by indexing and search.
 
 ## 8. Evidence Judge Type and Contract Changes
 
@@ -238,19 +432,25 @@
 
 ## 23. Integration With Search and Indexing
 
-- [ ] 23.1 After approve action, ensure next `knowledge update` includes the active solved case in searchable documents.
-- [ ] 23.2 Before approve action, ensure `review_required` solved case does not justify high-confidence direct answers by itself.
-- [ ] 23.3 After reject/request edits, ensure solved case remains non-high-confidence evidence.
-- [ ] 23.4 After convert-to-unresolved, ensure unresolved case can appear as low-confidence context but not direct-answer evidence.
-- [ ] 23.5 Add tests for search behavior across review state transitions.
+- [ ] 23.1 Ensure `discoverKnowledgeDocuments` or its replacement excludes `_pipeline/`, `_sources/`, `_taxonomy/`, `indexes/`, and `reports/` from searchable Markdown.
+- [ ] 23.2 Ensure published whitepaper slices under formal directories are included after `knowledge publish` and `knowledge update`.
+- [ ] 23.3 Ensure draft, review_required, quality_error, rejected, and repair-plan Markdown never justify high-confidence direct answers.
+- [ ] 23.4 Ensure search evidence can include optional quality metadata from the quality report for published documents.
+- [ ] 23.5 After approve action, ensure next `knowledge update` includes the active solved case in searchable documents.
+- [ ] 23.6 Before approve action, ensure `review_required` solved case does not justify high-confidence direct answers by itself.
+- [ ] 23.7 After reject/request edits, ensure solved case remains non-high-confidence evidence.
+- [ ] 23.8 After convert-to-unresolved, ensure unresolved case can appear as low-confidence context but not direct-answer evidence.
+- [ ] 23.9 Add tests for search behavior across pipeline draft/publish states and solved-case review state transitions.
 
 ## 24. Documentation for Implementation Consumers
 
 - [ ] 24.1 Add implementation notes inside `openspec/changes/harden-knowledge-diagnosis-mvp/design.md` if coding reveals a design gap; do not silently diverge from the design.
 - [ ] 24.2 Update `retrieval-research-plan.md` only if implementation discovers constraints that affect future BM25/vector/hybrid research.
-- [ ] 24.3 Add final implementation notes listing quality baseline counts for the real imported whitepapers.
-- [ ] 24.4 Add final implementation notes listing acceptance command output path and pass/fail summary.
-- [ ] 24.5 Add final implementation notes listing any skipped tasks and why.
+- [ ] 24.3 Add final implementation notes listing pipeline artifact counts for the real imported whitepapers: source files, extracted blocks, normalized blocks, draft slices, repaired slices, reviewed slices, published slices, and chunks.
+- [ ] 24.4 Add final implementation notes listing quality baseline counts for the real imported whitepapers.
+- [ ] 24.5 Add final implementation notes listing eval report output, Hit@1/3/5, answer-bearing rate, false positives, and failure attribution.
+- [ ] 24.6 Add final implementation notes listing acceptance command output path and pass/fail summary.
+- [ ] 24.7 Add final implementation notes listing any skipped tasks and why.
 
 ## 25. Final Compatibility and Verification
 
@@ -260,9 +460,13 @@
 - [ ] 25.4 Add tests that existing case JSON files remain readable without destructive migration.
 - [ ] 25.5 Add tests that runtime falls back to Experience -> Preflight -> DiagnosticWorker -> Review -> Presentation when `knowledge/` is absent.
 - [ ] 25.6 Add tests that hardening disabled mode, if implemented, preserves current MVP behavior.
-- [ ] 25.7 Run `pnpm lint`.
-- [ ] 25.8 Run `pnpm typecheck`.
-- [ ] 25.9 Run `pnpm build`.
-- [ ] 25.10 Run `pnpm test`.
-- [ ] 25.11 Run the real local acceptance command if available; if not run, document why and what risk remains.
-- [ ] 25.12 Review git diff to confirm module ownership boundaries: knowledge data logic in `src/knowledge/`, orchestration in `src/runtime/`, transport in `src/gateway/`, tools in `src/workers/`, docs in `docs/`, Agent configs in `src/agents/`, log rendering in `src/observability/`.
+- [ ] 25.7 Add tests that pipeline artifacts can be deleted and regenerated from `_sources` without losing source provenance.
+- [ ] 25.8 Add tests that `knowledge publish` marks dirty flag and `knowledge update` clears it after rebuilding indexes.
+- [ ] 25.9 Add tests that `knowledge eval` fails when expected whitepaper evidence is absent and passes when published slices contain the evidence.
+- [ ] 25.10 Run `pnpm lint`.
+- [ ] 25.11 Run `pnpm typecheck`.
+- [ ] 25.12 Run `pnpm build`.
+- [ ] 25.13 Run `pnpm test`.
+- [ ] 25.14 Run the real local acceptance command if available; if not run, document why and what risk remains.
+- [ ] 25.15 Run the real pipeline against `/Users/king/Documents/knowledge/` if the documents are available; record artifact paths and counts.
+- [ ] 25.16 Review git diff to confirm module ownership boundaries: knowledge data logic in `src/knowledge/`, orchestration in `src/runtime/`, transport in `src/gateway/`, tools in `src/workers/`, docs in `docs/`, Agent configs in `src/agents/`, log rendering in `src/observability/`.
