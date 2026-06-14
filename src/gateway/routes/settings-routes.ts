@@ -94,8 +94,13 @@ export async function handleSettingsRoutes(
     if (body.timeoutMs !== undefined) {
       config.claude.timeoutMs = Math.max(0, Number(body.timeoutMs));
     }
-    if (body.maxBudgetUsd !== undefined) {
-      config.claude.maxBudgetUsd = Math.max(0.01, Number(body.maxBudgetUsd));
+    if ('maxBudgetUsd' in body) {
+      const maxBudgetUsd = optionalPositiveNumber(body.maxBudgetUsd);
+      if (maxBudgetUsd === undefined) {
+        delete config.claude.maxBudgetUsd;
+      } else {
+        config.claude.maxBudgetUsd = Math.max(0.01, maxBudgetUsd);
+      }
     }
     if (body.sessionBusyMaxRetries !== undefined) {
       config.claude.sessionBusyMaxRetries = Math.max(0, Number(body.sessionBusyMaxRetries));
@@ -109,4 +114,13 @@ export async function handleSettingsRoutes(
   }
 
   return false;
+}
+
+function optionalPositiveNumber(value: number | string | null | undefined): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : undefined;
 }

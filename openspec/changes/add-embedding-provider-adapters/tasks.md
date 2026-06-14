@@ -1,3 +1,17 @@
+## 0. Mandatory Apply Workflow / 必须先执行的实施纪律
+
+- [ ] 0.1 Before any implementation task, load and follow the available `openspec-apply-change`, `test-driven-development`, `systematic-debugging`, and `verification-before-completion` skills, or write equivalent red/green/root-cause/fresh-verification evidence into `implementation-notes.md`.
+- [ ] 0.2 Treat this `tasks.md` as an execution contract: do not mark a checkbox complete unless the same section has behavior evidence, command output, or a documented reason why it is planning/docs-only.
+- [ ] 0.3 Implement in checkpoints, not one giant pass: provider contract -> vector artifact -> CLI/smoke -> docs/boundary -> final audit.
+- [ ] 0.4 Before each checkpoint, write the focused RED test or failing fixture first and run it until it fails for the expected reason; record the failure summary in `implementation-notes.md`.
+- [ ] 0.5 After each checkpoint turns GREEN, record the exact command, pass summary, changed files, and remaining risks in `implementation-notes.md` before starting the next checkpoint.
+- [ ] 0.6 If a provider official docs gate blocks real request/response code, stop provider-specific coding for that provider and implement only scaffold/fake behavior plus tests. Do not silently downgrade the task to "done".
+- [ ] 0.7 The minimum fake acceptance spine must run through config -> provider factory -> fake provider -> knowledge vector builder -> `vectors.jsonl` -> `vector-manifest.json` -> vector build report -> compatibility check.
+- [ ] 0.8 The fake acceptance fixture must include at least one eligible chunk and one restricted chunk; evidence must prove the restricted chunk text was not sent to the provider and was not written into reports.
+- [ ] 0.9 Resolve documentation boundary conflicts explicitly. If `docs/development-standards.md` still says `src/knowledge/` must not own any vector/RAG infrastructure, update it to the new split: `src/knowledge/` owns local vector artifacts/compatibility, while `src/embedding/` owns provider API calls and no module owns hybrid retrieval in this change.
+- [ ] 0.10 If settings API/UI are touched, pause and add compatibility tests before continuing; this change must not alter existing API response shapes unless explicitly covered by optional fields and tests.
+- [ ] 0.11 Before final completion, re-run the anti-fake-complete audit and update `design.md`, `spec.md`, `tasks.md`, or `implementation-notes.md` for any discovered gap. A checklist assertion alone is not evidence.
+
 ## 1. Planning and Guardrails
 
 - [ ] 1.1 Read `openspec/changes/add-embedding-provider-adapters/proposal.md`, `design.md`, `specs/embedding-provider-adapters/spec.md`, `docs/development-standards.md`, `docs/technical-architecture.md`, `docs/agent-design.md`, `src/agents/README.md`, and `src/agents/main.md` before coding.
@@ -275,6 +289,7 @@
 
 - [ ] 19.1 Update `docs/technical-architecture.md` to add `src/embedding/` to the implemented or planned module layout.
 - [ ] 19.2 Update `docs/development-standards.md` module ownership table to include `src/embedding/` and its must-not-own boundaries.
+- [ ] 19.2a Replace or qualify the old `src/knowledge/` boundary that says it must not own vector/RAG infrastructure. Completion evidence: docs clearly state `src/knowledge/` owns local vector artifact files, vector manifests, stale/compatibility checks, and chunk-to-embedding input conversion, while `src/embedding/` owns provider calls/errors/factory and this change still does not implement hybrid/RRF/reranker/GraphRAG.
 - [ ] 19.3 Document that `src/embedding/` must not own retrieval ranking, Evidence Judge, runtime orchestration, HTTP routes, or final replies.
 - [ ] 19.4 Add docs section explaining Agent model provider and embedding provider are independent.
 - [ ] 19.5 Add docs section explaining MiniMax is the current preferred embedding provider, Gemini is the fallback provider, and Qwen is reserved.
@@ -319,6 +334,7 @@
 - [ ] 21.14 Test distance mismatch.
 - [ ] 21.15 Test absent vector files.
 - [ ] 21.16 Test source chunk hash change marks stale or rebuild-required.
+- [ ] 21.17 Add one fixture-level test that exercises the full fake acceptance spine: load embedding config, create provider through factory, build vectors from fixture chunks, assert artifacts exist, assert compatibility passes, then mutate provider/model/dimensions/distance and assert rebuild-required.
 
 ## 22. CLI Tests
 

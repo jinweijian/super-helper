@@ -41,8 +41,6 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
       '-p',
       '--output-format',
       'json',
-      '--max-budget-usd',
-      String(this.config.claude.maxBudgetUsd),
       '--permission-mode',
       this.config.claude.permissionMode,
       '--tools',
@@ -56,6 +54,10 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
       ...sessionArgs(request),
       userPrompt,
     ];
+    const maxBudgetUsd = this.config.claude.maxBudgetUsd;
+    if (Number.isFinite(maxBudgetUsd) && Number(maxBudgetUsd) > 0) {
+      args.splice(3, 0, '--max-budget-usd', String(maxBudgetUsd));
+    }
     const command = shellCommand(this.config.claude.command, args);
 
     const execution = await runCommandWithSessionBusyRetry(

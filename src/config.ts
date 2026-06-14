@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import type { UserPersona } from './domain.js';
+import type { EmbeddingProviderConfig } from './embedding/types.js';
 
 export interface ModelProviderConfig {
   type: 'openai-compatible';
@@ -42,6 +43,7 @@ export interface SuperHelperConfig {
   models: {
     providers: Record<string, ModelProviderConfig>;
   };
+  embedding: EmbeddingProviderConfig;
   claude: {
     enabled: boolean;
     command: string;
@@ -51,7 +53,7 @@ export interface SuperHelperConfig {
     allowedTools: string[];
     disallowedTools: string[];
     timeoutMs: number;
-    maxBudgetUsd: number;
+    maxBudgetUsd?: number;
     sessionBusyMaxRetries: number;
     sessionBusyRetryDelayMs: number;
   };
@@ -101,6 +103,16 @@ export function defaultConfig(): SuperHelperConfig {
     models: {
       providers: {},
     },
+    embedding: {
+      enabled: false,
+      provider: 'minimax',
+      model: '',
+      apiKeyEnv: 'MINIMAX_API_KEY',
+      dimensions: 0,
+      distance: 'cosine',
+      batchSize: 16,
+      timeoutMs: 60_000,
+    },
     claude: {
       enabled: true,
       command: 'claude',
@@ -118,7 +130,6 @@ export function defaultConfig(): SuperHelperConfig {
         'WebSearch',
       ],
       timeoutMs: 1_200_000,
-      maxBudgetUsd: 0.2,
       sessionBusyMaxRetries: 10,
       sessionBusyRetryDelayMs: 10_000,
     },
@@ -166,6 +177,7 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
     knowledge: { ...defaults.knowledge, ...parsed.knowledge },
     agent: { ...defaults.agent, ...parsed.agent },
     models: { ...defaults.models, ...parsed.models },
+    embedding: { ...defaults.embedding, ...parsed.embedding },
     claude: { ...defaults.claude, ...parsed.claude },
     workspaces: parsed.workspaces?.length ? parsed.workspaces : defaults.workspaces,
     mcpTools: parsed.mcpTools ?? defaults.mcpTools,
@@ -173,6 +185,10 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
   merged.storage.rootDir = resolve(merged.storage.rootDir || DEFAULT_HOME);
   merged.knowledge.rootDir = resolve(parsed.knowledge?.rootDir || join(merged.storage.rootDir, 'knowledge'));
   merged.agent.modelProvider = selectActiveModelProvider(merged);
+  // 0.2 used to be the implicit default. Treat that legacy value as unset.
+  if (parsed.claude?.maxBudgetUsd === 0.2) {
+    delete merged.claude.maxBudgetUsd;
+  }
   return merged;
 }
 
@@ -187,6 +203,18 @@ export function getModelProvider(config: SuperHelperConfig): ModelProviderConfig
   }
 
   return config.models.providers[config.agent.modelProvider];
+}
+
+export function getEmbeddingConfig(config: SuperHelperConfig): EmbeddingProviderConfig {
+  return config.embedding;
+}
+
+export function isEmbeddingEnabled(config: SuperHelperConfig): boolean {
+  return config.embedding.enabled === true;
+}
+
+export function resolveEmbeddingSecret(config: EmbeddingProviderConfig): string | undefined {
+  return resolveSecret(config.apiKey, config.apiKeyEnv);
 }
 
 function selectActiveModelProvider(config: SuperHelperConfig): string | undefined {

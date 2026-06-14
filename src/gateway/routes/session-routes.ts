@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
 import type { UserPersona } from '../../domain.js';
 import type { FileMemoryStore } from '../../storage.js';
+import { recoverStaleActiveTurn } from '../../sessions/stale-turn.js';
 import { serializeSession, sessionSummary } from '../dto.js';
 import { readJson, sendJson } from '../http-utils.js';
 
@@ -13,8 +14,10 @@ export async function handleSessionRoutes(
   store: FileMemoryStore,
 ): Promise<boolean> {
   if (req.method === 'GET' && url.pathname === '/api/sessions') {
+    const sessions = store.listCases();
+    sessions.forEach((caseSession) => recoverStaleActiveTurn(caseSession, store, config));
     sendJson(res, 200, {
-      sessions: store.listCases().map((caseSession) => sessionSummary(caseSession, config)),
+      sessions: sessions.map((caseSession) => sessionSummary(caseSession, config)),
     });
     return true;
   }
@@ -47,6 +50,7 @@ export async function handleSessionRoutes(
       return true;
     }
 
+    recoverStaleActiveTurn(caseSession, store, config);
     sendJson(res, 200, { session: serializeSession(caseSession, config) });
     return true;
   }

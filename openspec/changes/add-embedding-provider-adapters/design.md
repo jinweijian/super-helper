@@ -317,6 +317,81 @@ Rationale:
 - embedding adapter 的失败模式经常不是编译错误，而是“看似能跑、真实语义错”：用错 endpoint、混用 provider、维度不一致、旧向量误用、无意付费调用、泄露原文或 secret。
 - 把执行纪律写入设计，可以减少不同模型/执行者只做表面实现的概率。
 
+## Mandatory Implementation Checkpoints
+
+本 change 必须按阶段交付和记录证据。实现者不得先把所有文件写完再统一补测试，也不得在没有失败测试的情况下勾选实现任务。
+
+Required sequence:
+
+```text
+1. Planning gate
+   -> 读取本 change 全部 artifact 和项目边界文档
+   -> 记录 openspec apply instructions
+   -> 记录 provider 官方文档核对状态
+
+2. Provider contract gate
+   -> 先写 provider/config/error/fake/scaffold RED tests
+   -> 再实现 src/embedding/*
+   -> GREEN 后更新 implementation-notes
+
+3. Vector artifact gate
+   -> 先写 chunks fixture -> vector artifact RED tests
+   -> 再实现 src/knowledge/vector-* 和 path/type exports
+   -> GREEN 后记录 artifact 路径、counts、privacy 检查
+
+4. CLI/smoke gate
+   -> 先写 CLI dispatch/output RED tests
+   -> 再接 src/cli.ts 到 provider/vector helpers
+   -> GREEN 后记录 disabled/fake smoke 输出
+
+5. Docs/boundary gate
+   -> 更新 docs/development-standards.md 和 docs/technical-architecture.md
+   -> 明确 src/embedding/ 与 src/knowledge/ 的新边界
+   -> 不能留下“src/knowledge/ 不拥有任何 vector artifact”的旧表述
+
+6. Completion gate
+   -> 执行 Anti-Fake-Complete Audit
+   -> 更新 implementation-notes
+   -> fresh verification 后才能标记完成
+```
+
+Stop conditions:
+
+- 如果 MiniMax 官方 embedding docs 仍不可得，必须停下 MiniMax real HTTP coding；只允许 scaffold/docs-required 行为。
+- 如果 Gemini 官方 docs 与本设计不同，必须先更新 OpenSpec，再实现 provider-specific request/response 逻辑。
+- 如果任一阶段测试只能证明 mock 行为，必须补一个 fixture path 证明真实模块边界贯通。
+- 如果发现文档模块边界和实现需求冲突，必须先更新 docs 和本 change，不允许让实现者自行解释。
+
+## End-to-End Fake Acceptance Spine
+
+本 change 的最小可验收贯通链路不是“provider class 能实例化”，而是以下 fake 可重复路径：
+
+```text
+SuperHelperConfig.embedding
+  -> createEmbeddingProvider(fake config)
+  -> FakeEmbeddingProvider.embedDocuments(...)
+  -> buildKnowledgeVectorIndex(...)
+  -> knowledge/indexes/vectors.jsonl
+  -> knowledge/indexes/vector-manifest.json
+  -> knowledge/indexes/vector-build-report.json
+  -> checkKnowledgeVectorCompatibility(...)
+```
+
+This spine must use a small fixture knowledge workspace with `knowledge/indexes/chunks.jsonl`. The fixture must include:
+
+- at least one eligible active chunk
+- at least one restricted chunk that must be skipped before text reaches the provider
+- stable chunk ids, document ids, source path, text hash/content hash, and source metadata
+
+Acceptance evidence must prove:
+
+- vector builder received only eligible text
+- vector records contain provider/model/dimensions/distance/text hash/source ids
+- manifest compatibility passes for matching config
+- manifest compatibility returns rebuild-required for provider/model/dimensions/distance changes
+- build report contains ids, hashes, counts, paths, and safe errors only
+- no raw chunk text, raw API key, raw request header, cookie, bearer token, or raw provider payload is persisted in reports or implementation notes
+
 ## Risks / Trade-offs
 
 - [Risk] MiniMax/Gemini API endpoint 或响应格式变化。 -> Mitigation: 任务要求编码前核对官方文档；adapter 测试用 fake HTTP 固定 contract，真实 smoke test 独立运行。

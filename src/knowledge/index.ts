@@ -12,6 +12,8 @@ export {
   updateKnowledgeIndexWithQuality,
 } from './indexer.js';
 export { loadKnowledgeTaxonomy, routeKnowledgeQuestion } from './taxonomy.js';
+export { buildKnowledgeHealthSummary } from './health.js';
+export type { KnowledgeHealthStatus, KnowledgeHealthSummary, KnowledgeSimilarWorkspace } from './health.js';
 export {
   auditKnowledgeQuality,
   evaluateQualityGate,

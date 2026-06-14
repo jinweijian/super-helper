@@ -17,11 +17,11 @@ export function renderApp(): string {
     .pill.warn { border-color: #f3c15f; background: #fff8e6; color: #7a4b00; }
     .pill.error { border-color: #ffb3b3; background: #fff1f1; color: #9b1c1c; }
     .workspace-shell { min-height: 0; height: calc(100vh - 56px); display: grid; grid-template-columns: 264px minmax(0, 1fr); }
-    .sessions-sidebar { min-height: 0; border-right: 1px solid #d9e2ec; background: #ffffff; display: grid; grid-template-rows: auto 1fr; }
+    .sessions-sidebar { min-height: 0; overflow: hidden; border-right: 1px solid #d9e2ec; background: #ffffff; display: grid; grid-template-rows: auto minmax(0, 1fr); }
     .sessions-head { padding: 14px; border-bottom: 1px solid #edf1f5; display: grid; gap: 10px; }
     .sessions-head h2 { margin: 0; font-size: 14px; }
-    .session-list { min-height: 0; overflow: auto; display: grid; align-content: start; gap: 6px; padding: 10px; }
-    .session-item { min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; align-items: stretch; border: 1px solid #cbd6e2; border-radius: 8px; background: #fff; overflow: visible; }
+    .session-list { min-height: 0; max-height: 100%; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; align-content: initial; gap: 6px; padding: 10px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    .session-item { flex: 0 0 auto; min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; align-items: stretch; border: 1px solid #cbd6e2; border-radius: 8px; background: #fff; overflow: visible; }
     .session-item.active { border-color: #2f80ed; background: #eef6ff; }
     .session-open { height: auto; min-height: 56px; text-align: left; display: grid; gap: 4px; padding: 9px 10px; border: 0; background: transparent; border-radius: 0; min-width: 0; }
     .session-more { width: 32px; height: 32px; align-self: center; padding: 0; }
@@ -109,7 +109,7 @@ export function renderApp(): string {
       .workspace-shell { grid-template-columns: 1fr; grid-template-rows: 150px minmax(0, 1fr); }
       .sessions-sidebar { min-height: 0; border-right: 0; border-bottom: 1px solid #d9e2ec; }
       .sessions-head { grid-template-columns: 1fr auto; align-items: center; padding: 10px 12px; }
-      .session-list { grid-auto-flow: column; grid-auto-columns: minmax(210px, 260px); overflow-x: auto; overflow-y: hidden; padding: 8px 10px; }
+      .session-list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(210px, 260px); overflow-x: auto; overflow-y: hidden; padding: 8px 10px; }
       .session-item { min-height: 54px; }
     }
     @media (max-width: 700px) { main { padding: 12px 12px 0; } .case { display: grid; } .msg { max-width: 100%; } }
@@ -230,12 +230,14 @@ export function renderApp(): string {
       border-right-color: var(--border);
       background: linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
       grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
     }
     .sessions-head { padding: 16px 12px 12px; border-bottom-color: var(--border); gap: 12px; }
     .sessions-head h2 { font-size: 13px; line-height: 1.2; font-weight: 800; color: var(--text); }
     .sessions-head .primary { width: 100%; }
-    .session-list { gap: 8px; padding: 10px 10px 14px; }
+    .session-list { gap: 8px; padding: 10px 10px 14px; overflow-y: auto; overflow-x: hidden; }
     .session-item {
+      flex: 0 0 auto;
       min-height: 66px;
       border-color: var(--border);
       background: var(--surface);
@@ -833,7 +835,7 @@ export function renderApp(): string {
       .workspace-shell { grid-template-columns: 1fr; grid-template-rows: 154px minmax(0, 1fr); }
       .sessions-sidebar { border-right: 0; border-bottom-color: var(--border); }
       .sessions-head .primary { width: auto; }
-      .session-list { grid-auto-columns: minmax(220px, 272px); padding: 8px 10px 10px; }
+      .session-list { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 272px); overflow-x: auto; overflow-y: hidden; padding: 8px 10px 10px; }
       .session-item { min-height: 60px; }
       .session-open { min-height: 58px; }
     }
@@ -946,6 +948,7 @@ export function renderApp(): string {
     .sessions-sidebar {
       background: #fff;
       border-right: 1px solid var(--border);
+      overflow: hidden;
     }
     .sessions-head {
       padding: 18px 12px 14px;
@@ -975,8 +978,11 @@ export function renderApp(): string {
     .session-list {
       padding: 12px;
       gap: 10px;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .session-item {
+      flex: 0 0 auto;
       min-height: 72px;
       border-radius: 12px;
       border-color: #dce5f1;
@@ -1572,6 +1578,152 @@ export function renderApp(): string {
       font-style: normal;
       color: #98a2b3;
     }
+    .knowledge-status-chip {
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid #d8e0eb;
+      padding: 0 9px;
+      font-size: 11px;
+      font-weight: 800;
+      background: #f8fafc;
+      color: #667085;
+    }
+    .knowledge-status-chip.ok { border-color: #9fd6b2; background: #f1fbf5; color: #247a43; }
+    .knowledge-status-chip.warn { border-color: #efca82; background: #fff7e8; color: #b96f10; }
+    .knowledge-status-chip.error { border-color: #f5b5af; background: #fff4f3; color: #b42318; }
+    .knowledge-status-chip.off { border-color: #d8e0eb; background: #f8fafc; color: #667085; }
+    .knowledge-health-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .health-tile {
+      min-width: 0;
+      display: grid;
+      gap: 5px;
+      padding: 11px;
+      border: 1px solid #dce5f1;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .health-tile span {
+      color: #667085;
+      font-size: 11px;
+      font-weight: 750;
+    }
+    .health-tile strong {
+      font-size: 13px;
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+    .health-tile.ok { border-color: #9fd6b2; background: #f4fbf6; }
+    .health-tile.warn { border-color: #efca82; background: #fff9ea; }
+    .health-tile.error { border-color: #f5b5af; background: #fff5f4; }
+    .health-tile.off { background: #f8fafc; }
+    .health-alert {
+      display: grid;
+      gap: 8px;
+      border: 1px solid #f5b5af;
+      border-radius: 12px;
+      background: #fff4f3;
+      padding: 12px;
+      color: #7a271a;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .health-code {
+      display: inline-flex;
+      width: fit-content;
+      max-width: 100%;
+      border: 1px solid rgba(122, 39, 26, .18);
+      border-radius: 7px;
+      padding: 3px 7px;
+      background: rgba(255,255,255,.68);
+      color: #7a271a;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .health-tree {
+      position: relative;
+      display: grid;
+      gap: 9px;
+      padding-left: 18px;
+    }
+    .health-tree::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 9px;
+      bottom: 9px;
+      width: 1px;
+      background: #d8e0eb;
+    }
+    .health-node {
+      position: relative;
+      display: grid;
+      gap: 4px;
+      padding: 10px 11px;
+      border: 1px solid #dce5f1;
+      border-radius: 12px;
+      background: #fff;
+      min-width: 0;
+    }
+    .health-node::before {
+      content: "";
+      position: absolute;
+      left: -15px;
+      top: 16px;
+      width: 9px;
+      height: 9px;
+      border: 2px solid #c6d3e4;
+      border-radius: 999px;
+      background: #fff;
+    }
+    .health-node.ok { border-color: #9fd6b2; background: #f4fbf6; }
+    .health-node.ok::before { border-color: #2e9d55; background: #2e9d55; }
+    .health-node.warn { border-color: #efca82; background: #fff9ea; }
+    .health-node.warn::before { border-color: #d99118; background: #d99118; }
+    .health-node.error { border-color: #f5b5af; background: #fff5f4; }
+    .health-node.error::before { border-color: #d64545; background: #d64545; }
+    .health-node.off { background: #f8fafc; }
+    .health-node strong {
+      font-size: 12px;
+      font-weight: 850;
+      color: #152033;
+    }
+    .health-node span {
+      color: #667085;
+      font-size: 11px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .health-row {
+      display: grid;
+      gap: 7px;
+      border-top: 1px solid #e5ebf2;
+      margin-top: 8px;
+      padding-top: 9px;
+      font-size: 12px;
+      color: #667085;
+    }
+    .health-row b {
+      color: #152033;
+      font-weight: 800;
+    }
+    .health-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .health-actions button {
+      min-width: 0;
+      padding: 0 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .evidence-row {
       border-radius: 12px;
       border-color: #dce5f1;
@@ -1683,6 +1835,7 @@ export function renderApp(): string {
             <div class="case-title-row">
               <h1 id="title">新对话</h1>
               <span class="case-status status-collecting_input" id="caseStatus">新建</span>
+              <span class="knowledge-status-chip off" id="knowledgeStatus">知识库待检查</span>
             </div>
             <div class="muted" id="meta">本地会话，helper agent 会先审核上下文，再决定追问或调用 Claude Code</div>
             <div class="case-step-rail" id="caseStepRail"></div>
@@ -1719,13 +1872,13 @@ export function renderApp(): string {
         <div class="insight-head">
           <div>
             <strong>诊断审计</strong>
-            <span id="insightSubhead">知识树与证据路线</span>
+            <span id="insightSubhead">知识健康与证据路线</span>
           </div>
         </div>
         <div class="insight-tabs" role="tablist" aria-label="诊断审计视图">
           <button class="active" id="insightTab-progress" onclick="setInsightTab('progress')">进度</button>
           <button id="insightTab-evidence" onclick="setInsightTab('evidence')">证据</button>
-          <button id="insightTab-tree" onclick="setInsightTab('tree')">知识树</button>
+          <button id="insightTab-health" onclick="setInsightTab('health')">知识健康</button>
         </div>
         <div class="insight-content" id="insightContent"></div>
         <div class="insight-footer">
@@ -1763,7 +1916,7 @@ export function renderApp(): string {
         <label>上下文窗口 Tokens<input id="contextWindowTokens" type="number" value="1000000" /></label>
         <div class="field-row">
           <label>Claude 超时毫秒<input id="claudeTimeoutMs" type="number" value="1200000" /></label>
-          <label>Claude 预算 USD<input id="claudeMaxBudgetUsd" type="number" step="0.01" value="0.2" /></label>
+          <label>Claude 预算 USD<input id="claudeMaxBudgetUsd" type="number" step="0.01" placeholder="不限制" /></label>
         </div>
         <div class="field-row">
           <label>Session busy 重试次数<input id="sessionBusyMaxRetries" type="number" value="3" /></label>
@@ -1817,7 +1970,7 @@ export function renderApp(): string {
       document.getElementById('contextWindowTokens').value = provider.contextWindowTokens || json.agent.contextWindowTokens || 200000;
       document.getElementById('temperature').value = provider.temperature ?? 0;
       document.getElementById('claudeTimeoutMs').value = json.claude.timeoutMs ?? 1200000;
-      document.getElementById('claudeMaxBudgetUsd').value = json.claude.maxBudgetUsd || 0.2;
+      document.getElementById('claudeMaxBudgetUsd').value = json.claude.maxBudgetUsd ?? '';
       document.getElementById('sessionBusyMaxRetries').value = json.claude.sessionBusyMaxRetries ?? 3;
       document.getElementById('sessionBusyRetryDelayMs').value = json.claude.sessionBusyRetryDelayMs ?? 3000;
       document.getElementById('settingsStatus').textContent = provider.hasApiKey ? '已检测到 API Key 配置，可以测试模型。' : '未检测到 API Key。请设置环境变量或临时输入 API Key 后测试。';
@@ -1872,6 +2025,7 @@ export function renderApp(): string {
       const title = document.getElementById('title');
       const meta = document.getElementById('meta');
       const status = document.getElementById('caseStatus');
+      const knowledgeStatus = document.getElementById('knowledgeStatus');
       const titleText = session?.title || '新对话';
       const metaText = session?.id
         ? session.id + ' / ' + statusLabel(session.status, session) + ' / ' + personaLabel(session.userPersona || personaSelect.value) + ' / 同案上下文连续'
@@ -1883,6 +2037,13 @@ export function renderApp(): string {
       const statusValue = session?.archivedAt ? 'archived' : session?.status || 'collecting_input';
       status.textContent = statusLabel(statusValue, session);
       status.className = 'case-status status-' + normalizeStatusClass(statusValue);
+      const knowledgeHealth = session?.knowledgeHealth;
+      if (knowledgeStatus) {
+        const healthStatus = knowledgeHealth?.serviceBinding?.status || 'off';
+        knowledgeStatus.textContent = knowledgeHeaderLabel(knowledgeHealth);
+        knowledgeStatus.className = 'knowledge-status-chip ' + healthStatusClass(healthStatus);
+        knowledgeStatus.title = knowledgeHealth?.serviceBinding?.message || '知识库状态会在打开会话后检查';
+      }
       if (session?.userPersona) {
         personaSelect.value = session.userPersona;
       }
@@ -2366,7 +2527,7 @@ export function renderApp(): string {
         headers: {'content-type': 'application/json'},
         body: JSON.stringify({
           timeoutMs: Number(document.getElementById('claudeTimeoutMs').value || 1200000),
-          maxBudgetUsd: Number(document.getElementById('claudeMaxBudgetUsd').value || 0.2),
+          maxBudgetUsd: optionalNumberInput('claudeMaxBudgetUsd'),
           sessionBusyMaxRetries: Number(document.getElementById('sessionBusyMaxRetries').value || 3),
           sessionBusyRetryDelayMs: Number(document.getElementById('sessionBusyRetryDelayMs').value || 3000)
         })
@@ -2375,6 +2536,11 @@ export function renderApp(): string {
       status.textContent = modelJson.agent && claudeJson.claude ? '配置已保存。' : '保存失败：' + JSON.stringify({modelJson, claudeJson});
       document.getElementById('apiKey').value = '';
       await loadConfig();
+    }
+
+    function optionalNumberInput(id) {
+      const value = document.getElementById(id).value.trim();
+      return value ? Number(value) : null;
     }
 
     function closeLogs() {
@@ -2441,7 +2607,7 @@ export function renderApp(): string {
     }
     function setInsightTab(tab) {
       activeInsightTab = tab;
-      ['progress', 'evidence', 'tree'].forEach((item) => {
+      ['progress', 'evidence', 'health'].forEach((item) => {
         const button = document.getElementById('insightTab-' + item);
         if (button) button.classList.toggle('active', item === tab);
       });
@@ -2451,11 +2617,11 @@ export function renderApp(): string {
       const content = document.getElementById('insightContent');
       const subhead = document.getElementById('insightSubhead');
       if (!content) return;
-      subhead.textContent = session?.id ? statusLabel(session.status, session) + ' / ' + personaLabel(session.userPersona || personaSelect.value) : '知识树与证据路线';
+      subhead.textContent = session?.id ? statusLabel(session.status, session) + ' / ' + personaLabel(session.userPersona || personaSelect.value) : '知识健康与证据路线';
       if (activeInsightTab === 'evidence') {
         content.innerHTML = renderInsightEvidence(session);
-      } else if (activeInsightTab === 'tree') {
-        content.innerHTML = renderInsightTree(session);
+      } else if (activeInsightTab === 'health') {
+        content.innerHTML = renderInsightKnowledgeHealth(session);
       } else {
         content.innerHTML = renderInsightProgress(session);
       }
@@ -2489,19 +2655,54 @@ export function renderApp(): string {
         + rows
         + missingHtml;
     }
-    function renderInsightTree(session) {
-      const moduleName = inferKnowledgeModule(session);
-      return '<div class="tree-card"><strong>知识树路径</strong><p>默认只展开本轮相关路径，避免把完整知识库变成噪音。</p></div>'
-        + '<div class="knowledge-map">'
-        + '<div class="knowledge-node active"><strong>知识库</strong><span>企业 Markdown 知识工作区</span></div>'
-        + '<div class="knowledge-node active"><strong>' + escapeHtml(moduleName) + '</strong><span>根据标题、用户问题或 taxonomy 别名推断的业务模块</span></div>'
-        + '<div class="knowledge-node"><strong>FAQ</strong><span>适合直接回答常见规则和操作问题</span></div>'
-        + '<div class="knowledge-node active"><strong>Runbook</strong><span>展示排查步骤、升级条件和风险边界</span></div>'
-        + '<div class="knowledge-node active"><strong>已解决 Case</strong><span>用户确认解决后，Case Curator 会生成待复核草稿</span></div>'
-        + '<div class="knowledge-node"><strong>白皮书切片</strong><span>用于解释背景、模型口径和复杂业务规则</span></div>'
+    function renderInsightKnowledgeHealth(session) {
+      const health = session?.knowledgeHealth;
+      if (!health) {
+        return '<div class="tree-card"><strong>知识健康</strong><p>打开具体会话后，会检查当前服务绑定、索引、检索和 Embedding 状态。</p></div>'
+          + '<div class="knowledge-health-grid">'
+          + renderHealthTile('服务绑定', '待检查', 'off')
+          + renderHealthTile('索引状态', '待检查', 'off')
+          + renderHealthTile('检索命中', '待检查', 'off')
+          + renderHealthTile('Embedding', '未启用', 'off')
+          + '</div>';
+      }
+
+      const service = health.serviceBinding || {};
+      const index = health.index || {};
+      const search = health.search || {};
+      const embedding = health.embedding || {};
+      const similar = health.similarWorkspaces || [];
+      const alert = service.status === 'error'
+        ? '<div class="health-alert"><strong>' + escapeHtml(service.message || '当前服务没有对应知识库目录') + '</strong><span>' + escapeHtml(service.workspaceRoot || '') + '</span><code class="health-code">' + escapeHtml(service.workspaceKey || '') + '</code></div>'
+        : '<div class="insight-card"><strong>服务绑定</strong><p>' + escapeHtml(service.message || '当前服务已绑定知识库工作区') + '</p><code class="health-code">' + escapeHtml(service.workspaceKey || '') + '</code></div>';
+      const treeNodes = [
+        renderHealthNode('Current Service: ' + (service.workspaceId || 'current'), service.workspaceRoot || '未识别服务路径', service.status),
+        renderHealthNode('knowledge root', service.knowledgeRoot || '未解析知识库路径', service.status),
+        renderHealthNode('manifest.json', index.manifestExists ? (index.documentCount + ' docs · ' + (index.updatedAt || '未记录更新时间')) : '缺失', index.manifestExists ? index.status : 'error'),
+        renderHealthNode('chunks.jsonl', index.chunksExists ? (index.chunkCount + ' chunks') : '缺失', index.chunksExists ? index.status : 'error'),
+      ].join('');
+      const similarHtml = similar.length
+        ? similar.map((item) => renderHealthNode('发现相似知识库', item.key + ' · ' + item.documentCount + ' docs · ' + item.chunkCount + ' chunks', 'ok')).join('')
+        : renderHealthNode('发现相似知识库', '暂无可建议绑定的其他知识库', 'off');
+      const filtered = (search.filteredOut || []).length
+        ? (search.filteredOut || []).map((item) => item.reason + ':' + item.count).join(' / ')
+        : '0';
+      const actions = (health.actions || ['绑定知识库', '重建索引', '运行健康检查']).map((action) =>
+        '<button type="button" onclick="healthAction(\\'' + escapeHtml(action) + '\\')">' + escapeHtml(action) + '</button>'
+      ).join('');
+
+      return '<div class="knowledge-health-grid">'
+        + renderHealthTile('服务绑定', healthStatusText(service.status), service.status)
+        + renderHealthTile('索引状态', healthStatusText(index.status), index.status)
+        + renderHealthTile('检索命中', (search.matchedFiles || 0) + ' / ' + (search.searchedFiles || 0), search.status)
+        + renderHealthTile('Embedding', healthStatusText(embedding.status), embedding.status)
         + '</div>'
-        + '<div class="knowledge-branch"><strong>source document</strong><em>></em><strong>parent slice</strong><em>></em><strong>evidence chunk</strong></div>'
-        + '<div class="insight-card placeholder-note"><strong>同案上下文</strong><p>原来的 session 复用改为内部能力展示：同一个 case 会持续使用同案上下文，普通用户不需要理解 Claude session id。</p></div>';
+        + alert
+        + '<div class="tree-card"><strong>知识树路径</strong><p>按当前服务绑定展开，只显示本轮诊断有关的健康节点。</p></div>'
+        + '<div class="health-tree">' + treeNodes + similarHtml + '</div>'
+        + '<div class="insight-card"><strong>本轮检索路径</strong><p><b>Query：</b>' + escapeHtml(search.query || session?.title || '暂无查询') + '</p><div class="health-row"><span><b>searched_files</b> ' + escapeHtml(String(search.searchedFiles || 0)) + '</span><span><b>matched_files</b> ' + escapeHtml(String(search.matchedFiles || 0)) + '</span><span><b>filtered_out</b> ' + escapeHtml(filtered) + '</span><span><b>reason</b> ' + escapeHtml(search.reason || '暂无检索结果') + '</span></div></div>'
+        + '<div class="insight-card"><strong>Embedding</strong><p>' + escapeHtml(embedding.message || 'Embedding 未启用') + '</p></div>'
+        + '<div class="health-actions">' + actions + '</div>';
     }
     function latestRunWithResult(session) {
       return [...(session?.runs || [])].reverse().find((run) => run.result);
@@ -2514,6 +2715,35 @@ export function renderApp(): string {
       if (/权限|安全|permission|security/i.test(text)) return '权限安全';
       return '当前业务模块';
     }
+    function renderHealthTile(label, value, status) {
+      return '<div class="health-tile ' + healthStatusClass(status) + '"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value || '未知') + '</strong></div>';
+    }
+    function renderHealthNode(title, detail, status) {
+      return '<div class="health-node ' + healthStatusClass(status) + '"><strong>' + escapeHtml(title) + '</strong><span>' + escapeHtml(detail || '暂无数据') + '</span></div>';
+    }
+    function healthStatusClass(status) {
+      if (status === 'ok' || status === 'warn' || status === 'error' || status === 'off') return status;
+      return 'off';
+    }
+    function healthStatusText(status) {
+      if (status === 'ok') return '正常';
+      if (status === 'warn') return '需关注';
+      if (status === 'error') return '异常';
+      return '未启用';
+    }
+    function knowledgeHeaderLabel(health) {
+      if (!health) return '知识库待检查';
+      if (health.serviceBinding?.status === 'error') return '知识库未连接';
+      if (health.index?.status === 'error') return '索引缺失';
+      if (health.index?.status === 'warn') return '索引需重建';
+      if (health.search?.status === 'warn') return '知识未命中';
+      return '知识库正常';
+    }
+    function healthAction(action) {
+      ticketDraftNotice = action + '：这是健康面板动作入口，后续会接入对应 API。';
+      activeInsightTab = 'health';
+      setInsightTab('health');
+    }
     function openTicketDraft() {
       ticketDraftNotice = caseId
         ? '工单系统预留：后续会携带 caseId、当前状态、证据摘要、未知项和用户最后一句话创建工单。'
@@ -2523,8 +2753,8 @@ export function renderApp(): string {
     }
     function markResolvedPlaceholder() {
       ticketDraftNotice = '已解决确认预留：后续会触发 Case Curator，生成 solved case 草稿并标记 review_required。';
-      activeInsightTab = 'tree';
-      setInsightTab('tree');
+      activeInsightTab = 'health';
+      setInsightTab('health');
     }
     function openAccountPlaceholder() {
       ticketDraftNotice = '用户系统预留：这里未来会放头像、账号、团队、偏好设置和退出登录。';

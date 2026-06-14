@@ -30,6 +30,7 @@ import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
 import { runKnowledgeAcceptance } from '../dist/runtime/knowledge-acceptance.js';
+import { resolveSessionStorageRoot } from '../dist/sessions/storage-scope.js';
 
 function baseConfig(rootDir) {
   return {
@@ -142,6 +143,15 @@ test('app surfaces interrupted requests and exposes session controls', () => {
   assert.match(html, /escapeHtml\(raw\)/);
 });
 
+test('history session list keeps its own scroll area instead of compressing items', () => {
+  const html = renderApp();
+
+  assert.match(html, /\.sessions-sidebar[\s\S]*overflow: hidden/);
+  assert.match(html, /\.session-list[\s\S]*overflow-y: auto/);
+  assert.match(html, /\.session-list[\s\S]*flex-direction: column/);
+  assert.match(html, /\.session-item[\s\S]*flex: 0 0 auto/);
+});
+
 test('in-progress card shows live motion and activity-based copy', () => {
   const html = renderApp();
 
@@ -212,6 +222,18 @@ test('diagnostic log drawer renders Claude command as a dedicated command block'
   assert.match(html, /block\.command/);
   assert.match(html, /class="log-command"/);
   assert.match(html, /Claude Code 命令/);
+});
+
+test('diagnostic audit panel exposes knowledge health view affordances', () => {
+  const html = renderApp();
+
+  assert.match(html, /知识健康/);
+  assert.match(html, /renderInsightKnowledgeHealth/);
+  assert.match(html, /服务绑定/);
+  assert.match(html, /索引状态/);
+  assert.match(html, /Embedding/);
+  assert.match(html, /绑定知识库/);
+  assert.match(html, /运行健康检查/);
 });
 
 test('composer keeps status chips out of the action row', () => {
@@ -725,6 +747,43 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
     assert.equal(response.result.status, 'partial');
     assert.match(response.result.summary, /error_max_budget_usd/);
     assert.equal(response.result.recommendedNextAction, 'continue_diagnosis');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Claude Code worker omits budget limit when no budget is configured', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workerPath = join(dir, 'fake-no-budget-worker.mjs');
+  writeFileSync(
+    workerPath,
+    `#!/usr/bin/env node
+console.log(JSON.stringify({ type: 'result', subtype: 'success', result: 'ok', total_cost_usd: 0 }));
+`,
+    'utf8',
+  );
+  chmodSync(workerPath, 0o755);
+
+  const config = baseConfig(dir);
+  config.claude.command = workerPath;
+  config.claude.commandWhitelist = [workerPath];
+  delete config.claude.maxBudgetUsd;
+  const worker = new ClaudeCodeWorker(config);
+
+  try {
+    const response = await worker.diagnose({
+      caseId: 'case_test',
+      runId: 'run_01',
+      workspaceId: 'current',
+      claudeSessionId: '55555555-5555-4555-8555-555555555555',
+      userGoal: '分析 q3',
+      knownFacts: [],
+      unknowns: [],
+      constraints: [],
+      allowedMcpToolIds: [],
+    });
+
+    assert.equal(response.trace.command.includes('--max-budget-usd'), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1769,6 +1828,58 @@ test('logs API returns newest structured blocks with severity and labels', async
     const commandBlock = logs.blocks.find((block) => block.phase === 'command');
     assert.equal(typeof commandBlock.command, 'string');
     assert.match(commandBlock.command, /claude worker not executed|claude -p/);
+  } finally {
+    if (server) {
+      await server.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('session API exposes knowledge health for the current workspace', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 43982;
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    config.claude.enabled = false;
+
+    const similarIndexes = join(config.knowledge.rootDir, 'workspaces', 'current-project-similar', 'knowledge', 'indexes');
+    mkdirSync(similarIndexes, { recursive: true });
+    writeFileSync(
+      join(similarIndexes, 'manifest.json'),
+      `${JSON.stringify({
+        version: 1,
+        updated_at: '2026-06-14T05:07:36.210Z',
+        document_count: 381,
+        chunk_count: 381,
+        source_document_count: 3,
+        documents: [],
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    writeFileSync(join(similarIndexes, 'chunks.jsonl'), '{}\n', 'utf8');
+
+    server = await startServer({ config });
+
+    const created = await fetch('http://127.0.0.1:43982/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'AI伴学助手有哪些功能' }),
+    }).then((res) => res.json());
+    const loaded = await fetch(`http://127.0.0.1:43982/api/session?caseId=${created.session.id}`).then((res) => res.json());
+
+    assert.equal(loaded.session.knowledgeHealth.serviceBinding.status, 'error');
+    assert.equal(loaded.session.knowledgeHealth.index.status, 'error');
+    assert.equal(loaded.session.knowledgeHealth.search.searchedFiles, 0);
+    assert.equal(loaded.session.knowledgeHealth.search.reason, 'knowledge workspace is not initialized for the current service');
+    assert.equal(loaded.session.knowledgeHealth.embedding.status, 'off');
+    assert.equal(loaded.session.knowledgeHealth.similarWorkspaces[0].documentCount, 381);
+    assert.ok(loaded.session.knowledgeHealth.actions.includes('绑定知识库'));
+    assert.ok(loaded.session.knowledgeHealth.actions.includes('运行健康检查'));
   } finally {
     if (server) {
       await server.close();
@@ -2879,6 +2990,71 @@ test('async turn failures can reply to the accepted user message', () => {
     assert.equal(helper.replyToMessageId, userMessageId);
     assert.match(helper.body, /worker failed/);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('session API recovers stale in-progress runs instead of polling forever', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 43983;
+    config.claude.timeoutMs = 10;
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    server = await startServer({ config });
+
+    const caseSession = await fetch('http://127.0.0.1:43983/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '卡住的会话' }),
+    }).then((res) => res.json());
+    const casePath = join(resolveSessionStorageRoot(config), 'cases', `${caseSession.session.id}.json`);
+    const persisted = JSON.parse(readFileSync(casePath, 'utf8'));
+    persisted.status = 'diagnosing';
+    persisted.updatedAt = '2020-01-01T00:00:00.000Z';
+    persisted.messages.push({
+      id: 'msg_stale_user',
+      role: 'user',
+      body: '为什么一直诊断中',
+      createdAt: '2020-01-01T00:00:00.000Z',
+    });
+    persisted.runs.push({
+      id: 'run_01',
+      caseId: persisted.id,
+      status: 'running',
+      request: {
+        caseId: persisted.id,
+        runId: 'run_01',
+        workspaceId: 'current',
+        claudeSessionId: persisted.claudeSessionId,
+        userGoal: '为什么一直诊断中',
+        knownFacts: ['为什么一直诊断中'],
+        unknowns: [],
+        constraints: [],
+        allowedMcpToolIds: [],
+      },
+    });
+    writeFileSync(casePath, `${JSON.stringify(persisted, null, 2)}\n`, 'utf8');
+
+    const loaded = await fetch(`http://127.0.0.1:43983/api/session?caseId=${persisted.id}`).then((res) => res.json());
+    const helper = loaded.session.messages.find((message) => message.role === 'helper');
+
+    assert.equal(loaded.session.status, 'partial');
+    assert.equal(loaded.session.runs[0].status, 'partial');
+    assert.equal(helper.replyToMessageId, 'msg_stale_user');
+    assert.match(helper.body, /后台诊断已超时/);
+    const logs = await fetch(`http://127.0.0.1:43983/api/logs?caseId=${persisted.id}`).then((res) => res.json());
+    assert.equal(logs.blocks.some((log) => log.phase === 'turn_recovery' && log.severity === 'warn'), true);
+
+    const sessions = await fetch('http://127.0.0.1:43983/api/sessions').then((res) => res.json());
+    assert.equal(sessions.sessions.find((item) => item.id === persisted.id).status, 'partial');
+  } finally {
+    if (server) {
+      await server.close();
+    }
     rmSync(dir, { recursive: true, force: true });
   }
 });

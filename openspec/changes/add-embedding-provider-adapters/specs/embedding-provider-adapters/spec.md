@@ -217,3 +217,40 @@ The implementation SHALL include auditable execution evidence that prevents chec
 #### Scenario: Fresh verification transcript is required
 - **WHEN** an implementer marks this change complete
 - **THEN** implementation notes include fresh output summaries for `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, focused embedding tests, focused vector tests, fake smoke, and fake vector build
+
+#### Scenario: Stage checkpoints are recorded before task completion
+- **WHEN** an implementer completes provider, vector, CLI, documentation, or verification stages
+- **THEN** implementation notes record the stage, the RED test or failing fixture observed first, the GREEN command, the files changed, and any skipped or deferred behavior before related task checkboxes are marked complete
+
+#### Scenario: Documentation boundary conflicts are resolved
+- **WHEN** vector artifact generation is added to `src/knowledge/` and provider logic is added to `src/embedding/`
+- **THEN** project architecture docs are updated so `src/knowledge/` owns local vector artifacts and compatibility checks but not provider API calls, retrieval ranking, Evidence Judge decisions, runtime orchestration, HTTP routes, or final replies
+
+### Requirement: End-to-end fake embedding acceptance
+The implementation SHALL prove the embedding adapter and knowledge vector artifact path works through a repeatable fake provider fixture before real provider smoke tests are considered.
+
+#### Scenario: Fake provider spine builds vector artifacts
+- **GIVEN** a fixture knowledge workspace has `knowledge/indexes/chunks.jsonl`
+- **AND** embedding config selects provider `fake` with explicit model, dimensions, and distance metric
+- **WHEN** the vector build path runs through the provider factory, fake provider, and knowledge vector builder
+- **THEN** it writes `vectors.jsonl`, `vector-manifest.json`, and a vector build report with provider, model, dimensions, distance, text hash, source ids, vector count, skipped count, failed count, and artifact paths
+
+#### Scenario: Restricted fixture text is not sent to provider
+- **GIVEN** the fixture includes one eligible chunk and one restricted chunk
+- **WHEN** the vector build path runs with the default remote-embedding privacy policy
+- **THEN** only the eligible chunk text is submitted to the provider
+- **AND** the restricted chunk is represented in the build report by id/hash/count/reason only, without raw text
+
+#### Scenario: Fake spine compatibility catches stale indexes
+- **GIVEN** a vector manifest produced by the fake provider fixture
+- **WHEN** active embedding config changes provider, model, dimensions, or distance
+- **THEN** compatibility checking refuses to use the old vector index and reports rebuild-required with the specific mismatch field
+
+#### Scenario: Disabled embedding preserves keyword-only behavior
+- **WHEN** `embedding.enabled` is false
+- **THEN** normal knowledge update, normal runtime startup, and default tests do not create a remote provider, do not call remote embedding APIs, and preserve existing keyword-only knowledge behavior
+
+#### Scenario: Fake acceptance cannot be substituted for real provider acceptance
+- **WHEN** only fake provider or fake fetch tests have run
+- **THEN** implementation notes may claim fake acceptance only
+- **AND** real MiniMax or Gemini smoke status must remain explicitly "not run" unless a sanitized opt-in command was actually executed with current official docs and credentials

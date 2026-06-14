@@ -10,6 +10,41 @@ This file is required execution evidence for the change. Do not mark the change 
 - Required correction from this audit: MiniMax remains the preferred target, but real MiniMax network code is blocked unless current official MiniMax embedding API docs are found and recorded. Until then, MiniMax completion means safe scaffold/fake-contract behavior plus tests, not guessed endpoint implementation.
 - Required correction from this audit: anti-fake-complete review must identify file-only, mock-only, stale-artifact, third-party-doc, accidental-network, boundary, and privacy failure modes, then update OpenSpec artifacts for any gap found.
 
+## Spec Author Re-Audit / Mandatory Apply Workflow
+
+- Re-audit date:
+- Reviewer:
+- Skills/process used:
+- OpenSpec status before edits:
+- Hardening changes made to proposal/design/spec/tasks:
+- Remaining OpenSpec gaps, if any:
+
+Use this section to prove the implementer followed the mandatory checkpoint workflow instead of doing a file-only implementation.
+
+| Checkpoint | RED test or failing fixture recorded first | GREEN command recorded | Implementation notes updated before moving on | Remaining risk/deferred item |
+| --- | --- | --- | --- | --- |
+| Provider contract |  |  |  |  |
+| Vector artifact |  |  |  |  |
+| CLI/smoke |  |  |  |  |
+| Docs/boundary |  |  |  |  |
+| Final audit |  |  |  |  |
+
+Minimum fake acceptance spine evidence:
+
+- Config used:
+- Provider created through factory: yes/no
+- Fake provider dimensions/distance:
+- Fixture workspace:
+- Eligible chunk ids submitted to provider:
+- Restricted chunk ids skipped before provider call:
+- Vectors path:
+- Manifest path:
+- Build report path:
+- Compatibility success evidence:
+- Provider/model/dimensions/distance mismatch evidence:
+- Confirmed no raw restricted text in report/notes: yes/no
+- Confirmed no API key/header/cookie/bearer token/raw provider payload in report/notes: yes/no
+
 ## Provider Documentation Baseline From Spec Hardening
 
 This section is a starting baseline, not a replacement for implementer verification. Re-check official docs before provider-specific coding.

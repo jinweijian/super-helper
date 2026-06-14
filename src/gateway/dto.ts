@@ -2,6 +2,7 @@ import type { ModelProviderConfig, SuperHelperConfig } from '../config.js';
 import { inferModelContextWindowTokens, resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
+import { buildKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/index.js';
 import type { StoredCase } from '../storage.js';
 
 export interface ModelSettingsInput {
@@ -20,7 +21,7 @@ export interface ModelSettingsInput {
 
 export interface ClaudeSettingsInput {
   timeoutMs?: number;
-  maxBudgetUsd?: number;
+  maxBudgetUsd?: number | string | null;
   sessionBusyMaxRetries?: number;
   sessionBusyRetryDelayMs?: number;
 }
@@ -113,11 +114,19 @@ export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConf
   };
 }
 
-export function serializeSession(caseSession: StoredCase, config: SuperHelperConfig): SessionSummary & Pick<StoredCase, 'messages' | 'runs'> {
+export function serializeSession(
+  caseSession: StoredCase,
+  config: SuperHelperConfig,
+): SessionSummary & Pick<StoredCase, 'messages' | 'runs'> & { knowledgeHealth: KnowledgeHealthSummary } {
   return {
     ...sessionSummary(caseSession, config),
     messages: caseSession.messages,
     runs: caseSession.runs,
+    knowledgeHealth: buildKnowledgeHealthSummary({
+      config,
+      workspaceId: caseSession.workspaceId,
+      query: knowledgeHealthQuery(caseSession),
+    }),
   };
 }
 
@@ -172,4 +181,12 @@ function positiveInteger(value?: number): number | undefined {
 
   const numberValue = Number(value);
   return Number.isFinite(numberValue) && numberValue > 0 ? Math.floor(numberValue) : undefined;
+}
+
+function knowledgeHealthQuery(caseSession: StoredCase): string {
+  return [...caseSession.messages]
+    .reverse()
+    .find((message) => message.role === 'user')
+    ?.body
+    .trim() || caseSession.title;
 }
