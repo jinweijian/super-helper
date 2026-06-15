@@ -94,3 +94,26 @@ export interface OnboardingProgressEvent {
   at: string;
   run: OnboardingRun;
 }
+
+export interface OnboardingValidationIssue {
+  field: string;
+  code: string;
+  message: string;
+}
+
+export interface OnboardingValidationResult {
+  ok: boolean;
+  issues: OnboardingValidationIssue[];
+}
+
+export interface OnboardingPlanStage {
+  id: OnboardingStageId;
+  action: 'run' | 'skip';
+  reason: string;
+  total?: number;
+}
+
+export interface OnboardingPlan {
+  stages: OnboardingPlanStage[];
+  stage(id: OnboardingStageId): OnboardingPlanStage;
+}

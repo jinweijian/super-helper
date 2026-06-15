@@ -6,14 +6,19 @@ export {
   onboardingRunPath,
   onboardingRunsRoot,
 } from './paths.js';
+export { buildOnboardingPlan } from './planner.js';
+export type { BuildOnboardingPlanInput } from './planner.js';
 export { FileOnboardingRunRepository } from './run-repository.js';
 export {
   FileSecretsRepository,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
 } from './secrets.js';
+export { validateOnboardingDraft } from './validator.js';
 export type {
   OnboardingDraft,
+  OnboardingPlan,
+  OnboardingPlanStage,
   OnboardingProgressEvent,
   OnboardingRun,
   OnboardingSafeError,
@@ -21,4 +26,6 @@ export type {
   OnboardingStageState,
   OnboardingStageStatus,
   OnboardingStatus,
+  OnboardingValidationIssue,
+  OnboardingValidationResult,
 } from './types.js';

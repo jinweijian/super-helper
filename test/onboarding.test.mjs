@@ -8,9 +8,15 @@ import {
   FileOnboardingDraftRepository,
   FileOnboardingRunRepository,
   FileSecretsRepository,
+  buildOnboardingPlan,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
+  validateOnboardingDraft,
 } from '../dist/onboarding/index.js';
+import {
+  embeddingFixture,
+  onboardingDraftFixture,
+} from './helpers/onboarding-fixtures.mjs';
 
 test('secret repository stores file secrets outside config and materializes runtime config', () => {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));
@@ -161,4 +167,35 @@ test('run repository recovers interrupted runs as retryable failures', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('validator reports missing workspace and enabled provider credentials', () => {
+  const draft = onboardingDraftFixture({
+    workspace: { id: 'current', name: 'Demo', rootPath: '/does/not/exist' },
+    embedding: {
+      ...embeddingFixture(),
+      enabled: true,
+      provider: 'siliconflow',
+      apiKeyRef: undefined,
+    },
+  });
+  const result = validateOnboardingDraft(draft, { resolveSecret: () => undefined });
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.field === 'workspace.rootPath'));
+  assert.ok(result.issues.some((issue) => issue.field === 'embedding.apiKeyRef'));
+});
+
+test('planner skips unchanged sources and compatible vector artifacts', () => {
+  const plan = buildOnboardingPlan({
+    draft: onboardingDraftFixture({
+      knowledge: { sourceDir: process.cwd(), buildVectorIndex: true },
+      embedding: { enabled: true },
+    }),
+    sourceChanges: { added: [], changed: [], unchanged: ['a.md'] },
+    keywordIndexDirty: false,
+    vectorCompatibility: 'compatible',
+  });
+  assert.equal(plan.stage('ingest_sources').action, 'skip');
+  assert.equal(plan.stage('build_keyword_index').action, 'skip');
+  assert.equal(plan.stage('build_vector_index').action, 'skip');
 });
