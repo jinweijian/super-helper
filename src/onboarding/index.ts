@@ -8,6 +8,11 @@ export {
 } from './paths.js';
 export { buildOnboardingPlan } from './planner.js';
 export type { BuildOnboardingPlanInput } from './planner.js';
+export { testOnboardingProviders } from './provider-tests.js';
+export type {
+  OnboardingProviderTestResult,
+  SkippedProviderTestResult,
+} from './provider-tests.js';
 export { FileOnboardingRunRepository } from './run-repository.js';
 export {
   FileSecretsRepository,

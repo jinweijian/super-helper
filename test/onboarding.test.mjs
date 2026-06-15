@@ -11,6 +11,7 @@ import {
   buildOnboardingPlan,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
+  testOnboardingProviders,
   validateOnboardingDraft,
 } from '../dist/onboarding/index.js';
 import {
@@ -198,4 +199,34 @@ test('planner skips unchanged sources and compatible vector artifacts', () => {
   assert.equal(plan.stage('ingest_sources').action, 'skip');
   assert.equal(plan.stage('build_keyword_index').action, 'skip');
   assert.equal(plan.stage('build_vector_index').action, 'skip');
+});
+
+test('provider test runner reports agent embedding and rerank independently', async () => {
+  const calls = [];
+  const result = await testOnboardingProviders(onboardingDraftFixture({
+    embedding: { enabled: true },
+    rerank: { enabled: true },
+  }), {
+    testAgent: async () => (calls.push('agent'), {
+      ok: true,
+      model: 'agent',
+      durationMs: 1,
+    }),
+    testEmbedding: async () => (calls.push('embedding'), {
+      ok: true,
+      model: 'embed',
+      durationMs: 1,
+      dimensions: 4,
+      provider: 'fake',
+    }),
+    testRerank: async () => (calls.push('rerank'), {
+      ok: true,
+      model: 'rerank',
+      durationMs: 1,
+      provider: 'fake',
+    }),
+  });
+  assert.deepEqual(new Set(calls), new Set(['agent', 'embedding', 'rerank']));
+  assert.equal(result.ok, true);
+  assert.equal(result.agent.ok, true);
 });

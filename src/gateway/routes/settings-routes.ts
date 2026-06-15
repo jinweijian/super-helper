@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
 import { defaultConfig, saveConfig } from '../../config.js';
 import { runEmbeddingSmokeTest, runRerankSmokeTest } from '../../embedding/index.js';
-import { createModelClient } from '../../model.js';
+import { runModelSmokeTest } from '../../model-smoke-test.js';
 import { listPublicAgentConfigs } from '../../runtime/agent-configs.js';
 import {
   embeddingProviderFromInput,
@@ -69,33 +69,8 @@ export async function handleSettingsRoutes(
     }
 
     const provider = modelProviderFromInput(body, existing);
-    try {
-      const startedAt = Date.now();
-      const reply = await createModelClient(provider).complete([
-        {
-          role: 'system',
-          content: 'You are a connectivity test for super helper. Reply briefly.',
-        },
-        {
-          role: 'user',
-          content: 'super helper model connectivity test. Reply with "ok".',
-        },
-      ]);
-      sendJson(res, 200, {
-        ok: true,
-        providerId,
-        model: provider.model,
-        durationMs: Date.now() - startedAt,
-        reply,
-      });
-    } catch (error) {
-      sendJson(res, 200, {
-        ok: false,
-        providerId,
-        model: provider.model,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    const result = await runModelSmokeTest(provider);
+    sendJson(res, 200, { providerId, ...result });
     return true;
   }
 
