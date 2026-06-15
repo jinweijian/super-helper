@@ -242,6 +242,10 @@ test('diagnostic audit panel exposes knowledge health view affordances', () => {
   assert.match(html, /Embedding/);
   assert.match(html, /绑定知识库/);
   assert.match(html, /运行健康检查/);
+  assert.match(html, /\/api\/knowledge\/bind/);
+  assert.match(html, /\/api\/knowledge\/reindex/);
+  assert.match(html, /\/api\/knowledge\/health/);
+  assert.doesNotMatch(html, /这是健康面板动作入口/);
 });
 
 test('composer keeps status chips out of the action row', () => {
@@ -1954,6 +1958,144 @@ test('session API exposes knowledge health for the current workspace', async () 
       await server.close();
     }
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('knowledge bind API initializes a service knowledge workspace shared by sessions', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-project-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 43983;
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    config.claude.enabled = false;
+    config.workspaces[0].rootPath = workspaceRoot;
+
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge')), false);
+
+    server = await startServer({ config });
+
+    const first = await fetch('http://127.0.0.1:43983/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '第一个会话' }),
+    }).then((res) => res.json());
+    const second = await fetch('http://127.0.0.1:43983/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '第二个会话' }),
+    }).then((res) => res.json());
+
+    const before = await fetch(`http://127.0.0.1:43983/api/session?caseId=${first.session.id}`).then((res) => res.json());
+    assert.equal(before.session.knowledgeHealth.serviceBinding.status, 'error');
+
+    const bound = await fetch('http://127.0.0.1:43983/api/knowledge/bind', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspaceId: 'current' }),
+    }).then((res) => res.json());
+
+    assert.equal(bound.ok, true);
+    assert.equal(bound.workspaceId, 'current');
+    assert.equal(bound.knowledgeHealth.serviceBinding.status, 'ok');
+    assert.equal(bound.knowledgeHealth.serviceBinding.knowledgeWorkspaceRoot, knowledgeWorkspace);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'indexes', 'manifest.json')), true);
+
+    const firstAfter = await fetch(`http://127.0.0.1:43983/api/session?caseId=${first.session.id}`).then((res) => res.json());
+    const secondAfter = await fetch(`http://127.0.0.1:43983/api/session?caseId=${second.session.id}`).then((res) => res.json());
+    assert.equal(firstAfter.session.knowledgeHealth.serviceBinding.status, 'ok');
+    assert.equal(secondAfter.session.knowledgeHealth.serviceBinding.status, 'ok');
+    assert.equal(
+      firstAfter.session.knowledgeHealth.serviceBinding.knowledgeRoot,
+      secondAfter.session.knowledgeHealth.serviceBinding.knowledgeRoot,
+    );
+  } finally {
+    if (server) {
+      await server.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('knowledge reindex API initializes the service workspace before rebuilding indexes', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-project-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 43984;
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    config.claude.enabled = false;
+    config.workspaces[0].rootPath = workspaceRoot;
+
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge')), false);
+
+    server = await startServer({ config });
+    const rebuilt = await fetch('http://127.0.0.1:43984/api/knowledge/reindex', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspaceId: 'current' }),
+    }).then((res) => res.json());
+
+    assert.equal(rebuilt.ok, true);
+    assert.equal(rebuilt.knowledgeHealth.serviceBinding.status, 'ok');
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'faq')), true);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', '_taxonomy', 'modules.yaml')), true);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'indexes', 'manifest.json')), true);
+    assert.equal(rebuilt.knowledgeHealth.index.status, 'ok');
+  } finally {
+    if (server) {
+      await server.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('knowledge reindex API repairs a partial service knowledge skeleton', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-project-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 43985;
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    config.claude.enabled = false;
+    config.workspaces[0].rootPath = workspaceRoot;
+
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    mkdirSync(join(knowledgeWorkspace, 'knowledge', 'indexes'), { recursive: true });
+    writeFileSync(join(knowledgeWorkspace, 'knowledge', 'indexes', 'manifest.json'), '{}\n', 'utf8');
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'faq')), false);
+
+    server = await startServer({ config });
+    const rebuilt = await fetch('http://127.0.0.1:43985/api/knowledge/reindex', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workspaceId: 'current' }),
+    }).then((res) => res.json());
+
+    assert.equal(rebuilt.ok, true);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'faq')), true);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', 'runbooks')), true);
+    assert.equal(existsSync(join(knowledgeWorkspace, 'knowledge', '_taxonomy', 'modules.yaml')), true);
+    assert.equal(rebuilt.knowledgeHealth.index.status, 'ok');
+  } finally {
+    if (server) {
+      await server.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
 

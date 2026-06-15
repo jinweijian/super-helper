@@ -7,6 +7,7 @@ import { FileMemoryStore } from '../storage.js';
 import { renderApp } from '../ui.js';
 import { sendHtml, sendJson } from './http-utils.js';
 import { handleChatRoutes } from './routes/chat-routes.js';
+import { handleKnowledgeRoutes } from './routes/knowledge-routes.js';
 import { handleLogRoutes } from './routes/log-routes.js';
 import { handleSessionRoutes } from './routes/session-routes.js';
 import { handleSettingsRoutes } from './routes/settings-routes.js';
@@ -61,6 +62,9 @@ async function route(
     return;
   }
   if (await handleSessionRoutes(req, res, url, config, store)) {
+    return;
+  }
+  if (await handleKnowledgeRoutes(req, res, url, config)) {
     return;
   }
   if (await handleChatRoutes(req, res, url, config, agent)) {

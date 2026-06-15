@@ -298,6 +298,14 @@ super-helper knowledge search --workspace /path/to/workspace --query "课程发�
 
 `--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime searches the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
 
+The browser health panel can operate the same service-scoped knowledge workspace through gateway endpoints:
+
+- `GET /api/knowledge/health` returns the health summary for the current service workspace.
+- `POST /api/knowledge/bind` initializes the resolved knowledge workspace skeleton for the requested `workspaceId`.
+- `POST /api/knowledge/reindex` rebuilds keyword indexes and quality reports for the resolved knowledge workspace.
+
+These routes are transport adapters only. They validate request shape, resolve the configured workspace id, call `src/knowledge/` operations with `resolveKnowledgeWorkspaceRoot`, and return DTOs. They must not decide diagnostic answers or write case-session state. Because all sessions for a service carry the same `workspaceId`, a bound knowledge workspace is shared by every session in that service.
+
 ## MCP Configuration
 
 MCP tools are configurable per workspace.
