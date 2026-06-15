@@ -135,6 +135,9 @@ Public response compatibility must be protected by tests for:
 - `/api/settings/embedding/test`
 - `/api/settings/rerank`
 - `/api/settings/rerank/test`
+- `/api/knowledge/health`
+- `/api/knowledge/bind`
+- `/api/knowledge/reindex`
 - `/api/logs`
 
 ## Session and Persistence Contract

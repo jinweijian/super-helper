@@ -1972,6 +1972,7 @@ export function renderApp(): string {
     let sessionFilter = 'all';
     let activeInsightTab = 'progress';
     let ticketDraftNotice = '';
+    let knowledgeActionNotice = '';
 
     async function loadConfig() {
       const res = await fetch('/api/config');
@@ -2803,6 +2804,9 @@ export function renderApp(): string {
       const actions = (health.actions || ['绑定知识库', '重建索引', '运行健康检查']).map((action) =>
         '<button type="button" onclick="healthAction(\\'' + escapeHtml(action) + '\\')">' + escapeHtml(action) + '</button>'
       ).join('');
+      const notice = knowledgeActionNotice
+        ? '<div class="insight-card"><strong>知识库动作</strong><p>' + escapeHtml(knowledgeActionNotice) + '</p></div>'
+        : '';
 
       return '<div class="knowledge-health-grid">'
         + renderHealthTile('服务绑定', healthStatusText(service.status), service.status)
@@ -2815,6 +2819,7 @@ export function renderApp(): string {
         + '<div class="health-tree">' + treeNodes + similarHtml + '</div>'
         + '<div class="insight-card"><strong>本轮检索路径</strong><p><b>Query：</b>' + escapeHtml(search.query || session?.title || '暂无查询') + '</p><div class="health-row"><span><b>searched_files</b> ' + escapeHtml(String(search.searchedFiles || 0)) + '</span><span><b>matched_files</b> ' + escapeHtml(String(search.matchedFiles || 0)) + '</span><span><b>filtered_out</b> ' + escapeHtml(filtered) + '</span><span><b>reason</b> ' + escapeHtml(search.reason || '暂无检索结果') + '</span></div></div>'
         + '<div class="insight-card"><strong>Embedding</strong><p>' + escapeHtml(embedding.message || 'Embedding 未启用') + '</p></div>'
+        + notice
         + '<div class="health-actions">' + actions + '</div>';
     }
     function latestRunWithResult(session) {
@@ -2852,10 +2857,57 @@ export function renderApp(): string {
       if (health.search?.status === 'warn') return '知识未命中';
       return '知识库正常';
     }
-    function healthAction(action) {
-      ticketDraftNotice = action + '：这是健康面板动作入口，后续会接入对应 API。';
+    async function healthAction(action) {
+      if (!currentSession?.workspaceId) {
+        knowledgeActionNotice = '请先打开一个会话，再检查或绑定当前服务的知识库。';
+        activeInsightTab = 'health';
+        setInsightTab('health');
+        return;
+      }
+
+      const workspaceId = currentSession.workspaceId;
+      const query = latestUserQuery(currentSession) || currentSession.title || '';
+      knowledgeActionNotice = action + '进行中...';
       activeInsightTab = 'health';
       setInsightTab('health');
+
+      try {
+        let res;
+        if (action === '绑定知识库') {
+          res = await fetch('/api/knowledge/bind', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({ workspaceId, query })
+          });
+        } else if (action === '重建索引') {
+          res = await fetch('/api/knowledge/reindex', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({ workspaceId, query })
+          });
+        } else {
+          res = await fetch('/api/knowledge/health?workspaceId=' + encodeURIComponent(workspaceId) + '&query=' + encodeURIComponent(query));
+        }
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(json.error || '请求失败：HTTP ' + res.status);
+        }
+
+        if (json.knowledgeHealth) {
+          currentSession = { ...currentSession, knowledgeHealth: json.knowledgeHealth };
+          setCaseHeader(currentSession);
+        }
+        knowledgeActionNotice = action + '完成：' + (json.knowledgeHealth?.serviceBinding?.message || '已刷新知识健康状态');
+        updateInsightPanel(currentSession);
+        await loadSessions();
+      } catch (error) {
+        knowledgeActionNotice = action + '失败：' + errorMessage(error);
+        updateInsightPanel(currentSession);
+      }
+    }
+    function latestUserQuery(session) {
+      return [...(session?.messages || [])].reverse().find((message) => message.role === 'user')?.body || '';
     }
     function openTicketDraft() {
       ticketDraftNotice = caseId
