@@ -7,7 +7,7 @@ import process from 'node:process';
 import test from 'node:test';
 import { SuperHelperAgent } from '../dist/agent.js';
 import { ClaudeCodeWorker } from '../dist/claude-worker.js';
-import { loadConfig } from '../dist/config.js';
+import { loadConfig, saveConfig } from '../dist/config.js';
 import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
@@ -75,6 +75,24 @@ function baseConfig(rootDir) {
     mcpTools: [],
   };
 }
+
+test('saveConfig replaces config atomically and leaves no temp file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const target = join(dir, 'config.json');
+  try {
+    const config = baseConfig(dir);
+    saveConfig(config, target);
+    const first = readFileSync(target, 'utf8');
+    config.server.port = 4555;
+    saveConfig(config, target);
+    const second = readFileSync(target, 'utf8');
+    assert.notEqual(first, second);
+    assert.equal(JSON.parse(second).server.port, 4555);
+    assert.equal(existsSync(`${target}.tmp`), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 function chatResponse(content) {
   return new Response(

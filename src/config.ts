@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import type { UserPersona } from './domain.js';
+import { join, resolve } from 'node:path';
+import type { SecretRef, UserPersona } from './domain.js';
 import type { EmbeddingProviderConfig, RerankProviderConfig } from './embedding/types.js';
+import { writeJsonAtomic } from './onboarding/atomic-json.js';
 
 export interface ModelProviderConfig {
   type: 'openai-compatible';
@@ -10,6 +11,7 @@ export interface ModelProviderConfig {
   api?: 'openai-completions' | 'openai-chat-completions';
   apiKey?: string;
   apiKeyEnv?: string;
+  apiKeyRef?: SecretRef;
   model: string;
   temperature?: number;
   maxTokens?: number;
@@ -22,6 +24,7 @@ export interface SuperHelperConfig {
   server: {
     host: string;
     port: number;
+    bindMode: 'loopback' | 'lan';
   };
   storage: {
     rootDir: string;
@@ -30,6 +33,8 @@ export interface SuperHelperConfig {
   knowledge: {
     rootDir: string;
     isolateByWorkspace: boolean;
+    sourceDir?: string;
+    buildVectorIndex: boolean;
   };
   agent: {
     name: string;
@@ -72,6 +77,11 @@ export interface SuperHelperConfig {
     enabled: boolean;
     config?: unknown;
   }>;
+  onboarding: {
+    version: 1;
+    completedAt?: string;
+    lastRunId?: string;
+  };
 }
 
 const DEFAULT_HOME = join(homedir(), '.super-helper');
@@ -84,6 +94,7 @@ export function defaultConfig(): SuperHelperConfig {
     server: {
       host: '127.0.0.1',
       port: 4317,
+      bindMode: 'loopback',
     },
     storage: {
       rootDir: DEFAULT_HOME,
@@ -92,6 +103,7 @@ export function defaultConfig(): SuperHelperConfig {
     knowledge: {
       rootDir: join(DEFAULT_HOME, 'knowledge'),
       isolateByWorkspace: true,
+      buildVectorIndex: false,
     },
     agent: {
       name: 'super helper',
@@ -153,6 +165,9 @@ export function defaultConfig(): SuperHelperConfig {
       },
     ],
     mcpTools: [],
+    onboarding: {
+      version: 1,
+    },
   };
 }
 
@@ -163,11 +178,10 @@ export function configPath(homeDir = DEFAULT_HOME): string {
 export function ensureConfig(homeDir = DEFAULT_HOME): SuperHelperConfig {
   const path = configPath(homeDir);
   if (!existsSync(path)) {
-    mkdirSync(dirname(path), { recursive: true });
     const config = defaultConfig();
     config.storage.rootDir = homeDir;
     config.knowledge.rootDir = join(homeDir, 'knowledge');
-    writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+    saveConfig(config, path);
     return config;
   }
 
@@ -193,6 +207,7 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
     claude: { ...defaults.claude, ...parsed.claude },
     workspaces: parsed.workspaces?.length ? parsed.workspaces : defaults.workspaces,
     mcpTools: parsed.mcpTools ?? defaults.mcpTools,
+    onboarding: { ...defaults.onboarding, ...parsed.onboarding },
   };
   merged.storage.rootDir = resolve(merged.storage.rootDir || DEFAULT_HOME);
   merged.knowledge.rootDir = resolve(parsed.knowledge?.rootDir || join(merged.storage.rootDir, 'knowledge'));
@@ -205,8 +220,23 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
 }
 
 export function saveConfig(config: SuperHelperConfig, path = configPath(config.storage.rootDir)): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  writeJsonAtomic(path, configForPersistence(config));
+}
+
+export function configForPersistence(config: SuperHelperConfig): SuperHelperConfig {
+  const copy = structuredClone(config);
+  for (const provider of Object.values(copy.models?.providers ?? {})) {
+    if (provider.apiKeyRef) {
+      delete provider.apiKey;
+    }
+  }
+  if (copy.embedding?.apiKeyRef) {
+    delete copy.embedding.apiKey;
+  }
+  if (copy.rerank?.apiKeyRef) {
+    delete copy.rerank.apiKey;
+  }
+  return copy;
 }
 
 export function getModelProvider(config: SuperHelperConfig): ModelProviderConfig | undefined {

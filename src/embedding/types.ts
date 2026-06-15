@@ -1,3 +1,5 @@
+import type { SecretRef } from '../domain.js';
+
 export type EmbeddingProviderId = 'siliconflow' | 'minimax' | 'gemini' | 'qwen' | 'fake';
 
 export type EmbeddingDistanceMetric = 'cosine' | 'dot' | 'euclidean';
@@ -10,6 +12,7 @@ export interface EmbeddingProviderConfig {
   endpoint?: string;
   apiKey?: string;
   apiKeyEnv?: string;
+  apiKeyRef?: SecretRef;
   dimensions: number;
   distance: EmbeddingDistanceMetric | string;
   batchSize?: number;
@@ -25,6 +28,7 @@ export interface RerankProviderConfig {
   endpoint?: string;
   apiKey?: string;
   apiKeyEnv?: string;
+  apiKeyRef?: SecretRef;
   timeoutMs?: number;
   topN?: number;
   extra?: Record<string, unknown>;

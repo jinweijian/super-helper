@@ -30,6 +30,10 @@ export type UserPersona = 'operations' | 'support' | 'customer' | 'developer';
 
 export type LogSeverity = 'ok' | 'warn' | 'error' | 'info';
 
+export type SecretRef =
+  | { source: 'file'; key: string }
+  | { source: 'env'; name: string };
+
 export interface ContextUsage {
   estimatedTokens: number;
   limitTokens: number;
