@@ -54,6 +54,7 @@ export interface OnboardingSafeError {
 
 export interface OnboardingStageState {
   id: OnboardingStageId;
+  action?: 'run' | 'skip';
   status: OnboardingStageStatus;
   progress: number;
   processed?: number;

@@ -8,7 +8,10 @@ import {
   FileOnboardingDraftRepository,
   FileOnboardingRunRepository,
   FileSecretsRepository,
+  OnboardingProgressHub,
+  OnboardingRunner,
   buildOnboardingPlan,
+  createOnboardingRun,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
   runOnboardingKnowledgePipeline,
@@ -166,6 +169,106 @@ test('run repository recovers interrupted runs as retryable failures', () => {
     assert.equal(recovered[0].retryableStage, 'slice_sources');
     assert.equal(recovered[0].safeError.code, 'interrupted');
     assert.equal(repository.load('run_test').status, 'failed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runner persists real progress and commits only after health succeeds', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));
+  try {
+    const order = [];
+    const drafts = new FileOnboardingDraftRepository(root);
+    const runs = new FileOnboardingRunRepository(root);
+    const progress = new OnboardingProgressHub();
+    const draft = drafts.save(onboardingDraftFixture({ revision: 0 }));
+    const run = createOnboardingRun({
+      id: 'run_success',
+      draft,
+      plan: buildOnboardingPlan({
+        draft,
+        sourceChanges: { added: ['a.md'], changed: [], unchanged: [] },
+        keywordIndexDirty: true,
+        vectorCompatibility: 'missing-index',
+      }),
+      now: '2026-06-15T00:00:00.000Z',
+    });
+    runs.save(run);
+    const runner = new OnboardingRunner({
+      drafts,
+      runs,
+      progress,
+      validate: async () => order.push('validate'),
+      testProviders: async () => order.push('providers'),
+      prepareWorkspace: async () => order.push('prepare'),
+      runKnowledge: async ({ report }) => {
+        order.push('knowledge');
+        report({ stage: 'slice_sources', processed: 2, total: 4, message: '2/4' });
+        return { draftSlices: 4 };
+      },
+      healthCheck: async () => (order.push('health'), { ok: true }),
+      commitConfig: async () => {
+        order.push('commit');
+        return { ...defaultConfig(), onboarding: { version: 1, lastRunId: run.id } };
+      },
+      onConfigCommitted: async () => order.push('reload'),
+    });
+    const completed = await runner.execute(run);
+    assert.equal(completed.status, 'completed');
+    assert.deepEqual(order, ['validate', 'providers', 'prepare', 'knowledge', 'health', 'commit', 'reload']);
+    assert.equal(runs.load(run.id).overallProgress, 100);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runner failure preserves old config and retries from failed stage', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));
+  try {
+    let attempts = 0;
+    const drafts = new FileOnboardingDraftRepository(root);
+    const runs = new FileOnboardingRunRepository(root);
+    const progress = new OnboardingProgressHub();
+    const draft = drafts.save(onboardingDraftFixture({ revision: 0 }));
+    const run = createOnboardingRun({
+      id: 'run_retry',
+      draft,
+      plan: buildOnboardingPlan({
+        draft,
+        sourceChanges: { added: ['a.md'], changed: [], unchanged: [] },
+        keywordIndexDirty: true,
+        vectorCompatibility: 'missing-index',
+      }),
+      now: '2026-06-15T00:00:00.000Z',
+    });
+    runs.save(run);
+    const commitCalls = [];
+    const runner = new OnboardingRunner({
+      drafts,
+      runs,
+      progress,
+      validate: async () => undefined,
+      testProviders: async () => ({ ok: true }),
+      prepareWorkspace: async () => undefined,
+      runKnowledge: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('slice failed');
+        return {};
+      },
+      healthCheck: async () => ({ ok: true }),
+      commitConfig: async () => {
+        commitCalls.push('commit');
+        return defaultConfig();
+      },
+    });
+    const failed = await runner.execute(run);
+    assert.equal(failed.status, 'failed');
+    assert.equal(failed.retryableStage, 'ingest_sources');
+    assert.equal(commitCalls.length, 0);
+
+    const completed = await runner.retry(failed.id);
+    assert.equal(completed.status, 'completed');
+    assert.equal(commitCalls.length, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,4 +1,5 @@
 export { writeJsonAtomic } from './atomic-json.js';
+export { commitOnboardingConfig } from './config-commit.js';
 export { FileOnboardingDraftRepository } from './draft-repository.js';
 export { runOnboardingKnowledgePipeline } from './knowledge-pipeline.js';
 export type {
@@ -18,7 +19,10 @@ export type {
   OnboardingProviderTestResult,
   SkippedProviderTestResult,
 } from './provider-tests.js';
+export { calculateOverallProgress, OnboardingProgressHub, STAGE_WEIGHTS } from './progress.js';
 export { FileOnboardingRunRepository } from './run-repository.js';
+export { createOnboardingRun, OnboardingRunner } from './runner.js';
+export type { OnboardingRunnerDependencies } from './runner.js';
 export {
   FileSecretsRepository,
   materializeConfigSecrets,
