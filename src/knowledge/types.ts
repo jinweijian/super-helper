@@ -532,6 +532,12 @@ export interface KnowledgeEvidenceResult {
   summary: string;
   excerpt: string;
   score: number;
+  retrieval?: {
+    source: 'keyword' | 'vector' | 'hybrid' | 'rerank';
+    keywordScore?: number;
+    vectorScore?: number;
+    rerankScore?: number;
+  };
   quality?: { severity: 'ok' | 'info' | 'warn' | 'error'; issues: string[] };
 }
 
@@ -544,6 +550,18 @@ export interface KnowledgeSearchQuery {
   productVersions?: string[];
   visibility?: KnowledgeVisibility[];
   limit?: number;
+}
+
+export interface KnowledgeRagSearchQuery extends KnowledgeSearchQuery {
+  retrievalLimit?: number;
+  embedding?: {
+    provider: import('../embedding/index.js').EmbeddingProvider;
+    limit?: number;
+  };
+  rerank?: {
+    provider: import('../embedding/index.js').RerankProvider;
+    topN?: number;
+  };
 }
 
 export interface KnowledgeRoute {

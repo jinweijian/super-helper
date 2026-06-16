@@ -34,6 +34,38 @@ export interface RerankProviderConfig {
   extra?: Record<string, unknown>;
 }
 
+export interface RerankDocumentInput {
+  id: string;
+  text: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RerankRequestInput {
+  query: string;
+  documents: RerankDocumentInput[];
+  topN?: number;
+}
+
+export interface RerankDocumentResult {
+  id: string;
+  score: number;
+  index?: number;
+}
+
+export interface RerankBatchResult {
+  provider: string;
+  model: string;
+  results: RerankDocumentResult[];
+  usage?: EmbeddingUsage;
+  warnings: string[];
+}
+
+export interface RerankProvider {
+  readonly id: string;
+  readonly model: string;
+  rerank(input: RerankRequestInput, options?: EmbeddingRequestOptions): Promise<RerankBatchResult>;
+}
+
 export interface EmbeddingDocumentInput {
   id: string;
   text: string;

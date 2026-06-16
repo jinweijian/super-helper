@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import type { SuperHelperConfig } from '../config.js';
 import { getModelProvider } from '../config.js';
 import type { DiagnosticRequest, DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
+import { createEmbeddingProvider, createRerankProvider } from '../embedding/index.js';
+import type { EmbeddingProvider, RerankProvider } from '../embedding/index.js';
 import type { PreflightDecision } from '../preflight.js';
 import type { AgentModelClient } from '../model.js';
 import { createModelClient } from '../model.js';
@@ -14,6 +16,7 @@ import {
   resolveKnowledgeWorkspaceRoot,
   routeKnowledgeQuestion,
   searchKnowledge,
+  searchKnowledgeWithRag,
   type KnowledgeEvidencePack,
   type KnowledgeRoute,
   type KnowledgeVisibility,
@@ -432,7 +435,7 @@ export class DiagnosticRuntime {
       intentCandidates: route.intentCandidates,
       sourceTypes: route.sourceTypes,
     });
-    let evidencePack = searchKnowledge({
+    let evidencePack = await this.searchKnowledgeForRuntime({
       workspaceRoot,
       query: userMessage,
       moduleCandidates: route.moduleCandidates,
@@ -442,7 +445,7 @@ export class DiagnosticRuntime {
       limit: 8,
     });
     if (evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
-      evidencePack = searchKnowledge({
+      evidencePack = await this.searchKnowledgeForRuntime({
         workspaceRoot,
         query: userMessage,
         moduleCandidates: route.moduleCandidates,
@@ -487,6 +490,41 @@ export class DiagnosticRuntime {
     this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
     this.events.finalReplyCreated(caseSession, reply, review.decision);
     return { caseSession, assistantMessage: reply, decision: review.decision };
+  }
+
+  private async searchKnowledgeForRuntime(input: Parameters<typeof searchKnowledge>[0]): Promise<KnowledgeEvidencePack> {
+    const embedding = this.createRuntimeEmbeddingProvider();
+    const rerank = this.createRuntimeRerankProvider();
+    if (!embedding && !rerank) {
+      return searchKnowledge(input);
+    }
+    return searchKnowledgeWithRag({
+      ...input,
+      embedding: embedding ? { provider: embedding } : undefined,
+      rerank: rerank ? { provider: rerank, topN: this.config.rerank.topN } : undefined,
+    });
+  }
+
+  private createRuntimeEmbeddingProvider(): EmbeddingProvider | undefined {
+    if (this.config.embedding.enabled !== true) {
+      return undefined;
+    }
+    try {
+      return createEmbeddingProvider(this.config.embedding);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private createRuntimeRerankProvider(): RerankProvider | undefined {
+    if (this.config.rerank.enabled !== true) {
+      return undefined;
+    }
+    try {
+      return createRerankProvider(this.config.rerank);
+    } catch {
+      return undefined;
+    }
   }
 
   private workspaceRootFor(workspaceId: string): string | undefined {

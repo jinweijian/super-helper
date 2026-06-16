@@ -9,6 +9,7 @@ import {
   EmbeddingProviderError,
   FakeEmbeddingProvider,
   createEmbeddingProvider,
+  createRerankProvider,
   embeddingConfigFingerprint,
   isEmbeddingManifestCompatible,
   isEmbeddingProviderError,
@@ -337,6 +338,42 @@ test('rerank smoke maps non-json provider failures by status without leaking pay
   assert.equal(result.error.status, 503);
   assert.equal(result.error.retryable, true);
   assert.doesNotMatch(JSON.stringify(result), /sk-secret/);
+});
+
+test('siliconflow rerank provider maps document ids without leaking request text', async () => {
+  const requests = [];
+  const provider = createRerankProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Reranker-8B',
+    apiKey: 'sk-rerank-secret',
+    topN: 2,
+  }, {
+    fetch: async (_url, init) => {
+      requests.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({
+        results: [
+          { index: 1, relevance_score: 0.91 },
+          { index: 0, relevance_score: 0.42 },
+        ],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+
+  const result = await provider.rerank({
+    query: '登录失败',
+    documents: [
+      { id: 'doc_a', text: '普通登录说明' },
+      { id: 'doc_b', text: '登录失败排查步骤' },
+    ],
+    topN: 2,
+  });
+
+  assert.equal(requests[0].model, 'Qwen/Qwen3-Reranker-8B');
+  assert.deepEqual(requests[0].documents, ['普通登录说明', '登录失败排查步骤']);
+  assert.deepEqual(result.results.map((item) => item.id), ['doc_b', 'doc_a']);
+  assert.equal(result.results[0].score, 0.91);
+  assert.doesNotMatch(JSON.stringify(result), /登录失败排查步骤|sk-rerank-secret/);
 });
 
 test('minimax provider is docs-gated and does not guess network calls', async () => {

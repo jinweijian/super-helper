@@ -20,6 +20,7 @@ export {
   keywordsFromQuery,
   loadSourceDocuments,
   searchKnowledge,
+  searchKnowledgeWithRag,
   updateKnowledgeIndex,
   updateKnowledgeIndexWithQuality,
 } from './indexer.js';
@@ -84,6 +85,7 @@ export type {
   KnowledgeIndexManifest,
   KnowledgeIngestReport,
   KnowledgeInitResult,
+  KnowledgeRagSearchQuery,
   KnowledgeRoute,
   KnowledgeSearchQuery,
   KnowledgeSourceDocument,

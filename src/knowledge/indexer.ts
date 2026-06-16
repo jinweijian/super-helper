@@ -10,16 +10,19 @@ import {
   writeKnowledgeQualityReport,
   writeSourceQualityReport,
 } from './quality.js';
+import { readKnowledgeVectorRecords } from './vector-index.js';
 import type {
   KnowledgeChunk,
   KnowledgeDocument,
   KnowledgeEvidencePack,
   KnowledgeEvidenceResult,
   KnowledgeIndexManifest,
+  KnowledgeRagSearchQuery,
   KnowledgeSearchQuery,
   KnowledgeSourceDocument,
   KnowledgeSourceType,
   KnowledgeUpdateResult,
+  KnowledgeVectorRecord,
   KnowledgeVisibility,
 } from './types.js';
 
@@ -159,6 +162,68 @@ export function searchKnowledge(input: KnowledgeSearchQuery): KnowledgeEvidenceP
   };
 }
 
+export async function searchKnowledgeWithRag(input: KnowledgeRagSearchQuery): Promise<KnowledgeEvidencePack> {
+  const finalLimit = input.limit ?? 8;
+  const retrievalLimit = input.retrievalLimit ?? Math.max(finalLimit * 4, 20);
+  const keywordPack = searchKnowledge({ ...input, limit: retrievalLimit });
+  const docs = discoverKnowledgeDocuments(input.workspaceRoot);
+  const docById = new Map(docs.map((document) => [document.frontmatter.id, document]));
+  const chunks = loadChunks(input.workspaceRoot, docs);
+  const chunkById = new Map(chunks.map((chunk) => [chunk.chunk_id, chunk]));
+  const normalized = normalizeText(input.query);
+  const queryKeywords = keywordsFromQuery(input.query);
+  const moduleCandidates = input.moduleCandidates?.length ? input.moduleCandidates : inferModules(queryKeywords, docs);
+  const intentCandidates = input.intentCandidates ?? [];
+  const qualityMap = loadChunkQualityMap(input.workspaceRoot);
+  const filteredOut = [...keywordPack.coverage.filtered_out];
+
+  let results: KnowledgeEvidenceResult[] = keywordPack.results.map((result) => ({
+    ...result,
+    retrieval: { source: 'keyword' as const, keywordScore: result.score },
+  }));
+
+  if (input.embedding?.provider) {
+    try {
+      const vectorResults = await recallVectorKnowledge({
+        input,
+        docById,
+        chunkById,
+        queryKeywords,
+        normalized,
+        moduleCandidates,
+        intentCandidates,
+        qualityMap,
+        limit: input.embedding.limit ?? retrievalLimit,
+      });
+      results = mergeEvidenceResults(results, vectorResults);
+    } catch {
+      filteredOut.push({ reason: 'vector_recall_failed', count: 1 });
+    }
+  }
+
+  if (input.rerank?.provider && results.length > 0) {
+    try {
+      results = await rerankEvidenceResults(input, results, input.rerank.topN ?? finalLimit);
+    } catch {
+      filteredOut.push({ reason: 'rerank_failed', count: 1 });
+      results.sort((a, b) => b.score - a.score);
+    }
+  } else {
+    results.sort((a, b) => b.score - a.score);
+  }
+
+  const finalResults = results.slice(0, finalLimit);
+  return {
+    query: keywordPack.query,
+    results: finalResults,
+    coverage: {
+      searched_files: docs.length,
+      matched_files: new Set(finalResults.map((result) => result.source)).size,
+      filtered_out: filteredOut,
+    },
+  };
+}
+
 export function discoverKnowledgeDocuments(workspaceRoot: string): KnowledgeDocument[] {
   const root = knowledgeRoot(workspaceRoot);
   if (!existsSync(root)) {
@@ -293,6 +358,196 @@ function toEvidenceResult(
     score,
     quality,
   };
+}
+
+async function recallVectorKnowledge(input: {
+  input: KnowledgeRagSearchQuery;
+  docById: Map<string, KnowledgeDocument>;
+  chunkById: Map<string, KnowledgeChunk>;
+  queryKeywords: string[];
+  normalized: string;
+  moduleCandidates: string[];
+  intentCandidates: string[];
+  qualityMap: Map<string, { severity: 'ok' | 'info' | 'warn' | 'error'; issues: string[] }>;
+  limit: number;
+}): Promise<KnowledgeEvidenceResult[]> {
+  const provider = input.input.embedding?.provider;
+  if (!provider) {
+    return [];
+  }
+
+  const loaded = readKnowledgeVectorRecords(input.input.workspaceRoot);
+  if (loaded.records.length === 0) {
+    return [];
+  }
+
+  const queryVector = await provider.embedQuery({ text: input.input.query });
+  return loaded.records
+    .map((record): KnowledgeEvidenceResult | undefined => {
+      const chunk = input.chunkById.get(record.chunk_id);
+      const parent = input.docById.get(record.document_id);
+      if (!chunk || !parent) {
+        return undefined;
+      }
+      if (!passesFilters(parent, input.input, input.moduleCandidates, input.intentCandidates)) {
+        return undefined;
+      }
+      if (parent.frontmatter.status === 'archived' || parent.frontmatter.status === 'deprecated') {
+        return undefined;
+      }
+
+      const vectorScore = vectorSimilarity(queryVector.vector, record);
+      if (vectorScore <= 0) {
+        return undefined;
+      }
+      const keywordScoreInfo = scoreChunk(chunk, parent, input.queryKeywords, input.normalized);
+      const score = Number((vectorScore * 100 + keywordScoreInfo.score * 0.25).toFixed(6));
+      return {
+        ...toEvidenceResult(chunk, parent, score, keywordScoreInfo.matchedTerms, input.qualityMap),
+        retrieval: { source: 'vector' as const, vectorScore },
+      };
+    })
+    .filter((item): item is KnowledgeEvidenceResult => item !== undefined)
+    .sort((a, b) => (b.retrieval?.vectorScore ?? 0) - (a.retrieval?.vectorScore ?? 0))
+    .slice(0, input.limit);
+}
+
+function mergeEvidenceResults(
+  primary: KnowledgeEvidenceResult[],
+  secondary: KnowledgeEvidenceResult[],
+): KnowledgeEvidenceResult[] {
+  const byKey = new Map<string, KnowledgeEvidenceResult>();
+  for (const result of [...primary, ...secondary]) {
+    const key = evidenceResultKey(result);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, result);
+      continue;
+    }
+    byKey.set(key, {
+      ...existing,
+      score: Number(Math.max(existing.score, result.score).toFixed(6)),
+      matched_terms: Array.from(new Set([...existing.matched_terms, ...result.matched_terms])).slice(0, 12),
+      retrieval: mergeRetrieval(existing.retrieval, result.retrieval),
+    });
+  }
+  return Array.from(byKey.values()).sort((a, b) => b.score - a.score);
+}
+
+async function rerankEvidenceResults(
+  input: KnowledgeRagSearchQuery,
+  results: KnowledgeEvidenceResult[],
+  topN: number,
+): Promise<KnowledgeEvidenceResult[]> {
+  const provider = input.rerank?.provider;
+  if (!provider) {
+    return results;
+  }
+
+  const documents = results.map((result) => ({
+    id: evidenceResultKey(result),
+    text: evidenceTextForRerank(result),
+    metadata: {
+      document_id: result.document_id,
+      chunk_id: result.chunk_id,
+      source: result.source,
+      source_type: result.source_type,
+      module: result.module,
+      intent: result.intent,
+    },
+  }));
+  const reranked = await provider.rerank({ query: input.query, documents, topN });
+  const resultById = new Map(results.map((result) => [evidenceResultKey(result), result]));
+  const used = new Set<string>();
+  const reordered: KnowledgeEvidenceResult[] = [];
+
+  for (const item of reranked.results) {
+    const result = resultById.get(item.id);
+    if (!result || used.has(item.id)) {
+      continue;
+    }
+    used.add(item.id);
+    reordered.push({
+      ...result,
+      score: Number((result.score + item.score * 100).toFixed(6)),
+      retrieval: mergeRetrieval(result.retrieval, { source: 'rerank', rerankScore: item.score }),
+    });
+  }
+
+  return [
+    ...reordered,
+    ...results.filter((result) => !used.has(evidenceResultKey(result))).sort((a, b) => b.score - a.score),
+  ];
+}
+
+function mergeRetrieval(
+  left: KnowledgeEvidenceResult['retrieval'],
+  right: KnowledgeEvidenceResult['retrieval'],
+): KnowledgeEvidenceResult['retrieval'] {
+  const keywordScore = right?.keywordScore ?? left?.keywordScore;
+  const vectorScore = right?.vectorScore ?? left?.vectorScore;
+  const rerankScore = right?.rerankScore ?? left?.rerankScore;
+  const source = rerankScore !== undefined
+    ? 'rerank'
+    : keywordScore !== undefined && vectorScore !== undefined
+      ? 'hybrid'
+      : vectorScore !== undefined
+        ? 'vector'
+        : 'keyword';
+  return {
+    source,
+    keywordScore,
+    vectorScore,
+    rerankScore,
+  };
+}
+
+function evidenceResultKey(result: KnowledgeEvidenceResult): string {
+  return result.chunk_id ?? result.document_id;
+}
+
+function evidenceTextForRerank(result: KnowledgeEvidenceResult): string {
+  return [
+    result.title,
+    result.summary,
+    result.excerpt,
+    result.matched_terms.join(' '),
+  ].filter(Boolean).join('\n');
+}
+
+function vectorSimilarity(queryVector: number[], record: KnowledgeVectorRecord): number {
+  if (queryVector.length === 0 || queryVector.length !== record.vector.length) {
+    return 0;
+  }
+  if (record.distance === 'dot') {
+    return dotProduct(queryVector, record.vector);
+  }
+  if (record.distance === 'euclidean') {
+    let squared = 0;
+    for (let index = 0; index < queryVector.length; index += 1) {
+      const delta = queryVector[index]! - record.vector[index]!;
+      squared += delta * delta;
+    }
+    return 1 / (1 + Math.sqrt(squared));
+  }
+  const queryNorm = vectorNorm(queryVector);
+  const recordNorm = vectorNorm(record.vector);
+  if (queryNorm === 0 || recordNorm === 0) {
+    return 0;
+  }
+  return dotProduct(queryVector, record.vector) / (queryNorm * recordNorm);
+}
+
+function dotProduct(left: number[], right: number[]): number {
+  let score = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    score += left[index]! * right[index]!;
+  }
+  return score;
+}
+
+function vectorNorm(value: number[]): number {
+  return Math.sqrt(dotProduct(value, value));
 }
 
 function scoreChunk(

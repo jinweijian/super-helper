@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   approveSolvedCase,
   auditKnowledgeQuality,
+  buildKnowledgeVectorIndex,
   buildDraftSlices,
   discoverSourceFiles,
   evaluateQualityGate,
@@ -20,6 +21,7 @@ import {
   reviewDraftSlices,
   routeKnowledgeQuestion,
   runKnowledgeEval,
+  searchKnowledgeWithRag,
   searchKnowledge,
   updateKnowledgeIndex,
   applyKnowledgeRepairPlan,
@@ -34,6 +36,37 @@ function tempWorkspace() {
 
 function cleanup(path) {
   rmSync(path, { recursive: true, force: true });
+}
+
+function writeTestFaq(workspace, input) {
+  const dir = join(workspace, 'knowledge', 'faq', 'account');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, `${input.id}.md`),
+    `---
+id: ${input.id}
+title: ${input.title}
+type: faq
+module: account
+intent: how_to
+source_type: faq
+confidence: high
+status: active
+visibility: internal
+product_versions: []
+related_terms:
+${input.terms.map((term) => `  - ${term}`).join('\n')}
+related_repos: []
+last_verified_at: 2026-06-15
+owner: support
+---
+
+# ${input.title}
+
+${input.body}
+`,
+    'utf8',
+  );
 }
 
 test('knowledge init creates the enterprise knowledge workspace skeleton', () => {
@@ -210,6 +243,136 @@ chunking_strategy: semantic-section-v1
       limit: 5,
     });
     assert.equal(dirtyResult.results[0].document_id, 'kb_whitepaper_course_visibility');
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge RAG search reranks recalled keyword results after retrieval', async () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeTestFaq(workspace, {
+      id: 'kb_login_general',
+      title: '登录说明',
+      terms: ['登录', '账号'],
+      body: '用户可以使用账号和密码登录系统。这里是普通登录说明，不包含失败排查步骤。',
+    });
+    writeTestFaq(workspace, {
+      id: 'kb_login_failure',
+      title: '登录失败排查',
+      terms: ['登录', '失败', '排查'],
+      body: '登录失败时，应先检查账号状态、密码错误次数和浏览器缓存，然后查看服务端认证日志。',
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const rerankCalls = [];
+    const pack = await searchKnowledgeWithRag({
+      workspaceRoot: workspace,
+      query: '登录失败怎么排查',
+      limit: 2,
+      rerank: {
+        provider: {
+          id: 'fake-rerank',
+          model: 'test-rerank',
+          async rerank(input) {
+            rerankCalls.push(input.documents.map((item) => item.id));
+            return {
+              provider: 'fake-rerank',
+              model: 'test-rerank',
+              results: input.documents.map((item) => ({
+                id: item.id,
+                score: item.text.includes('服务端认证日志') ? 0.99 : 0.1,
+              })).sort((left, right) => right.score - left.score),
+              warnings: [],
+            };
+          },
+        },
+      },
+    });
+
+    assert.equal(rerankCalls.length, 1);
+    assert.equal(pack.results[0].document_id, 'kb_login_failure');
+    assert.equal(pack.results[0].retrieval?.source, 'rerank');
+    assert.equal(pack.results[0].retrieval?.rerankScore, 0.99);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('knowledge RAG search can recall vector-only matches before rerank', async () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    writeTestFaq(workspace, {
+      id: 'kb_refund_policy',
+      title: '退款规则',
+      terms: ['退款', '订单'],
+      body: '申请售后退款时，需要检查订单支付状态、课程观看进度和退款窗口。',
+    });
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const provider = {
+      id: 'fake',
+      model: 'test-vector',
+      dimensions: 3,
+      distance: 'cosine',
+      async embedDocuments(input) {
+        return {
+          provider: 'fake',
+          model: 'test-vector',
+          dimensions: 3,
+          distance: 'cosine',
+          results: input.map((item) => ({
+            id: item.id,
+            provider: 'fake',
+            model: 'test-vector',
+            dimensions: 3,
+            distance: 'cosine',
+            vector: [1, 0, 0],
+            contentHash: item.contentHash,
+            metadata: item.metadata,
+          })),
+          warnings: [],
+        };
+      },
+      async embedQuery() {
+        return {
+          id: 'query',
+          provider: 'fake',
+          model: 'test-vector',
+          dimensions: 3,
+          distance: 'cosine',
+          vector: [1, 0, 0],
+          warnings: [],
+        };
+      },
+    };
+    await buildKnowledgeVectorIndex({
+      workspaceRoot: workspace,
+      provider,
+      config: {
+        enabled: true,
+        provider: 'fake',
+        model: 'test-vector',
+        dimensions: 3,
+        distance: 'cosine',
+      },
+    });
+
+    const keywordOnly = searchKnowledge({ workspaceRoot: workspace, query: '付款凭证异常怎么办', limit: 3 });
+    assert.equal(keywordOnly.results.length, 0);
+
+    const pack = await searchKnowledgeWithRag({
+      workspaceRoot: workspace,
+      query: '付款凭证异常怎么办',
+      limit: 1,
+      embedding: { provider },
+    });
+
+    assert.equal(pack.results[0].document_id, 'kb_refund_policy');
+    assert.equal(pack.results[0].retrieval?.source, 'vector');
+    assert.equal(pack.results[0].retrieval?.vectorScore, 1);
   } finally {
     cleanup(workspace);
   }

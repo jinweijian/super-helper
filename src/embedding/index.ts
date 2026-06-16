@@ -13,6 +13,11 @@ export { SiliconFlowEmbeddingProvider } from './siliconflow.js';
 export { runEmbeddingSmokeTest } from './smoke-test.js';
 export { runRerankSmokeTest } from './rerank-smoke-test.js';
 export {
+  createRerankProvider,
+  FakeRerankProvider,
+  SiliconFlowRerankProvider,
+} from './rerank-provider.js';
+export {
   assertEmbeddingDimensions,
   embeddingConfigFingerprint,
   hashEmbeddingText,
@@ -41,5 +46,10 @@ export type {
   EmbeddingUsage,
   EmbeddingVectorResult,
   RerankProviderConfig,
+  RerankBatchResult,
+  RerankDocumentInput,
+  RerankDocumentResult,
+  RerankProvider,
+  RerankRequestInput,
   RerankProviderHealthCheckResult,
 } from './types.js';
