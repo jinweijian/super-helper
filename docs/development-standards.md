@@ -35,6 +35,8 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 | Area | Owns | Must Not Own |
 | --- | --- | --- |
 | `src/gateway/` | HTTP server, routes, DTOs, request parsing, response serialization | Preflight, worker dispatch policy, evidence review, final reply formatting |
+| `src/cli/` | CLI argument interpretation, server command composition, local status/doctor reporting, browser-open helper | HTTP route handling, provider implementations, runtime diagnosis decisions, knowledge indexing internals |
+| `src/onboarding/` | Setup drafts, validation, run records, progress events, recovery, provider test orchestration, knowledge pipeline orchestration, config commit, local SecretRef storage | HTTP request parsing, product diagnostic runtime, provider adapter implementation, final user replies |
 | `src/agents/` | Product Agent configuration documents and `registry.json` stage pairings | Runtime orchestration, HTTP routing, worker execution, persistence |
 | `src/runtime/` | Agent turn orchestration, Preflight Gate, request building, review decisions, presentation, lifecycle event recording | HTTP APIs, route DTOs, raw file persistence details, Claude CLI implementation |
 | `src/embedding/` | Embedding/rerank provider contracts, provider factories, remote provider adapters, provider smoke tests, safe provider error normalization | Knowledge workspace indexing decisions, runtime orchestration, HTTP DTO parsing, final replies |

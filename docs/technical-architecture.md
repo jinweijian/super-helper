@@ -13,6 +13,8 @@ The current MVP keeps the public import surface stable while separating product 
 - `src/gateway/http-server.ts` owns HTTP server startup and route composition.
 - `src/gateway/routes/` owns route handlers for chat, sessions, settings, and logs.
 - `src/gateway/dto.ts` owns public response shapes for settings, sessions, and model settings.
+- `src/cli/` owns `dashboard`, `onboard`, `status`, and `doctor` command composition.
+- `src/onboarding/` owns Setup drafts, validation, run records, progress events, recovery, provider tests, knowledge pipeline orchestration, local secrets, and config commit.
 - `src/agents/` owns product Agent configs and `registry.json` stage pairings.
 - `src/runtime/diagnostic-runtime.ts` owns one user turn from input receipt through final presentation.
 - `src/runtime/preflight-gate.ts`, `request-builder.ts`, `review-gate.ts`, and `presenter.ts` own runtime decisions and formatting helpers.
@@ -138,6 +140,33 @@ Route code must not embed preflight, worker, review, or presentation decisions. 
 
 Same-case async turns are serialized in the runtime so every accepted user message receives its own helper reply.
 
+## Dashboard Onboarding
+
+The default local setup flow is Dashboard-driven:
+
+```bash
+pnpm onboard
+pnpm dashboard
+pnpm status
+pnpm doctor
+```
+
+`onboard` and `dashboard` both start the HTTP service. `onboard` always opens `/setup`; `dashboard` opens `/setup` until onboarding is completed and opens `/` afterwards. `--bind loopback` listens on `127.0.0.1`; `--bind lan` listens on `0.0.0.0` and prints a trusted-LAN warning. The MVP intentionally does not enforce access tokens yet, so LAN mode is only for trusted internal networks.
+
+Setup state is persisted under `storage.rootDir`:
+
+```text
+onboarding/
+  draft.json
+  runs/
+secrets.json
+config.json
+```
+
+The HTTP routes under `/api/onboarding/*` are transport adapters only. They save drafts, start/retry runs, expose run snapshots, and stream progress through Server-Sent Events. The recoverable execution model belongs to `src/onboarding/runner.ts`; route code must not run provider calls or knowledge pipeline steps directly.
+
+Submitted API keys are stored outside `config.json` and referenced through `SecretRef`. `config.json` may contain `apiKeyRef` or environment variable references, while `secrets.json` contains local file-backed values with restricted permissions. Public DTOs expose only `hasApiKey` and never return raw secret values or file secret keys.
+
 ## Knowledge Processing Pipeline
 
 Knowledge lives behind a strict local processing pipeline so that only audited, published slices can support high-confidence direct answers. The full pipeline is:
@@ -205,7 +234,7 @@ knowledge/indexes/
 
 `knowledge vector build` reads the existing `chunks.jsonl`, skips restricted or inactive chunks before calling the provider, writes vector records, and records provider/model/dimensions/distance/source manifest hash in the manifest. Compatibility checks refuse to use stale or mismatched vector artifacts and report that a rebuild is required.
 
-Runtime retrieval is still keyword/frontmatter based in this change. The vector artifacts prove the provider adapter and local indexing path, but they are not yet wired into hybrid retrieval, rerank sorting, or final-answer generation. SiliconFlow rerank has a smoke-test path so operators can validate model credentials and request shape before a future retrieval-ranking change.
+Runtime retrieval uses a RAG-style flow. Keyword/frontmatter recall runs first. When embedding is enabled and compatible vector artifacts exist, vector recall adds semantically similar chunks. The merged candidate set is then passed through the configured rerank provider when rerank is enabled. Evidence Judge receives the reranked evidence pack and decides whether it is sufficient for a direct answer or whether the turn should escalate to Claude Code.
 
 Current embedding commands:
 

@@ -18,7 +18,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "pnpm build && node dist/cli.js dev",
-    "start": "pnpm build && node dist/cli.js dev",
+    "start": "pnpm build && node dist/cli.js dashboard",
+    "onboard": "pnpm build && node dist/cli.js onboard",
+    "dashboard": "pnpm build && node dist/cli.js dashboard",
+    "status": "pnpm build && node dist/cli.js status",
     "doctor": "pnpm build && node dist/cli.js doctor",
     "knowledge:init": "pnpm build && node dist/cli.js knowledge init",
     "knowledge:update": "pnpm build && node dist/cli.js knowledge update",
