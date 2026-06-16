@@ -1,7 +1,7 @@
 import type { ModelProviderConfig, SuperHelperConfig } from '../config.js';
 import { defaultConfig, inferModelContextWindowTokens, resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
-import type { UserPersona } from '../domain.js';
+import type { SecretRef, UserPersona } from '../domain.js';
 import type { EmbeddingProviderConfig, RerankProviderConfig } from '../embedding/index.js';
 import { buildKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/index.js';
 import type { StoredCase } from '../storage.js';
@@ -53,6 +53,10 @@ export interface ClaudeSettingsInput {
   sessionBusyRetryDelayMs?: number;
 }
 
+export interface PublicSettingsSecretReader {
+  has(ref?: SecretRef): boolean;
+}
+
 export interface SessionSummary {
   id: string;
   claudeSessionId: string;
@@ -83,7 +87,7 @@ export interface AgentActivityItem {
   severity: string;
 }
 
-export function publicSettings(config: SuperHelperConfig): unknown {
+export function publicSettings(config: SuperHelperConfig, secrets?: PublicSettingsSecretReader): unknown {
   const defaults = defaultConfig();
   const embedding = { ...defaults.embedding, ...config.embedding };
   const rerank = { ...defaults.rerank, ...config.rerank };
@@ -98,7 +102,7 @@ export function publicSettings(config: SuperHelperConfig): unknown {
             baseUrl: provider.baseUrl,
             api: provider.api,
             apiKeyEnv: provider.apiKeyEnv,
-            hasApiKey: Boolean(provider.apiKey || (provider.apiKeyEnv && process.env[provider.apiKeyEnv])),
+            hasApiKey: hasConfiguredSecret(provider, secrets),
             model: provider.model,
             temperature: provider.temperature,
             maxTokens: provider.maxTokens,
@@ -107,8 +111,8 @@ export function publicSettings(config: SuperHelperConfig): unknown {
         ]),
       ),
     },
-    embedding: publicEmbeddingSettings(embedding),
-    rerank: publicRerankSettings(rerank),
+    embedding: publicEmbeddingSettings(embedding, secrets),
+    rerank: publicRerankSettings(rerank, secrets),
     claude: {
       enabled: config.claude.enabled,
       command: config.claude.command,
@@ -163,7 +167,10 @@ export function rerankProviderFromInput(
   };
 }
 
-function publicEmbeddingSettings(config: EmbeddingProviderConfig): Record<string, unknown> {
+function publicEmbeddingSettings(
+  config: EmbeddingProviderConfig,
+  secrets?: PublicSettingsSecretReader,
+): Record<string, unknown> {
   return {
     enabled: config.enabled,
     provider: config.provider,
@@ -171,7 +178,7 @@ function publicEmbeddingSettings(config: EmbeddingProviderConfig): Record<string
     baseUrl: config.baseUrl,
     endpoint: config.endpoint,
     apiKeyEnv: config.apiKeyEnv,
-    hasApiKey: Boolean(config.apiKey || (config.apiKeyEnv && process.env[config.apiKeyEnv])),
+    hasApiKey: hasConfiguredSecret(config, secrets),
     dimensions: config.dimensions,
     distance: config.distance,
     batchSize: config.batchSize,
@@ -179,7 +186,10 @@ function publicEmbeddingSettings(config: EmbeddingProviderConfig): Record<string
   };
 }
 
-function publicRerankSettings(config: RerankProviderConfig): Record<string, unknown> {
+function publicRerankSettings(
+  config: RerankProviderConfig,
+  secrets?: PublicSettingsSecretReader,
+): Record<string, unknown> {
   return {
     enabled: config.enabled,
     provider: config.provider,
@@ -187,7 +197,7 @@ function publicRerankSettings(config: RerankProviderConfig): Record<string, unkn
     baseUrl: config.baseUrl,
     endpoint: config.endpoint,
     apiKeyEnv: config.apiKeyEnv,
-    hasApiKey: Boolean(config.apiKey || (config.apiKeyEnv && process.env[config.apiKeyEnv])),
+    hasApiKey: hasConfiguredSecret(config, secrets),
     timeoutMs: config.timeoutMs,
     topN: config.topN,
   };
@@ -254,6 +264,7 @@ export function modelProviderFromInput(input: ModelSettingsInput, existing?: Mod
     baseUrl: input.baseUrl?.trim() || existing?.baseUrl || '',
     api: input.api ?? existing?.api ?? 'openai-completions',
     apiKeyEnv: input.apiKeyEnv?.trim() || existing?.apiKeyEnv,
+    apiKeyRef: existing?.apiKeyRef,
     apiKey: input.apiKey?.trim() || existing?.apiKey,
     model: input.model?.trim() || existing?.model || '',
     temperature: input.temperature ?? existing?.temperature ?? 0,
@@ -272,6 +283,17 @@ export function modelProviderFromInput(input: ModelSettingsInput, existing?: Mod
   }
 
   return provider;
+}
+
+function hasConfiguredSecret(
+  config: { apiKey?: string; apiKeyEnv?: string; apiKeyRef?: SecretRef },
+  secrets?: PublicSettingsSecretReader,
+): boolean {
+  return Boolean(
+    config.apiKey ||
+      (config.apiKeyEnv && process.env[config.apiKeyEnv]) ||
+      (config.apiKeyRef && secrets?.has(config.apiKeyRef)),
+  );
 }
 
 function positiveInteger(value?: number): number | undefined {

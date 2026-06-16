@@ -27,7 +27,7 @@ export function startServer(options: StartServerOptions): Promise<{ url: string;
 
   const server = createServer(async (req, res) => {
     try {
-      await route(req, res, context, onboarding);
+      await route(req, res, context, onboarding, secrets);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sendJson(res, 500, { error: message });
@@ -56,6 +56,7 @@ async function route(
   res: ServerResponse,
   context: GatewayApplicationContext,
   onboarding: OnboardingService,
+  secrets: FileSecretsRepository,
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const { config, store, agent } = context;
@@ -77,7 +78,7 @@ async function route(
   if (await handleOnboardingRoutes(req, res, url, onboarding)) {
     return;
   }
-  if (await handleSettingsRoutes(req, res, url, config)) {
+  if (await handleSettingsRoutes(req, res, url, config, secrets)) {
     return;
   }
   if (await handleSessionRoutes(req, res, url, config, store)) {

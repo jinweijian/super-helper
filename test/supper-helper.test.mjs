@@ -397,6 +397,43 @@ test('settings API sanitizes secrets and can test model connectivity', async () 
   }
 });
 
+test('settings API stores submitted keys in secrets file instead of config', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 0;
+    config.agent.useModelForPreflight = false;
+    config.claude.enabled = false;
+    server = await startServer({ config });
+
+    const settings = await fetch(`${server.url}/api/settings/model`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        providerId: 'minimax',
+        baseUrl: 'https://api.test/v1',
+        model: 'test-model',
+        apiKey: 'submitted-secret',
+      }),
+    }).then((res) => {
+      assert.equal(res.status, 200);
+      return res.json();
+    });
+
+    assert.equal(settings.models.providers.minimax.hasApiKey, true);
+    assert.equal(settings.models.providers.minimax.apiKey, undefined);
+    assert.doesNotMatch(readFileSync(join(dir, 'config.json'), 'utf8'), /submitted-secret/);
+    assert.match(readFileSync(join(dir, 'secrets.json'), 'utf8'), /submitted-secret/);
+  } finally {
+    if (server) {
+      await server.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('model client times out instead of hanging agent review forever', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) =>

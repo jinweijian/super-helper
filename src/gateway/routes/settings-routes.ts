@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
 import { defaultConfig, saveConfig } from '../../config.js';
+import type { SecretRef } from '../../domain.js';
 import { runEmbeddingSmokeTest, runRerankSmokeTest } from '../../embedding/index.js';
 import { runModelSmokeTest } from '../../model-smoke-test.js';
 import { listPublicAgentConfigs } from '../../runtime/agent-configs.js';
@@ -16,11 +17,17 @@ import {
 } from '../dto.js';
 import { readJson, sendJson } from '../http-utils.js';
 
+interface SettingsSecretStore {
+  set(key: string, value: string): SecretRef;
+  has(ref?: SecretRef): boolean;
+}
+
 export async function handleSettingsRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
   config: SuperHelperConfig,
+  secrets: SettingsSecretStore,
 ): Promise<boolean> {
   if (req.method === 'GET' && url.pathname === '/api/config') {
     sendJson(res, 200, {
@@ -37,7 +44,7 @@ export async function handleSettingsRoutes(
   }
 
   if (req.method === 'GET' && url.pathname === '/api/settings') {
-    sendJson(res, 200, publicSettings(config));
+    sendJson(res, 200, publicSettings(config, secrets));
     return true;
   }
 
@@ -51,11 +58,12 @@ export async function handleSettingsRoutes(
     const providerId = body.providerId?.trim() || 'default';
     const existing = config.models.providers[providerId];
     const provider = modelProviderFromInput(body, existing);
+    applySubmittedSecret(provider, body, secrets, `providers.agent.${providerId}`);
     config.models.providers[providerId] = provider;
     config.agent.modelProvider = providerId;
     config.agent.useModelForPreflight = body.useModelForPreflight ?? true;
     saveConfig(config);
-    sendJson(res, 200, publicSettings(config));
+    sendJson(res, 200, publicSettings(config, secrets));
     return true;
   }
 
@@ -77,8 +85,9 @@ export async function handleSettingsRoutes(
   if (req.method === 'POST' && url.pathname === '/api/settings/embedding') {
     const body = (await readJson(req)) as EmbeddingSettingsInput;
     config.embedding = embeddingProviderFromInput(body, embeddingConfig(config));
+    applySubmittedSecret(config.embedding, body, secrets, 'providers.embedding');
     saveConfig(config);
-    sendJson(res, 200, publicSettings(config));
+    sendJson(res, 200, publicSettings(config, secrets));
     return true;
   }
 
@@ -93,8 +102,9 @@ export async function handleSettingsRoutes(
   if (req.method === 'POST' && url.pathname === '/api/settings/rerank') {
     const body = (await readJson(req)) as RerankSettingsInput;
     config.rerank = rerankProviderFromInput(body, rerankConfig(config));
+    applySubmittedSecret(config.rerank, body, secrets, 'providers.rerank');
     saveConfig(config);
-    sendJson(res, 200, publicSettings(config));
+    sendJson(res, 200, publicSettings(config, secrets));
     return true;
   }
 
@@ -126,7 +136,7 @@ export async function handleSettingsRoutes(
       config.claude.sessionBusyRetryDelayMs = Math.max(0, Number(body.sessionBusyRetryDelayMs));
     }
     saveConfig(config);
-    sendJson(res, 200, publicSettings(config));
+    sendJson(res, 200, publicSettings(config, secrets));
     return true;
   }
 
@@ -139,6 +149,26 @@ function embeddingConfig(config: SuperHelperConfig): SuperHelperConfig['embeddin
 
 function rerankConfig(config: SuperHelperConfig): SuperHelperConfig['rerank'] {
   return { ...defaultConfig().rerank, ...config.rerank };
+}
+
+function applySubmittedSecret(
+  provider: { apiKey?: string; apiKeyEnv?: string; apiKeyRef?: SecretRef },
+  input: { apiKey?: string; apiKeyEnv?: string },
+  secrets: SettingsSecretStore,
+  key: string,
+): void {
+  const apiKey = input.apiKey?.trim();
+  if (apiKey) {
+    provider.apiKeyRef = secrets.set(key, apiKey);
+    provider.apiKey = apiKey;
+    return;
+  }
+
+  const apiKeyEnv = input.apiKeyEnv?.trim();
+  if (apiKeyEnv) {
+    provider.apiKeyRef = { source: 'env', name: apiKeyEnv };
+    delete provider.apiKey;
+  }
 }
 
 function optionalPositiveNumber(value: number | string | null | undefined): number | undefined {
