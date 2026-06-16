@@ -1,6 +1,12 @@
 export { parseMarkdownDocument, parseSimpleYaml } from './frontmatter.js';
 export { initKnowledgeWorkspace } from './init.js';
-export { defaultSourceDirectory, ingestSourceDocuments } from './ingest.js';
+export {
+  defaultSourceDirectory,
+  discoverSourceFiles,
+  ingestSourceDocuments,
+  intakeSourceDocument,
+} from './ingest.js';
+export type { IntakeSourceDocumentResult } from './ingest.js';
 export {
   chunksPath,
   knowledgeRoot,

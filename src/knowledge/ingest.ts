@@ -11,6 +11,16 @@ export function defaultSourceDirectory(): string | undefined {
   return existsSync(path) ? path : undefined;
 }
 
+export function discoverSourceFiles(sourceDir?: string): string[] {
+  if (!sourceDir || !existsSync(sourceDir)) {
+    return [];
+  }
+  return readdirSync(sourceDir)
+    .map((name) => join(sourceDir, name))
+    .filter((path) => statSync(path).isFile())
+    .sort();
+}
+
 export function ingestSourceDocuments(input: {
   workspaceRoot: string;
   sourceDir?: string;
@@ -32,13 +42,7 @@ export function ingestSourceDocuments(input: {
     generatedAt: new Date().toISOString(),
   };
 
-  if (!sourceDir || !existsSync(sourceDir)) {
-    return report;
-  }
-
-  const files = readdirSync(sourceDir)
-    .map((name) => join(sourceDir, name))
-    .filter((path) => statSync(path).isFile());
+  const files = discoverSourceFiles(sourceDir);
 
   for (const sourcePath of files) {
     try {
@@ -70,42 +74,34 @@ function ingestOneSource(
   force?: boolean,
   legacyActivePublish = false,
 ): KnowledgeIngestReport['imported'][number] {
-  const ext = extname(sourcePath).toLowerCase();
-  const hash = hashSourceDocument(sourcePath);
-  const sourceDocumentId = `src_${hash.slice(0, 12)}`;
-  const originalName = basename(sourcePath);
-
   // Stage 1: Source intake
   const intake = intakeSourceDocument({
     workspaceRoot,
     sourcePath,
-    sourceDocumentId,
-    ext,
-    force: Boolean(force),
+    force,
   });
-  if (intake.reused && intake.reusedImport) {
-    // Already processed this source; reuse the existing slices.
-    return intake.reusedImport;
+  if (intake.reused) {
+    return ingestRecord(workspaceRoot, intake, []);
   }
 
   // Stage 2: Block extraction
   const { blocks: extractedBlocks } = extractSourceBlocks({
     workspaceRoot,
-    sourceDocumentId,
+    sourceDocumentId: intake.sourceDocumentId,
     sourcePath,
   });
 
   // Stage 3: Normalize blocks
   const { blocks: normalizedBlocks } = normalizeSourceBlocks({
     workspaceRoot,
-    sourceDocumentId,
+    sourceDocumentId: intake.sourceDocumentId,
     blocks: extractedBlocks,
   });
 
   // Stage 4: Build draft slices (not yet published)
   const draftReport = buildDraftSlices({
     workspaceRoot,
-    sourceDocumentId,
+    sourceDocumentId: intake.sourceDocumentId,
     sourceTitle: intake.sourceTitle,
     sourceKind: intake.sourceKind,
     sourceDocumentPath: intake.sourceDocumentRelativePath,
@@ -115,47 +111,41 @@ function ingestOneSource(
   if (legacyActivePublish) {
     legacyWriteActiveSlicesToFormalTree({
       workspaceRoot,
-      sourceDocumentId,
+      sourceDocumentId: intake.sourceDocumentId,
       sourceTitle: intake.sourceTitle,
       sourceKind: intake.sourceKind,
       draftPaths: draftReport.draftPaths,
     });
   }
 
-  return {
-    sourcePath,
-    sourceDocumentId,
-    sourceDocumentPath: intake.sourceDocumentRelativePath,
-    parentSliceIds: draftReport.draftIds,
-    sourceMetaPath: intake.sourceMetaPath,
-    blocksPath: join(workspaceRoot, 'knowledge', '_pipeline', 'extracts', `${sourceDocumentId}.blocks.jsonl`),
-    normalizedBlocksPath: join(workspaceRoot, 'knowledge', '_pipeline', 'normalized', `${sourceDocumentId}.blocks.jsonl`),
-    draftRoot: join(workspaceRoot, 'knowledge', '_pipeline', 'drafts', sourceDocumentId),
-    publishReportPath: undefined,
-  };
+  return ingestRecord(workspaceRoot, intake, draftReport.draftIds);
 }
 
-interface IntakeResult {
+export interface IntakeSourceDocumentResult {
+  sourceDocumentId: string;
+  sourcePath: string;
   sourceTitle: string;
   sourceKind: string;
   sourceMetaPath: string;
   sourceDocumentRelativePath: string;
   reused: boolean;
-  reusedImport?: KnowledgeIngestReport['imported'][number];
 }
 
-function intakeSourceDocument(input: {
+export function intakeSourceDocument(input: {
   workspaceRoot: string;
   sourcePath: string;
-  sourceDocumentId: string;
-  ext: string;
-  force: boolean;
-}): IntakeResult {
+  force?: boolean;
+}): IntakeSourceDocumentResult {
+  const ext = extname(input.sourcePath).toLowerCase();
+  if (!['.docx', '.md', '.markdown'].includes(ext)) {
+    throw new Error(`unsupported source extension: ${ext || 'none'}`);
+  }
   const originalName = basename(input.sourcePath);
   const hash = hashSourceDocument(input.sourcePath);
+  const sourceDocumentId = `src_${hash.slice(0, 12)}`;
   const sourceRoot = join(sourcesRoot(input.workspaceRoot), 'whitepapers');
   mkdirSync(sourceRoot, { recursive: true });
-  const targetSource = join(sourceRoot, input.sourceDocumentId, originalName);
+  const targetSource = join(sourceRoot, sourceDocumentId, originalName);
   const targetMeta = `${targetSource}.meta.json`;
 
   if (existsSync(targetMeta) && !input.force) {
@@ -164,22 +154,13 @@ function intakeSourceDocument(input: {
       if (existing.sha256 === hash) {
         // Reuse existing intake
         return {
+          sourceDocumentId,
+          sourcePath: input.sourcePath,
           sourceTitle: existing.title,
-          sourceKind: existing.source_kind ?? (input.ext === '.docx' ? 'whitepaper_docx' : 'whitepaper_markdown'),
+          sourceKind: existing.source_kind ?? (ext === '.docx' ? 'whitepaper_docx' : 'whitepaper_markdown'),
           sourceMetaPath: targetMeta,
           sourceDocumentRelativePath: existing.path,
           reused: true,
-          reusedImport: {
-            sourcePath: input.sourcePath,
-            sourceDocumentId: input.sourceDocumentId,
-            sourceDocumentPath: existing.path,
-            parentSliceIds: [],
-            sourceMetaPath: targetMeta,
-            blocksPath: join(workspaceRootPath(input.workspaceRoot), 'knowledge', '_pipeline', 'extracts', `${input.sourceDocumentId}.blocks.jsonl`),
-            normalizedBlocksPath: join(workspaceRootPath(input.workspaceRoot), 'knowledge', '_pipeline', 'normalized', `${input.sourceDocumentId}.blocks.jsonl`),
-            draftRoot: join(workspaceRootPath(input.workspaceRoot), 'knowledge', '_pipeline', 'drafts', input.sourceDocumentId),
-            publishReportPath: undefined,
-          },
         };
       }
     } catch {
@@ -191,11 +172,11 @@ function intakeSourceDocument(input: {
   copyFileSync(input.sourcePath, targetSource);
 
   const sourceTitle = inferTitleFromFile(input.sourcePath, originalName);
-  const sourceKind = input.ext === '.docx' ? 'whitepaper_docx' : 'whitepaper_markdown';
+  const sourceKind = ext === '.docx' ? 'whitepaper_docx' : 'whitepaper_markdown';
   const sourceDocumentRelativePath = relativeKnowledgePath(input.workspaceRoot, targetSource);
 
   const meta: KnowledgeSourceDocument = {
-    id: input.sourceDocumentId,
+    id: sourceDocumentId,
     source_type: sourceKind,
     path: sourceDocumentRelativePath,
     sha256: hash,
@@ -206,7 +187,7 @@ function intakeSourceDocument(input: {
     ingest_tool_version: 'pipeline-v1',
     original_path: input.sourcePath,
     stored_path: sourceDocumentRelativePath,
-    parser: input.ext === '.docx' ? 'local-docx-v1' : 'local-markdown-v1',
+    parser: ext === '.docx' ? 'local-docx-v1' : 'local-markdown-v1',
     imported_at: new Date().toISOString(),
     source_kind: sourceKind,
     pipeline_status: 'imported',
@@ -215,11 +196,31 @@ function intakeSourceDocument(input: {
   writeFileSync(targetMeta, `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
 
   return {
+    sourceDocumentId,
+    sourcePath: input.sourcePath,
     sourceTitle,
     sourceKind,
     sourceMetaPath: targetMeta,
     sourceDocumentRelativePath,
     reused: false,
+  };
+}
+
+function ingestRecord(
+  workspaceRoot: string,
+  intake: IntakeSourceDocumentResult,
+  parentSliceIds: string[],
+): KnowledgeIngestReport['imported'][number] {
+  return {
+    sourcePath: intake.sourcePath,
+    sourceDocumentId: intake.sourceDocumentId,
+    sourceDocumentPath: intake.sourceDocumentRelativePath,
+    parentSliceIds,
+    sourceMetaPath: intake.sourceMetaPath,
+    blocksPath: join(workspaceRoot, 'knowledge', '_pipeline', 'extracts', `${intake.sourceDocumentId}.blocks.jsonl`),
+    normalizedBlocksPath: join(workspaceRoot, 'knowledge', '_pipeline', 'normalized', `${intake.sourceDocumentId}.blocks.jsonl`),
+    draftRoot: join(workspaceRoot, 'knowledge', '_pipeline', 'drafts', intake.sourceDocumentId),
+    publishReportPath: undefined,
   };
 }
 
@@ -234,10 +235,6 @@ function inferTitleFromFile(filePath: string, fallback: string): string {
   } catch {
     return fallback.replace(/\.[^.]+$/, '');
   }
-}
-
-function workspaceRootPath(_workspaceRoot: string): string {
-  return _workspaceRoot;
 }
 
 function legacyWriteActiveSlicesToFormalTree(input: {

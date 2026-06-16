@@ -9,9 +9,11 @@ import {
   approveSolvedCase,
   auditKnowledgeQuality,
   buildDraftSlices,
+  discoverSourceFiles,
   evaluateQualityGate,
   generateKnowledgeRepairPlan,
   initKnowledgeWorkspace,
+  intakeSourceDocument,
   parseMarkdownDocument,
   publishApprovedDraftSlices,
   resolveKnowledgeWorkspaceRoot,
@@ -53,6 +55,24 @@ test('knowledge init creates the enterprise knowledge workspace skeleton', () =>
     assert.match(readFileSync(join(knowledgeRoot, 'whitepapers', 'README.md'), 'utf8'), /source_pages/);
   } finally {
     cleanup(workspace);
+  }
+});
+
+test('knowledge intake exposes per-file stages and reuses unchanged content', () => {
+  const workspace = tempWorkspace();
+  const sourceDir = tempWorkspace();
+  try {
+    const path = join(sourceDir, 'guide.md');
+    writeFileSync(path, '# Guide\n\nA meaningful answer-bearing paragraph.', 'utf8');
+    const [source] = discoverSourceFiles(sourceDir);
+    const first = intakeSourceDocument({ workspaceRoot: workspace, sourcePath: source });
+    const second = intakeSourceDocument({ workspaceRoot: workspace, sourcePath: source });
+    assert.equal(first.reused, false);
+    assert.equal(second.reused, true);
+    assert.equal(first.sourceDocumentId, second.sourceDocumentId);
+  } finally {
+    cleanup(workspace);
+    cleanup(sourceDir);
   }
 });
 

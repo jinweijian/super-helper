@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ import {
   buildOnboardingPlan,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
+  runOnboardingKnowledgePipeline,
   testOnboardingProviders,
   validateOnboardingDraft,
 } from '../dist/onboarding/index.js';
@@ -229,4 +230,27 @@ test('provider test runner reports agent embedding and rerank independently', as
   assert.deepEqual(new Set(calls), new Set(['agent', 'embedding', 'rerank']));
   assert.equal(result.ok, true);
   assert.equal(result.agent.ok, true);
+});
+
+test('knowledge pipeline reports real file and slice counts', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-pipeline-'));
+  const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-sources-'));
+  try {
+    writeFileSync(join(sourceDir, 'a.md'), '# A\n\nA complete answer-bearing paragraph for source A.', 'utf8');
+    writeFileSync(join(sourceDir, 'b.md'), '# B\n\nA complete answer-bearing paragraph for source B.', 'utf8');
+    const events = [];
+    const result = await runOnboardingKnowledgePipeline({
+      draft: onboardingDraftFixture({
+        knowledge: { rootDir: workspaceRoot, sourceDir, buildVectorIndex: false },
+      }),
+      workspaceRoot,
+      report: (event) => events.push(event),
+    });
+    assert.ok(events.some((event) =>
+      event.stage === 'ingest_sources' && event.processed === 2 && event.total === 2));
+    assert.ok(result.draftSlices >= 2);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(sourceDir, { recursive: true, force: true });
+  }
 });

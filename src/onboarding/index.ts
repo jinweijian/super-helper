@@ -1,5 +1,10 @@
 export { writeJsonAtomic } from './atomic-json.js';
 export { FileOnboardingDraftRepository } from './draft-repository.js';
+export { runOnboardingKnowledgePipeline } from './knowledge-pipeline.js';
+export type {
+  KnowledgeStageProgress,
+  OnboardingKnowledgePipelineResult,
+} from './knowledge-pipeline.js';
 export {
   onboardingDraftPath,
   onboardingRoot,
