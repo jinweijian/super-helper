@@ -8,6 +8,8 @@ It exists because this project must behave like a real Agent AI system, not a pi
 
 Code must be organized by responsibility and contract.
 
+`docs/module-boundary-standards.md` 是更细的模块边界合同，负责分层、适配器结构、拆文件规则、CLI 边界，以及 provider / retrieval / knowledge 的职责分离。本文件仍是项目级开发规范；任何改动涉及模块归属或结构拆分时，编码前必须同时阅读这两个文件。
+
 Do not add logic wherever it is convenient. Every change must first answer:
 
 - Which module owns this responsibility?
@@ -22,7 +24,7 @@ If the answer is unclear, pause and update the design before writing implementat
 For every feature, bug fix, or refactor:
 
 1. Identify the affected responsibility: agents, gateway, runtime, sessions, worker, observability, UI, config, or docs.
-2. Read the relevant module section in this document and `docs/technical-architecture.md`.
+2. Read the relevant module section in this document, `docs/module-boundary-standards.md`, and `docs/technical-architecture.md`.
 3. Keep compatibility entry points thin.
 4. Add or update focused tests at the contract boundary.
 5. Run the required verification commands.
@@ -48,6 +50,10 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 | `src/ui.ts` | Browser UI rendering and client-side interactions | Server routes, runtime decisions, worker behavior |
 | `src/config.ts` | Config loading, defaults, provider/workspace settings | Runtime orchestration, route decisions |
 | `src/domain.ts` | Shared domain types | Implementation behavior |
+
+上表定义目录级 ownership。`docs/module-boundary-standards.md` 定义目录内部和跨目录的拆分方式。当一个文件开始混合 contracts、factories、adapters、command output 和 business strategy 时，必须按该文档的拆分规则处理，不要继续往最近的文件里堆逻辑。
+
+未来 RAG、hybrid retrieval、candidate fusion、query embedding orchestration、rerank orchestration 都属于 retrieval 边界。在专门的 `src/retrieval/` 模块建立之前，任何过渡方案都必须写入 OpenSpec design，并且不能继续加深 `src/knowledge/` 与远程 provider adapter 的耦合。
 
 ## Compatibility Entry Points
 
