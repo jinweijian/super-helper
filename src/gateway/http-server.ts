@@ -1,29 +1,32 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../config.js';
-import { ClaudeCodeWorker } from '../claude-worker.js';
-import { SuperHelperAgent } from '../agent.js';
-import { resolveSessionStorageRoot } from '../sessions/storage-scope.js';
-import { FileMemoryStore } from '../storage.js';
+import { FileSecretsRepository, createOnboardingService, materializeConfigSecrets, type OnboardingService } from '../onboarding/index.js';
 import { renderApp } from '../ui.js';
 import { sendHtml, sendJson } from './http-utils.js';
+import { GatewayApplicationContext } from './application-context.js';
 import { handleChatRoutes } from './routes/chat-routes.js';
 import { handleKnowledgeRoutes } from './routes/knowledge-routes.js';
 import { handleLogRoutes } from './routes/log-routes.js';
+import { handleOnboardingRoutes } from './routes/onboarding-routes.js';
 import { handleSessionRoutes } from './routes/session-routes.js';
 import { handleSettingsRoutes } from './routes/settings-routes.js';
 
 export interface StartServerOptions {
   config: SuperHelperConfig;
+  onboarding?: OnboardingService;
 }
 
 export function startServer(options: StartServerOptions): Promise<{ url: string; close: () => Promise<void> }> {
-  const { config } = options;
-  const store = new FileMemoryStore(resolveSessionStorageRoot(config));
-  const agent = new SuperHelperAgent(config, store, new ClaudeCodeWorker(config));
+  const context = new GatewayApplicationContext(options.config);
+  const secrets = new FileSecretsRepository(options.config.storage.rootDir);
+  const onboarding = options.onboarding ?? createOnboardingService({
+    config: options.config,
+    onConfigCommitted: (config) => context.reload(materializeConfigSecrets(config, secrets)),
+  });
 
   const server = createServer(async (req, res) => {
     try {
-      await route(req, res, config, store, agent);
+      await route(req, res, context, onboarding);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sendJson(res, 500, { error: message });
@@ -32,9 +35,12 @@ export function startServer(options: StartServerOptions): Promise<{ url: string;
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(config.server.port, config.server.host, () => {
+    server.listen(options.config.server.port, options.config.server.host, () => {
+      const address = server.address();
+      const actualPort = typeof address === 'object' && address ? address.port : options.config.server.port;
+      const host = options.config.server.host === '0.0.0.0' ? '127.0.0.1' : options.config.server.host;
       resolve({
-        url: `http://${config.server.host}:${config.server.port}`,
+        url: `http://${host}:${actualPort}`,
         close: () =>
           new Promise((closeResolve, closeReject) => {
             server.close((error) => (error ? closeReject(error) : closeResolve()));
@@ -47,17 +53,20 @@ export function startServer(options: StartServerOptions): Promise<{ url: string;
 async function route(
   req: IncomingMessage,
   res: ServerResponse,
-  config: SuperHelperConfig,
-  store: FileMemoryStore,
-  agent: SuperHelperAgent,
+  context: GatewayApplicationContext,
+  onboarding: OnboardingService,
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  const { config, store, agent } = context;
 
   if (req.method === 'GET' && url.pathname === '/') {
     sendHtml(res, renderApp());
     return;
   }
 
+  if (await handleOnboardingRoutes(req, res, url, onboarding)) {
+    return;
+  }
   if (await handleSettingsRoutes(req, res, url, config)) {
     return;
   }
