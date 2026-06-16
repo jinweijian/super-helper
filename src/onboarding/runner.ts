@@ -60,7 +60,7 @@ export interface OnboardingRunnerDependencies {
     draft: OnboardingDraft;
     startStage?: OnboardingStageId;
     report(progress: KnowledgeStageProgress): void;
-  }): Promise<Record<string, number>>;
+  }): Promise<Record<string, unknown>>;
   healthCheck(draft: OnboardingDraft): Promise<Record<string, unknown>>;
   commitConfig(draft: OnboardingDraft, runId: string): Promise<SuperHelperConfig>;
   onConfigCommitted?(config: SuperHelperConfig): Promise<void> | void;
@@ -323,10 +323,14 @@ function assertOk(result: unknown, fallback: string): void {
   }
 }
 
-function numericCounters(value: Record<string, number>): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => typeof item === 'number' && Number.isFinite(item)),
-  );
+function numericCounters(value: Record<string, unknown>): Record<string, number> {
+  const counters: Record<string, number> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === 'number' && Number.isFinite(item)) {
+      counters[key] = item;
+    }
+  }
+  return counters;
 }
 
 function safeOnboardingError(error: unknown): OnboardingSafeError {

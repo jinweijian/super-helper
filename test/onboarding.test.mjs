@@ -10,6 +10,7 @@ import {
   FileSecretsRepository,
   OnboardingProgressHub,
   OnboardingRunner,
+  OnboardingService,
   buildOnboardingPlan,
   createOnboardingRun,
   materializeConfigSecrets,
@@ -19,9 +20,48 @@ import {
   validateOnboardingDraft,
 } from '../dist/onboarding/index.js';
 import {
+  draftInputFixture,
   embeddingFixture,
   onboardingDraftFixture,
 } from './helpers/onboarding-fixtures.mjs';
+
+function createServiceFixture(options = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-service-'));
+  const drafts = new FileOnboardingDraftRepository(root);
+  const runs = new FileOnboardingRunRepository(root);
+  const secrets = new FileSecretsRepository(root);
+  const progress = new OnboardingProgressHub();
+  const runner = {
+    async execute(run) {
+      if (options.runnerNeverCompletes) return new Promise(() => {});
+      return runs.save({
+        ...run,
+        status: 'completed',
+        overallProgress: 100,
+        updatedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+    },
+    async retry(id) {
+      return this.execute(runs.load(id));
+    },
+  };
+  const config = defaultConfig();
+  config.storage.rootDir = root;
+  return {
+    root,
+    secretsPath: join(root, 'secrets.json'),
+    service: new OnboardingService({
+      config,
+      drafts,
+      runs,
+      secrets,
+      progress,
+      runner,
+      validate: () => ({ ok: true, issues: [] }),
+    }),
+  };
+}
 
 test('secret repository stores file secrets outside config and materializes runtime config', () => {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));
@@ -171,6 +211,36 @@ test('run repository recovers interrupted runs as retryable failures', () => {
     assert.equal(repository.load('run_test').status, 'failed');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('service stores input secrets as refs and exposes only sanitized draft', async () => {
+  const fixture = createServiceFixture();
+  try {
+    const state = await fixture.service.saveDraft({
+      ...draftInputFixture(),
+      secrets: {
+        agentApiKey: 'agent-secret',
+        embeddingApiKey: 'embedding-secret',
+        rerankApiKey: 'rerank-secret',
+      },
+    });
+    assert.equal(state.draft.agent.provider.hasApiKey, true);
+    assert.equal(JSON.stringify(state).includes('agent-secret'), false);
+    assert.equal(readFileSync(fixture.secretsPath, 'utf8').includes('agent-secret'), true);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('service rejects a second active onboarding run', async () => {
+  const fixture = createServiceFixture({ runnerNeverCompletes: true });
+  try {
+    await fixture.service.saveDraft(draftInputFixture());
+    await fixture.service.startRun();
+    await assert.rejects(() => fixture.service.startRun(), /already active/);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 

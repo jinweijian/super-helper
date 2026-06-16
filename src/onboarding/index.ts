@@ -23,6 +23,7 @@ export { calculateOverallProgress, OnboardingProgressHub, STAGE_WEIGHTS } from '
 export { FileOnboardingRunRepository } from './run-repository.js';
 export { createOnboardingRun, OnboardingRunner } from './runner.js';
 export type { OnboardingRunnerDependencies } from './runner.js';
+export { createOnboardingService, OnboardingService } from './service.js';
 export {
   FileSecretsRepository,
   materializeConfigSecrets,
@@ -31,9 +32,13 @@ export {
 export { validateOnboardingDraft } from './validator.js';
 export type {
   OnboardingDraft,
+  OnboardingDraftInput,
+  OnboardingEmbeddingInput,
+  OnboardingModelProviderInput,
   OnboardingPlan,
   OnboardingPlanStage,
   OnboardingProgressEvent,
+  OnboardingRerankInput,
   OnboardingRun,
   OnboardingSafeError,
   OnboardingStageId,
@@ -42,4 +47,5 @@ export type {
   OnboardingStatus,
   OnboardingValidationIssue,
   OnboardingValidationResult,
+  PublicOnboardingState,
 } from './types.js';

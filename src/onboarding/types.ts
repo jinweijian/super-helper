@@ -1,5 +1,23 @@
+import type { SecretRef } from '../domain.js';
 import type { ModelProviderConfig } from '../config.js';
 import type { EmbeddingProviderConfig, RerankProviderConfig } from '../embedding/types.js';
+
+type EnvSecretRef = Extract<SecretRef, { source: 'env' }>;
+
+export type OnboardingModelProviderInput =
+  Omit<ModelProviderConfig, 'apiKey' | 'apiKeyEnv' | 'apiKeyRef'> & {
+    apiKeyRef?: EnvSecretRef;
+  };
+
+export type OnboardingEmbeddingInput =
+  Omit<EmbeddingProviderConfig, 'apiKey' | 'apiKeyEnv' | 'apiKeyRef'> & {
+    apiKeyRef?: EnvSecretRef;
+  };
+
+export type OnboardingRerankInput =
+  Omit<RerankProviderConfig, 'apiKey' | 'apiKeyEnv' | 'apiKeyRef'> & {
+    apiKeyRef?: EnvSecretRef;
+  };
 
 export type OnboardingStageId =
   | 'validate_draft'
@@ -44,6 +62,22 @@ export interface OnboardingDraft {
   embedding: EmbeddingProviderConfig;
   rerank: RerankProviderConfig;
   updatedAt: string;
+}
+
+export interface OnboardingDraftInput {
+  draft: Omit<OnboardingDraft, 'revision' | 'updatedAt' | 'agent' | 'embedding' | 'rerank'> & {
+    agent: {
+      providerId: string;
+      provider: OnboardingModelProviderInput;
+    };
+    embedding: OnboardingEmbeddingInput;
+    rerank: OnboardingRerankInput;
+  };
+  secrets?: {
+    agentApiKey?: string;
+    embeddingApiKey?: string;
+    rerankApiKey?: string;
+  };
 }
 
 export interface OnboardingSafeError {
@@ -94,6 +128,13 @@ export interface OnboardingProgressEvent {
   runId: string;
   at: string;
   run: OnboardingRun;
+}
+
+export interface PublicOnboardingState {
+  completed: boolean;
+  draft?: Record<string, unknown>;
+  latestRun?: OnboardingRun;
+  validation?: OnboardingValidationResult;
 }
 
 export interface OnboardingValidationIssue {
