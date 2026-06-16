@@ -92,7 +92,8 @@ export class OnboardingRunner {
     run = this.saveAndPublish(run, 'run.started');
 
     try {
-      for (const stage of run.stages) {
+      for (let index = 0; index < run.stages.length; index += 1) {
+        const stage = run.stages[index]!;
         if (stage.status === 'completed' || stage.status === 'skipped') {
           continue;
         }
@@ -103,6 +104,7 @@ export class OnboardingRunner {
           }
           run = this.startStage(run, 'ingest_sources');
           run = await this.executeKnowledgeStages(run, executionDraft);
+          index = Math.max(index, lastKnowledgeStageIndex(run));
           continue;
         }
         if (stage.action === 'skip') {
@@ -307,6 +309,11 @@ function findStage(run: OnboardingRun, stageId: OnboardingStageId): OnboardingSt
     throw new Error(`Unknown onboarding stage: ${stageId}`);
   }
   return stage;
+}
+
+function lastKnowledgeStageIndex(run: OnboardingRun): number {
+  return run.stages.reduce((lastIndex, stage, index) =>
+    KNOWLEDGE_STAGES.includes(stage.id) ? index : lastIndex, -1);
 }
 
 function updateStage(

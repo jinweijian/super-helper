@@ -194,14 +194,6 @@ function secretCheck(
   if (provider.apiKey) {
     return { id, label, severity: 'ok', message: 'configured' };
   }
-  if (provider.apiKeyEnv) {
-    return {
-      id,
-      label,
-      severity: env[provider.apiKeyEnv] ? 'ok' : 'error',
-      message: env[provider.apiKeyEnv] ? `env ${provider.apiKeyEnv}` : `missing env ${provider.apiKeyEnv}`,
-    };
-  }
   if (provider.apiKeyRef) {
     const ok = hasSecretRef(provider.apiKeyRef, secrets, env);
     return {
@@ -211,6 +203,14 @@ function secretCheck(
       message: provider.apiKeyRef.source === 'env'
         ? (ok ? `env ${provider.apiKeyRef.name}` : `missing env ${provider.apiKeyRef.name}`)
         : (ok ? 'file secret configured' : 'file secret missing'),
+    };
+  }
+  if (provider.apiKeyEnv) {
+    return {
+      id,
+      label,
+      severity: env[provider.apiKeyEnv] ? 'ok' : 'error',
+      message: env[provider.apiKeyEnv] ? `env ${provider.apiKeyEnv}` : `missing env ${provider.apiKeyEnv}`,
     };
   }
   return { id, label, severity: 'error', message: 'missing secret' };

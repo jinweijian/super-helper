@@ -4,6 +4,7 @@ import type { SuperHelperConfig } from '../config.js';
 import { chunksPath, dirtyFlagPath, knowledgeRoot, manifestPath } from './paths.js';
 import { resolveKnowledgeWorkspaceRoot, workspaceKnowledgeKey } from './storage-scope.js';
 import { discoverKnowledgeDocuments, searchKnowledge } from './indexer.js';
+import { checkKnowledgeVectorCompatibility } from './vector-index.js';
 import type { KnowledgeIndexManifest } from './types.js';
 
 export type KnowledgeHealthStatus = 'ok' | 'warn' | 'error' | 'off';
@@ -69,6 +70,7 @@ export function buildKnowledgeHealthSummary(input: {
   const chunksExists = existsSync(chunksPath(knowledgeWorkspaceRoot));
   const dirty = existsSync(dirtyFlagPath(knowledgeWorkspaceRoot));
   const docs = knowledgeRootExists ? discoverKnowledgeDocuments(knowledgeWorkspaceRoot) : [];
+  const embedding = embeddingHealth(input.config, knowledgeWorkspaceRoot);
   const query = input.query?.trim() || '';
   const search = searchHealth({
     workspaceRoot: knowledgeWorkspaceRoot,
@@ -101,12 +103,33 @@ export function buildKnowledgeHealthSummary(input: {
       message: indexMessage({ rootExists: knowledgeRootExists, manifestExists: Boolean(manifest), chunksExists, dirty }),
     },
     search,
-    embedding: {
-      status: 'off',
-      message: 'Embedding 向量索引未启用，当前仅检查关键词索引健康度',
-    },
+    embedding,
     similarWorkspaces: findSimilarKnowledgeWorkspaces(input.config, knowledgeWorkspaceRoot),
     actions: ['绑定知识库', '重建索引', '运行健康检查'],
+  };
+}
+
+function embeddingHealth(config: SuperHelperConfig, workspaceRoot: string): KnowledgeHealthSummary['embedding'] {
+  if (!config.embedding?.enabled) {
+    return {
+      status: 'off',
+      message: 'Embedding 向量索引未启用，当前仅检查关键词索引健康度',
+    };
+  }
+
+  const compatibility = checkKnowledgeVectorCompatibility({
+    workspaceRoot,
+    embeddingConfig: config.embedding,
+  });
+  if (compatibility.status === 'compatible') {
+    return {
+      status: 'ok',
+      message: `Embedding 向量索引可用，vectors=${compatibility.manifest?.vector_count ?? 0}`,
+    };
+  }
+  return {
+    status: 'warn',
+    message: `Embedding 已启用，但向量索引需要重建：${compatibility.status}`,
   };
 }
 
