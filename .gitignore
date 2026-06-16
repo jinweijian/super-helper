@@ -8,6 +8,7 @@ dist/
 
 # Local secrets and environment overrides
 .key
+.key.yaml
 .env
 .env.*
 !.env.example

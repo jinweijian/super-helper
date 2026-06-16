@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -24,6 +24,7 @@ import {
   embeddingFixture,
   onboardingDraftFixture,
 } from './helpers/onboarding-fixtures.mjs';
+import { fullOnboardingFixture } from './helpers/full-onboarding-fixture.mjs';
 
 function createServiceFixture(options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-service-'));
@@ -471,5 +472,40 @@ test('knowledge pipeline reports vector build batch progress', async () => {
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
+test('one dashboard run configures providers, publishes clean knowledge, and commits config', async () => {
+  const fixture = await fullOnboardingFixture({
+    sources: {
+      'login.md': [
+        '# 账号登录排查',
+        '',
+        '当学员反馈账号无法登录时，需要先确认账号状态、密码错误次数、浏览器缓存和服务端认证日志；如果账号被锁定，运营应记录证据并引导用户完成密码重置。',
+      ].join('\n'),
+      'refund.md': [
+        '# 课程退款处理',
+        '',
+        '当学员申请课程退款时，需要检查订单支付状态、课程观看进度、退款窗口和售后凭证；如果满足规则，运营应提交退款记录并通知学员处理结果。',
+      ].join('\n'),
+    },
+  });
+  try {
+    await fixture.saveDraft();
+    const run = await fixture.startAndWait();
+    assert.equal(run.status, 'completed', run.safeError?.message);
+    assert.equal(run.overallProgress, 100);
+    assert.ok(run.counters.indexedDocuments >= 1);
+    assert.ok(run.counters.indexedChunks >= 1);
+    assert.ok(run.counters.vectorCount >= 1);
+
+    const configJson = readFileSync(fixture.configPath, 'utf8');
+    assert.equal(JSON.parse(configJson).onboarding.lastRunId, run.id);
+    assert.doesNotMatch(configJson, /fixture-secret/);
+    assert.equal(existsSync(join(fixture.knowledgeWorkspace, 'knowledge', 'indexes', 'manifest.json')), true);
+    assert.equal(existsSync(join(fixture.knowledgeWorkspace, 'knowledge', 'indexes', 'chunks.jsonl')), true);
+    assert.equal(existsSync(join(fixture.knowledgeWorkspace, 'knowledge', 'indexes', 'vector-manifest.json')), true);
+  } finally {
+    await fixture.close();
   }
 });

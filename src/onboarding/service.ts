@@ -5,6 +5,7 @@ import {
   checkKnowledgeVectorCompatibility,
   discoverSourceFiles,
   initKnowledgeWorkspace,
+  resolveKnowledgeWorkspaceRoot,
 } from '../knowledge/index.js';
 import { commitOnboardingConfig } from './config-commit.js';
 import { FileOnboardingDraftRepository } from './draft-repository.js';
@@ -155,12 +156,13 @@ export function createOnboardingService(input: {
     },
     testProviders: testOnboardingProviders,
     prepareWorkspace: async (draft) => {
-      initKnowledgeWorkspace({ workspaceRoot: draft.knowledge.rootDir, sourceDir: draft.knowledge.sourceDir, qualityGate: 'off' });
+      initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspaceRootForDraft(draft, input.config), qualityGate: 'off' });
     },
+    materializeDraftSecrets: (draft) => materializeDraftSecrets(draft, secrets),
     runKnowledge: async (runInput) => {
       const result = await runOnboardingKnowledgePipeline({
         draft: runInput.draft,
-        workspaceRoot: runInput.draft.knowledge.rootDir,
+        workspaceRoot: knowledgeWorkspaceRootForDraft(runInput.draft, input.config),
         report: runInput.report,
       });
       return { ...result } as Record<string, unknown>;
@@ -182,6 +184,29 @@ export function createOnboardingService(input: {
     runner,
     validate: (draft) => validateOnboardingDraft(draft, { resolveSecret: (ref) => secrets.resolve(ref) }),
   });
+}
+
+function knowledgeWorkspaceRootForDraft(draft: OnboardingDraft, currentConfig: SuperHelperConfig): string {
+  const config = structuredClone(currentConfig);
+  config.knowledge = {
+    ...config.knowledge,
+    rootDir: draft.knowledge.rootDir,
+  };
+  config.workspaces = [{
+    id: draft.workspace.id,
+    name: draft.workspace.name,
+    rootPath: draft.workspace.rootPath,
+    mcpToolIds: config.workspaces.find((workspace) => workspace.id === draft.workspace.id)?.mcpToolIds ?? [],
+  }];
+  return resolveKnowledgeWorkspaceRoot(config, draft.workspace.id);
+}
+
+function materializeDraftSecrets(draft: OnboardingDraft, secrets: FileSecretsRepository): OnboardingDraft {
+  const copy = structuredClone(draft);
+  copy.agent.provider.apiKey = secrets.resolve(copy.agent.provider.apiKeyRef) ?? copy.agent.provider.apiKey;
+  copy.embedding.apiKey = secrets.resolve(copy.embedding.apiKeyRef) ?? copy.embedding.apiKey;
+  copy.rerank.apiKey = secrets.resolve(copy.rerank.apiKeyRef) ?? copy.rerank.apiKey;
+  return copy;
 }
 
 function rejectUnsafeDraftInput(input: OnboardingDraftInput): void {

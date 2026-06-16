@@ -47,10 +47,13 @@ export function renderSetupApp(): string {
             <option value="lan">可信内网 lan / 0.0.0.0</option>
           </select>
         </label>
+        <label>Agent Base URL <input id="agentBaseUrl" value="https://api.minimaxi.com/v1" /></label>
         <label>Agent preset <input id="agentModel" placeholder="MiniMax-M1 / gpt-4.1 / ..." /></label>
         <label>Agent API Key <input id="agentKey" type="password" autocomplete="off" /></label>
+        <label>Embedding Base URL <input id="embeddingBaseUrl" value="https://api.siliconflow.cn/v1" /></label>
         <label>Embedding preset <input id="embeddingModel" placeholder="Qwen/Qwen3-Embedding-0.6B" /></label>
         <label>Embedding API Key <input id="embeddingKey" type="password" autocomplete="off" /></label>
+        <label>Rerank Base URL <input id="rerankBaseUrl" value="https://api.siliconflow.cn/v1" /></label>
         <label>Rerank preset <input id="rerankModel" placeholder="Qwen/Qwen3-Reranker-8B" /></label>
         <label>Rerank API Key <input id="rerankKey" type="password" autocomplete="off" /></label>
       </div>
@@ -108,9 +111,9 @@ export function renderSetupApp(): string {
           workspace: { id: 'current', name: 'Current Project', rootPath: $('workspacePath').value },
           knowledge: { rootDir: $('knowledgeRoot').value, sourceDir: $('sourceDir').value || undefined, buildVectorIndex: true },
           server: { bindMode: $('bindMode').value, port: Number($('port').value || 4317) },
-          agent: { providerId: 'default', provider: { type: 'openai-compatible', baseUrl: '', model: $('agentModel').value } },
-          embedding: { enabled: true, provider: 'siliconflow', model: $('embeddingModel').value, dimensions: Number($('dimensions').value || 1024), distance: 'cosine', batchSize: Number($('batchSize').value || 16) },
-          rerank: { enabled: true, provider: 'siliconflow', model: $('rerankModel').value, topN: Number($('topN').value || 2) }
+          agent: { providerId: 'default', provider: { type: 'openai-compatible', baseUrl: $('agentBaseUrl').value, model: $('agentModel').value } },
+          embedding: { enabled: true, provider: 'siliconflow', baseUrl: $('embeddingBaseUrl').value, model: $('embeddingModel').value, dimensions: Number($('dimensions').value || 1024), distance: 'cosine', batchSize: Number($('batchSize').value || 16) },
+          rerank: { enabled: true, provider: 'siliconflow', baseUrl: $('rerankBaseUrl').value, model: $('rerankModel').value, topN: Number($('topN').value || 2) }
         },
         secrets: {
           agentApiKey: $('agentKey').value || undefined,

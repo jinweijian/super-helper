@@ -56,6 +56,7 @@ export interface OnboardingRunnerDependencies {
   validate(draft: OnboardingDraft): Promise<unknown>;
   testProviders(draft: OnboardingDraft): Promise<unknown>;
   prepareWorkspace(draft: OnboardingDraft): Promise<unknown>;
+  materializeDraftSecrets?(draft: OnboardingDraft): OnboardingDraft;
   runKnowledge(input: {
     draft: OnboardingDraft;
     startStage?: OnboardingStageId;
@@ -75,10 +76,11 @@ export class OnboardingRunner {
       throw new Error(`Onboarding run already active: ${active.id}`);
     }
 
-    const draft = this.dependencies.drafts.load();
-    if (!draft) {
+    const persistedDraft = this.dependencies.drafts.load();
+    if (!persistedDraft) {
       throw new Error('No onboarding draft is available for execution.');
     }
+    const executionDraft = this.dependencies.materializeDraftSecrets?.(persistedDraft) ?? persistedDraft;
 
     let run: OnboardingRun = {
       ...structuredClone(inputRun),
@@ -100,14 +102,14 @@ export class OnboardingRunner {
             continue;
           }
           run = this.startStage(run, 'ingest_sources');
-          run = await this.executeKnowledgeStages(run, draft);
+          run = await this.executeKnowledgeStages(run, executionDraft);
           continue;
         }
         if (stage.action === 'skip') {
           run = this.skipStage(run, stage.id);
           continue;
         }
-        run = await this.executeSingleStage(run, draft, stage.id);
+        run = await this.executeSingleStage(run, persistedDraft, executionDraft, stage.id);
       }
 
       run = {
@@ -157,22 +159,23 @@ export class OnboardingRunner {
 
   private async executeSingleStage(
     run: OnboardingRun,
-    draft: OnboardingDraft,
+    persistedDraft: OnboardingDraft,
+    executionDraft: OnboardingDraft,
     stageId: OnboardingStageId,
   ): Promise<OnboardingRun> {
     let updated = this.startStage(run, stageId);
     if (stageId === 'validate_draft') {
-      await this.dependencies.validate(draft);
+      await this.dependencies.validate(persistedDraft);
     } else if (stageId === 'test_providers') {
-      assertOk(await this.dependencies.testProviders(draft), 'Provider test failed.');
+      assertOk(await this.dependencies.testProviders(executionDraft), 'Provider test failed.');
     } else if (stageId === 'prepare_workspace') {
-      await this.dependencies.prepareWorkspace(draft);
+      await this.dependencies.prepareWorkspace(persistedDraft);
     } else if (stageId === 'health_check') {
-      const health = await this.dependencies.healthCheck(draft);
+      const health = await this.dependencies.healthCheck(executionDraft);
       assertOk(health, 'Health check failed.');
       updated = { ...updated, healthSummary: health };
     } else if (stageId === 'commit_config') {
-      const config = await this.dependencies.commitConfig(draft, run.id);
+      const config = await this.dependencies.commitConfig(persistedDraft, run.id);
       await this.dependencies.onConfigCommitted?.(config);
     }
     return this.completeStage(updated, stageId);
