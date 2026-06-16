@@ -1,10 +1,15 @@
 import {
+  approveQualityCleanDraftSlices,
+  auditKnowledgeQuality,
   buildDraftSlices,
   discoverSourceFiles,
   extractSourceBlocks,
   initKnowledgeWorkspace,
   intakeSourceDocument,
   normalizeSourceBlocks,
+  publishApprovedDraftSlices,
+  writeKnowledgeQualityReport,
+  writeSourceQualityReport,
 } from '../knowledge/index.js';
 import type { OnboardingDraft, OnboardingStageId } from './types.js';
 
@@ -20,6 +25,10 @@ export interface OnboardingKnowledgePipelineResult {
   reusedSources: number;
   processedSources: number;
   draftSlices: number;
+  approvedSlices: number;
+  pendingReviewSlices: number;
+  blockedSlices: number;
+  publishedSlices: number;
 }
 
 export async function runOnboardingKnowledgePipeline(input: {
@@ -81,11 +90,40 @@ export async function runOnboardingKnowledgePipeline(input: {
     input.report(stageProgress('slice_sources', index, changed.length, source.sourcePath));
   }
 
+  const quality = auditKnowledgeQuality({ workspaceRoot: input.workspaceRoot, gate: 'warn' });
+  writeKnowledgeQualityReport({ workspaceRoot: input.workspaceRoot, report: quality });
+  writeSourceQualityReport({ workspaceRoot: input.workspaceRoot, report: quality });
+  input.report({
+    stage: 'audit_slices',
+    processed: quality.inspected.draftSlices,
+    total: Math.max(quality.inspected.draftSlices, draftSlices),
+    message: `Audited ${quality.inspected.draftSlices} draft slices`,
+  });
+
+  const approval = approveQualityCleanDraftSlices({
+    workspaceRoot: input.workspaceRoot,
+    reviewer: 'super-helper-onboarding',
+  });
+  const publish = publishApprovedDraftSlices({
+    workspaceRoot: input.workspaceRoot,
+    qualityGate: 'strict',
+  });
+  input.report({
+    stage: 'publish_approved',
+    processed: publish.publishedIds.length,
+    total: approval.approvedIds.length,
+    message: `Published ${publish.publishedIds.length}/${approval.approvedIds.length} quality-clean draft slices`,
+  });
+
   return {
     sources: total,
     reusedSources: sources.length - changed.length,
     processedSources: changed.length,
     draftSlices,
+    approvedSlices: approval.approvedIds.length,
+    pendingReviewSlices: approval.pendingReviewIds.length,
+    blockedSlices: approval.blockedIds.length,
+    publishedSlices: publish.publishedIds.length,
   };
 }
 

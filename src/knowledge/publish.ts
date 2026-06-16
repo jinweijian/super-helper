@@ -123,6 +123,67 @@ export interface PublishApprovedDraftSlicesInput {
   qualityGate?: KnowledgeQualityGate;
 }
 
+export interface QualityAutoApprovalResult {
+  approvedIds: string[];
+  pendingReviewIds: string[];
+  blockedIds: string[];
+}
+
+export function approveQualityCleanDraftSlices(input: {
+  workspaceRoot: string;
+  reviewer: string;
+}): QualityAutoApprovalResult {
+  const quality = readKnowledgeQualityReport(input.workspaceRoot);
+  const approvedIds: string[] = [];
+  const pendingReviewIds: string[] = [];
+  const blockedIds: string[] = [];
+  const approveBySource = new Map<string, string[]>();
+
+  const draftsRoot = join(input.workspaceRoot, 'knowledge', '_pipeline', 'drafts');
+  if (!existsSync(draftsRoot)) {
+    return { approvedIds, pendingReviewIds, blockedIds };
+  }
+
+  const sourceDirs = readdirSync(draftsRoot).filter((name: string) => {
+    const fullPath = join(draftsRoot, name);
+    return statSync(fullPath).isDirectory();
+  });
+
+  for (const sourceDir of sourceDirs) {
+    const slices = readDraftSlices(input.workspaceRoot, sourceDir);
+    for (const slice of slices) {
+      const parsed = parseMarkdownDocument(slice.content, slice.path);
+      if (!isAutoApprovableStatus(parsed.frontmatter.pipeline_status)) {
+        continue;
+      }
+      const severity = highestQualitySeverity(parsed.frontmatter, sourceDir, quality);
+      if (severity === 'error') {
+        blockedIds.push(parsed.frontmatter.id);
+        continue;
+      }
+      if (severity === 'warn') {
+        pendingReviewIds.push(parsed.frontmatter.id);
+        continue;
+      }
+      approvedIds.push(parsed.frontmatter.id);
+      approveBySource.set(sourceDir, [...(approveBySource.get(sourceDir) ?? []), parsed.frontmatter.id]);
+    }
+  }
+
+  for (const [sourceDocumentId, ids] of approveBySource.entries()) {
+    reviewDraftSlices({
+      workspaceRoot: input.workspaceRoot,
+      sourceDocumentId,
+      action: 'approve',
+      reviewer: input.reviewer,
+      notes: 'quality-clean auto approval',
+      ids,
+    });
+  }
+
+  return { approvedIds, pendingReviewIds, blockedIds };
+}
+
 export function publishApprovedDraftSlices(input: PublishApprovedDraftSlicesInput): KnowledgePublishReport {
   const gate: KnowledgeQualityGate = input.qualityGate ?? 'warn';
   const quality = readKnowledgeQualityReport(input.workspaceRoot);
@@ -199,6 +260,31 @@ export function publishApprovedDraftSlices(input: PublishApprovedDraftSlicesInpu
     qualityReportPath: quality ? qualityReportPath(input.workspaceRoot) : undefined,
     qualityReportGeneratedAt: quality?.generatedAt,
   });
+}
+
+function isAutoApprovableStatus(status: KnowledgePipelineStatus | undefined): boolean {
+  return status === undefined || status === 'draft' || status === 'quality_warn' || status === 'quality_error' || status === 'review_required';
+}
+
+function highestQualitySeverity(
+  frontmatter: KnowledgeFrontmatter,
+  sourceDocumentId: string,
+  quality: ReturnType<typeof readKnowledgeQualityReport>,
+): 'ok' | 'warn' | 'error' {
+  if (frontmatter.quality_status === 'error') return 'error';
+  if (frontmatter.quality_status === 'warn') return 'warn';
+  if (!quality) return 'ok';
+  const issueMatches = quality.issues.filter((issue) => {
+    if (issue.documentId === frontmatter.id) return true;
+    if (issue.sourceDocument === sourceDocumentId) return true;
+    if (issue.sourceDocument === frontmatter.source_document_id) return true;
+    if (issue.sourceDocument === frontmatter.source_document) return true;
+    if (issue.source === frontmatter.source_document) return true;
+    return false;
+  });
+  if (issueMatches.some((issue) => issue.severity === 'error')) return 'error';
+  if (issueMatches.some((issue) => issue.severity === 'warn')) return 'warn';
+  return 'ok';
 }
 
 function publishBlockReason(

@@ -439,7 +439,9 @@ function isHeadingOnly(doc: KnowledgeDocument, body: string): boolean {
 }
 
 function isMultiTopic(doc: KnowledgeDocument, threshold: number): boolean {
-  const headings = (doc.body.match(/^#{1,4}\s+(.+)$/gm) ?? []).map((h) => h.replace(/^#{1,4}\s+/, '').trim());
+  const headings = (doc.body.match(/^#{1,4}\s+(.+)$/gm) ?? [])
+    .map((h) => h.replace(/^#{1,4}\s+/, '').trim())
+    .filter((heading) => !isTemplateProvenanceHeading(heading));
   if (headings.length < 2) return false;
   // Detect unrelated headings by checking for shared significant tokens
   const tokensPerHeading = headings.map((h) => new Set(h.match(/[一-龥]{2,}/g) ?? []));
@@ -456,6 +458,10 @@ function isMultiTopic(doc: KnowledgeDocument, threshold: number): boolean {
   }
   if (total === 0) return false;
   return shared / total < 0.3 && headings.length >= threshold;
+}
+
+function isTemplateProvenanceHeading(heading: string): boolean {
+  return ['核心内容', '原文来源'].includes(heading);
 }
 
 const COREFERENCE_TERMS = ['该功能', '上述', '如下图', '该配置', '该流程', '此功能', '该模块', '本节', '上面提到', '如下所示'];

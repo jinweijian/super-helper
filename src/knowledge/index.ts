@@ -47,8 +47,8 @@ export {
   readKnowledgeRepairPlan,
   applyKnowledgeRepairPlan,
 } from './repair.js';
-export { reviewDraftSlices, publishApprovedDraftSlices } from './publish.js';
-export type { ReviewDraftSlicesInput, PublishApprovedDraftSlicesInput } from './publish.js';
+export { approveQualityCleanDraftSlices, reviewDraftSlices, publishApprovedDraftSlices } from './publish.js';
+export type { QualityAutoApprovalResult, ReviewDraftSlicesInput, PublishApprovedDraftSlicesInput } from './publish.js';
 export {
   approveSolvedCase,
   convertSolvedToUnresolved,

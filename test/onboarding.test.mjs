@@ -236,8 +236,16 @@ test('knowledge pipeline reports real file and slice counts', async () => {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-pipeline-'));
   const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-sources-'));
   try {
-    writeFileSync(join(sourceDir, 'a.md'), '# A\n\nA complete answer-bearing paragraph for source A.', 'utf8');
-    writeFileSync(join(sourceDir, 'b.md'), '# B\n\nA complete answer-bearing paragraph for source B.', 'utf8');
+    writeFileSync(
+      join(sourceDir, 'a.md'),
+      '# 账号登录排查\n\n当学员反馈账号无法登录时，需要先确认账号状态、密码错误次数、浏览器缓存和服务端认证日志；如果账号被锁定，运营应记录证据并引导用户完成密码重置。',
+      'utf8',
+    );
+    writeFileSync(
+      join(sourceDir, 'b.md'),
+      '# 课程退款处理\n\n当学员申请课程退款时，需要检查订单支付状态、课程观看进度、退款窗口和售后凭证；如果满足规则，运营应提交退款记录并通知学员处理结果。',
+      'utf8',
+    );
     const events = [];
     const result = await runOnboardingKnowledgePipeline({
       draft: onboardingDraftFixture({
@@ -248,7 +256,13 @@ test('knowledge pipeline reports real file and slice counts', async () => {
     });
     assert.ok(events.some((event) =>
       event.stage === 'ingest_sources' && event.processed === 2 && event.total === 2));
+    assert.ok(events.some((event) => event.stage === 'audit_slices'));
+    assert.ok(events.some((event) => event.stage === 'publish_approved'));
     assert.ok(result.draftSlices >= 2);
+    assert.ok(result.approvedSlices >= 2);
+    assert.equal(result.pendingReviewSlices, 0);
+    assert.equal(result.blockedSlices, 0);
+    assert.ok(result.publishedSlices >= 2);
   } finally {
     rmSync(workspaceRoot, { recursive: true, force: true });
     rmSync(sourceDir, { recursive: true, force: true });

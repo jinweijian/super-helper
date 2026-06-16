@@ -7,6 +7,7 @@ import process from 'node:process';
 import test from 'node:test';
 import {
   approveSolvedCase,
+  approveQualityCleanDraftSlices,
   auditKnowledgeQuality,
   buildKnowledgeVectorIndex,
   buildDraftSlices,
@@ -1306,6 +1307,38 @@ test('publish blocks quality error draft', () => {
     const report = publishApprovedDraftSlices({ workspaceRoot: workspace, sourceDocumentId: 'src_quality_error' });
     assert.equal(report.publishedIds.length, 0);
     assert.deepEqual(report.rejectedIds, ['drf_quality_error_001']);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
+test('quality-clean auto approval publishes only slices without warn or error issues', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const draftsRoot = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_gate');
+    mkdirSync(draftsRoot, { recursive: true });
+    writeFileSync(join(draftsRoot, '001-clean.md'), approvedDraftMarkdown('clean', 'draft', 'unchecked'), 'utf8');
+    writeFileSync(join(draftsRoot, '002-warned.md'), approvedDraftMarkdown('warned', 'draft', 'unchecked'), 'utf8');
+    writeFileSync(join(draftsRoot, '003-broken.md'), approvedDraftMarkdown('broken', 'draft', 'unchecked'), 'utf8');
+    const report = emptyQualityReport(workspace);
+    report.issues = [
+      { documentId: 'warned', severity: 'warn', code: 'too_short', message: 'too short' },
+      { documentId: 'broken', severity: 'error', code: 'missing_source_blocks', message: 'missing blocks' },
+    ];
+    report.severityCounts = { info: 0, warn: 1, error: 1 };
+    writeKnowledgeQualityReport({ workspaceRoot: workspace, report });
+
+    const approval = approveQualityCleanDraftSlices({
+      workspaceRoot: workspace,
+      reviewer: 'super-helper-onboarding',
+    });
+    const published = publishApprovedDraftSlices({ workspaceRoot: workspace, qualityGate: 'strict' });
+
+    assert.deepEqual(approval.approvedIds, ['clean']);
+    assert.deepEqual(approval.pendingReviewIds, ['warned']);
+    assert.deepEqual(approval.blockedIds, ['broken']);
+    assert.deepEqual(published.publishedIds, ['clean']);
   } finally {
     cleanup(workspace);
   }
