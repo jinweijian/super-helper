@@ -1,1 +1,1 @@
-export { startServer, type StartServerOptions } from './gateway/http-server.js';
+export { startServer, type StartedServer, type StartServerOptions } from './gateway/http-server.js';

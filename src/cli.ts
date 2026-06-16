@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { runDoctorCommand, runServerCommand, runStatusCommand } from './cli/index.js';
 import { configPath, defaultConfig, ensureConfig, saveConfig, type SuperHelperConfig } from './config.js';
 import {
   createEmbeddingProvider,
@@ -40,24 +39,32 @@ import {
 } from './knowledge/index.js';
 
 async function main(): Promise<void> {
-  const command = process.argv[2] ?? 'dev';
+  const command = process.argv[2] ?? 'dashboard';
+  const argv = process.argv.slice(3);
+
+  if (command === 'onboard' || command === 'dashboard') {
+    await runServerCommand({ mode: command, argv });
+    return;
+  }
+
+  if (command === 'status') {
+    await runStatusCommand({ argv });
+    return;
+  }
+
+  if (command === 'doctor') {
+    const result = await runDoctorCommand({ argv });
+    if (!result.ok) {
+      process.exit(1);
+    }
+    return;
+  }
 
   if (command === 'init') {
     const path = configPath();
     const config = ensureConfig();
     saveConfig(config);
     console.log(`super helper config ready at ${path}`);
-    return;
-  }
-
-  if (command === 'doctor') {
-    const config = ensureConfig();
-    console.log(`config: ${configPath()}`);
-    console.log(`storage: ${config.storage.rootDir}`);
-    console.log(`knowledge: ${config.knowledge.rootDir}`);
-    const claude = spawnSync(config.claude.command, ['--version'], { encoding: 'utf8' });
-    console.log(`claude: ${claude.status === 0 ? claude.stdout.trim() : 'not available'}`);
-    console.log(`AGENT.md: ${existsSync('AGENT.md') ? 'present' : 'missing'}`);
     return;
   }
 
@@ -687,7 +694,7 @@ function readJsonArg(name: string): unknown {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [init|doctor|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|vector build>|embedding test|rerank test|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|vector build>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 
 main().catch((error) => {

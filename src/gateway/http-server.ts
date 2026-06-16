@@ -17,13 +17,24 @@ export interface StartServerOptions {
   onboarding?: OnboardingService;
 }
 
-export function startServer(options: StartServerOptions): Promise<{ url: string; close: () => Promise<void> }> {
-  const context = new GatewayApplicationContext(options.config);
+export interface StartedServer {
+  url: string;
+  listenHost: string;
+  port: number;
+  close: () => Promise<void>;
+}
+
+export function startServer(options: StartServerOptions): Promise<StartedServer> {
   const secrets = new FileSecretsRepository(options.config.storage.rootDir);
+  const runtimeConfig = materializeConfigSecrets(options.config, secrets);
+  const context = new GatewayApplicationContext(runtimeConfig);
   const onboarding = options.onboarding ?? createOnboardingService({
-    config: options.config,
+    config: runtimeConfig,
     onConfigCommitted: (config) => context.reload(materializeConfigSecrets(config, secrets)),
   });
+  if (!options.onboarding) {
+    onboarding.recoverInterrupted();
+  }
 
   const server = createServer(async (req, res) => {
     try {
@@ -36,12 +47,15 @@ export function startServer(options: StartServerOptions): Promise<{ url: string;
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(options.config.server.port, options.config.server.host, () => {
+    server.listen(runtimeConfig.server.port, runtimeConfig.server.host, () => {
       const address = server.address();
-      const actualPort = typeof address === 'object' && address ? address.port : options.config.server.port;
-      const host = options.config.server.host === '0.0.0.0' ? '127.0.0.1' : options.config.server.host;
+      const actualPort = typeof address === 'object' && address ? address.port : runtimeConfig.server.port;
+      const listenHost = runtimeConfig.server.host;
+      const host = listenHost === '0.0.0.0' ? '127.0.0.1' : listenHost;
       resolve({
         url: `http://${host}:${actualPort}`,
+        listenHost,
+        port: actualPort,
         close: () =>
           new Promise((closeResolve, closeReject) => {
             server.close((error) => (error ? closeReject(error) : closeResolve()));

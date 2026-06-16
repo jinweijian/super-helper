@@ -54,8 +54,12 @@ export function materializeConfigSecrets(
   for (const provider of Object.values(copy.models.providers)) {
     provider.apiKey = secrets.resolve(provider.apiKeyRef) ?? provider.apiKey;
   }
-  copy.embedding.apiKey = secrets.resolve(copy.embedding.apiKeyRef) ?? copy.embedding.apiKey;
-  copy.rerank.apiKey = secrets.resolve(copy.rerank.apiKeyRef) ?? copy.rerank.apiKey;
+  if (copy.embedding) {
+    copy.embedding.apiKey = secrets.resolve(copy.embedding.apiKeyRef) ?? copy.embedding.apiKey;
+  }
+  if (copy.rerank) {
+    copy.rerank.apiKey = secrets.resolve(copy.rerank.apiKeyRef) ?? copy.rerank.apiKey;
+  }
   return copy;
 }
 
