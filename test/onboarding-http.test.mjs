@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { defaultConfig } from '../dist/config.js';
 import { startServer } from '../dist/server.js';
+import { renderSetupApp } from '../dist/setup-ui.js';
 import { draftInputFixture } from './helpers/onboarding-fixtures.mjs';
 
 class FakeOnboardingService {
@@ -108,6 +109,27 @@ test('onboarding HTTP API saves draft, starts run, and restores snapshot', async
 
     const restored = await fetch(`${fixture.url}/api/onboarding/runs/${started.run.id}`).then((res) => res.json());
     assert.equal(restored.run.id, started.run.id);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('setup UI contains QuickStart, advanced settings, progress, and retry controls', () => {
+  const html = renderSetupApp();
+  assert.match(html, /QuickStart/);
+  assert.match(html, /高级设置/);
+  assert.match(html, /检查并执行/);
+  assert.match(html, /EventSource/);
+  assert.match(html, /从失败阶段重试/);
+  assert.match(html, /可信内网/);
+});
+
+test('root redirects to setup until onboarding is completed', async () => {
+  const fixture = await startOnboardingServer({ completed: false });
+  try {
+    const response = await fetch(`${fixture.url}/`, { redirect: 'manual' });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), '/setup');
   } finally {
     await fixture.close();
   }

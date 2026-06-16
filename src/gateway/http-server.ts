@@ -1,8 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../config.js';
 import { FileSecretsRepository, createOnboardingService, materializeConfigSecrets, type OnboardingService } from '../onboarding/index.js';
+import { renderSetupApp } from '../setup-ui.js';
 import { renderApp } from '../ui.js';
-import { sendHtml, sendJson } from './http-utils.js';
+import { sendHtml, sendJson, sendRedirect } from './http-utils.js';
 import { GatewayApplicationContext } from './application-context.js';
 import { handleChatRoutes } from './routes/chat-routes.js';
 import { handleKnowledgeRoutes } from './routes/knowledge-routes.js';
@@ -59,7 +60,16 @@ async function route(
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const { config, store, agent } = context;
 
+  if (req.method === 'GET' && url.pathname === '/setup') {
+    sendHtml(res, renderSetupApp());
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/') {
+    if (!onboarding.getState().completed) {
+      sendRedirect(res, '/setup');
+      return;
+    }
     sendHtml(res, renderApp());
     return;
   }
