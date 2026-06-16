@@ -818,6 +818,7 @@ console.log(JSON.stringify({ result: JSON.stringify(result) }));
   const config = baseConfig(dir);
   config.claude.command = workerPath;
   config.claude.commandWhitelist = [workerPath];
+  config.claude.timeoutMs = 5000;
   config.claude.sessionBusyMaxRetries = 2;
   config.claude.sessionBusyRetryDelayMs = 1;
   const worker = new ClaudeCodeWorker(config);
@@ -857,6 +858,7 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
   const config = baseConfig(dir);
   config.claude.command = workerPath;
   config.claude.commandWhitelist = [workerPath];
+  config.claude.timeoutMs = 5000;
   const worker = new ClaudeCodeWorker(config);
 
   try {

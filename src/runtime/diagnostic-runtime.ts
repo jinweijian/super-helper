@@ -501,12 +501,12 @@ export class DiagnosticRuntime {
     return searchKnowledgeWithRag({
       ...input,
       embedding: embedding ? { provider: embedding } : undefined,
-      rerank: rerank ? { provider: rerank, topN: this.config.rerank.topN } : undefined,
+      rerank: rerank ? { provider: rerank, topN: this.config.rerank?.topN } : undefined,
     });
   }
 
   private createRuntimeEmbeddingProvider(): EmbeddingProvider | undefined {
-    if (this.config.embedding.enabled !== true) {
+    if (this.config.embedding?.enabled !== true) {
       return undefined;
     }
     try {
@@ -517,7 +517,7 @@ export class DiagnosticRuntime {
   }
 
   private createRuntimeRerankProvider(): RerankProvider | undefined {
-    if (this.config.rerank.enabled !== true) {
+    if (this.config.rerank?.enabled !== true) {
       return undefined;
     }
     try {
