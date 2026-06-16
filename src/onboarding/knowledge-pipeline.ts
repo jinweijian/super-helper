@@ -1,13 +1,17 @@
+import { createEmbeddingProvider } from '../embedding/index.js';
 import {
   approveQualityCleanDraftSlices,
   auditKnowledgeQuality,
+  buildKnowledgeVectorIndex,
   buildDraftSlices,
+  checkKnowledgeVectorCompatibility,
   discoverSourceFiles,
   extractSourceBlocks,
   initKnowledgeWorkspace,
   intakeSourceDocument,
   normalizeSourceBlocks,
   publishApprovedDraftSlices,
+  updateKnowledgeIndex,
   writeKnowledgeQualityReport,
   writeSourceQualityReport,
 } from '../knowledge/index.js';
@@ -29,6 +33,9 @@ export interface OnboardingKnowledgePipelineResult {
   pendingReviewSlices: number;
   blockedSlices: number;
   publishedSlices: number;
+  indexedDocuments: number;
+  indexedChunks: number;
+  vectorCount: number;
 }
 
 export async function runOnboardingKnowledgePipeline(input: {
@@ -115,6 +122,16 @@ export async function runOnboardingKnowledgePipeline(input: {
     message: `Published ${publish.publishedIds.length}/${approval.approvedIds.length} quality-clean draft slices`,
   });
 
+  const index = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot });
+  input.report({
+    stage: 'build_keyword_index',
+    processed: index.chunkCount,
+    total: index.chunkCount,
+    message: `Indexed ${index.documentCount} documents and ${index.chunkCount} chunks`,
+  });
+
+  const vectorCount = await maybeBuildVectorIndex(input);
+
   return {
     sources: total,
     reusedSources: sources.length - changed.length,
@@ -124,7 +141,57 @@ export async function runOnboardingKnowledgePipeline(input: {
     pendingReviewSlices: approval.pendingReviewIds.length,
     blockedSlices: approval.blockedIds.length,
     publishedSlices: publish.publishedIds.length,
+    indexedDocuments: index.documentCount,
+    indexedChunks: index.chunkCount,
+    vectorCount,
   };
+}
+
+async function maybeBuildVectorIndex(input: {
+  draft: OnboardingDraft;
+  workspaceRoot: string;
+  report(progress: KnowledgeStageProgress): void;
+}): Promise<number> {
+  if (!input.draft.knowledge.buildVectorIndex || !input.draft.embedding.enabled) {
+    input.report({
+      stage: 'build_vector_index',
+      processed: 0,
+      total: 0,
+      message: 'Vector index skipped: embedding disabled or vector build not requested',
+    });
+    return 0;
+  }
+
+  const compatibility = checkKnowledgeVectorCompatibility({
+    workspaceRoot: input.workspaceRoot,
+    embeddingConfig: input.draft.embedding,
+  });
+  if (compatibility.status === 'compatible') {
+    const vectorCount = compatibility.manifest?.vector_count ?? 0;
+    input.report({
+      stage: 'build_vector_index',
+      processed: vectorCount,
+      total: vectorCount,
+      message: 'Vector index skipped: existing artifacts are compatible',
+    });
+    return vectorCount;
+  }
+
+  const provider = createEmbeddingProvider(input.draft.embedding);
+  const result = await buildKnowledgeVectorIndex({
+    workspaceRoot: input.workspaceRoot,
+    provider,
+    config: input.draft.embedding,
+    onProgress: (progress) => {
+      input.report({
+        stage: 'build_vector_index',
+        processed: progress.processed,
+        total: progress.total,
+        message: `Built vector batch ${progress.processed}/${progress.total}`,
+      });
+    },
+  });
+  return result.vectorCount;
 }
 
 function stageProgress(

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -25,6 +25,44 @@ function writeChunks(indexes, chunks) {
   mkdirSync(indexes, { recursive: true });
   writeFileSync(join(indexes, 'chunks.jsonl'), chunks.map((chunk) => JSON.stringify(chunk)).join('\n') + '\n', 'utf8');
 }
+
+test('vector builder reports completed eligible batches', async () => {
+  const { workspace, indexes } = tempWorkspace();
+  try {
+    writeChunks(indexes, Array.from({ length: 5 }, (_, index) => ({
+      chunk_id: `chk_${index}`,
+      parent_id: `doc_${index}`,
+      source: `knowledge/faq/${index}.md`,
+      module: 'general',
+      intent: 'how_to',
+      source_type: 'faq',
+      status: 'active',
+      confidence: 'high',
+      visibility: 'internal',
+      headings: [],
+      keywords: ['test'],
+      text: `answer-bearing chunk ${index}`,
+    })));
+    const progress = [];
+    const config = {
+      enabled: true,
+      provider: 'fake',
+      model: 'fake-vector',
+      dimensions: 4,
+      distance: 'cosine',
+      batchSize: 2,
+    };
+    await buildKnowledgeVectorIndex({
+      workspaceRoot: workspace,
+      provider: createEmbeddingProvider(config),
+      config,
+      onProgress: (item) => progress.push(item),
+    });
+    assert.deepEqual(progress.at(-1), { processed: 5, total: 5 });
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
 
 test('knowledge vector build writes artifacts and skips restricted chunks before provider call', async () => {
   const { workspace, indexes } = tempWorkspace();

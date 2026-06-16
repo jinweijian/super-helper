@@ -25,6 +25,7 @@ export interface BuildKnowledgeVectorIndexInput {
   workspaceRoot: string;
   provider: EmbeddingProvider;
   config: EmbeddingProviderConfig;
+  onProgress?: (progress: { processed: number; total: number }) => void;
 }
 
 export interface BuildKnowledgeVectorIndexResult extends KnowledgeVectorBuildReport {
@@ -121,37 +122,46 @@ export async function buildKnowledgeVectorIndex(input: BuildKnowledgeVectorIndex
   }
 
   const records: KnowledgeVectorRecord[] = [];
+  const chunkById = new Map(eligibleChunks.map((chunk) => [chunk.chunk_id, chunk]));
   if (eligibleInputs.length > 0) {
-    try {
-      const batch = await input.provider.embedDocuments(eligibleInputs);
-      const chunkById = new Map(eligibleChunks.map((chunk) => [chunk.chunk_id, chunk]));
-      for (const result of batch.results) {
-        const chunk = chunkById.get(result.id);
-        if (!chunk) {
-          failures.push({ chunkId: result.id, error: 'provider returned vector for unknown chunk id' });
-          continue;
+    const batchSize = Math.max(1, Math.floor(input.config.batchSize ?? 16));
+    let processed = 0;
+    for (let offset = 0; offset < eligibleInputs.length; offset += batchSize) {
+      const batchInputs = eligibleInputs.slice(offset, offset + batchSize);
+      try {
+        const batch = await input.provider.embedDocuments(batchInputs, { batchSize });
+        for (const result of batch.results) {
+          const chunk = chunkById.get(result.id);
+          if (!chunk) {
+            failures.push({ chunkId: result.id, error: 'provider returned vector for unknown chunk id' });
+            continue;
+          }
+          records.push({
+            vector_id: `vec_${result.id}`,
+            source: chunk.source,
+            document_id: chunk.parent_id,
+            chunk_id: chunk.chunk_id,
+            text_hash: result.contentHash ?? hashEmbeddingText(chunk.text),
+            provider: result.provider,
+            model: result.model,
+            dimensions: result.dimensions,
+            distance: result.distance,
+            vector: result.vector,
+            created_at: generatedAt,
+            metadata: sanitizeVectorMetadata(result.metadata),
+          });
         }
-        records.push({
-          vector_id: `vec_${result.id}`,
-          source: chunk.source,
-          document_id: chunk.parent_id,
-          chunk_id: chunk.chunk_id,
-          text_hash: result.contentHash ?? hashEmbeddingText(chunk.text),
-          provider: result.provider,
-          model: result.model,
-          dimensions: result.dimensions,
-          distance: result.distance,
-          vector: result.vector,
-          created_at: generatedAt,
-          metadata: sanitizeVectorMetadata(result.metadata),
-        });
+      } catch (error) {
+        const safeError = formatEmbeddingSafeError(error);
+        for (const item of batchInputs) {
+          failures.push({ chunkId: item.chunkId ?? item.id, textHash: item.contentHash, error: safeError });
+        }
       }
-    } catch (error) {
-      const safeError = formatEmbeddingSafeError(error);
-      for (const item of eligibleInputs) {
-        failures.push({ chunkId: item.chunkId ?? item.id, textHash: item.contentHash, error: safeError });
-      }
+      processed += batchInputs.length;
+      input.onProgress?.({ processed, total: eligibleInputs.length });
     }
+  } else {
+    input.onProgress?.({ processed: 0, total: 0 });
   }
 
   const manifest: KnowledgeVectorManifest = {

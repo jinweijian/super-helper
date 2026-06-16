@@ -268,3 +268,35 @@ test('knowledge pipeline reports real file and slice counts', async () => {
     rmSync(sourceDir, { recursive: true, force: true });
   }
 });
+
+test('knowledge pipeline reports vector build batch progress', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-pipeline-vector-'));
+  const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-sources-vector-'));
+  try {
+    writeFileSync(
+      join(sourceDir, 'vector.md'),
+      '# 课程访问排查\n\n当学员反馈课程无法访问时，需要检查课程发布状态、班级授权、订单支付状态和浏览器缓存；如果授权缺失，运营应补充授权记录并通知学员重新进入课程。',
+      'utf8',
+    );
+    const events = [];
+    const result = await runOnboardingKnowledgePipeline({
+      draft: onboardingDraftFixture({
+        knowledge: { rootDir: workspaceRoot, sourceDir, buildVectorIndex: true },
+        embedding: { enabled: true, provider: 'fake', model: 'fake-vector', dimensions: 4, distance: 'cosine', batchSize: 1 },
+      }),
+      workspaceRoot,
+      report: (event) => events.push(event),
+    });
+
+    const vectorEvents = events.filter((event) => event.stage === 'build_vector_index');
+    assert.ok(vectorEvents.length >= 1);
+    assert.deepEqual(
+      { processed: vectorEvents.at(-1).processed, total: vectorEvents.at(-1).total },
+      { processed: result.vectorCount, total: result.vectorCount },
+    );
+    assert.ok(result.vectorCount >= 1);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
