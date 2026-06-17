@@ -10,6 +10,8 @@ export async function handleOnboardingRoutes(
     | 'getState'
     | 'saveDraft'
     | 'validateDraft'
+    | 'getReviewState'
+    | 'submitReview'
     | 'startRun'
     | 'getRun'
     | 'retryRun'
@@ -35,6 +37,16 @@ export async function handleOnboardingRoutes(
 
     if (req.method === 'POST' && url.pathname === '/api/onboarding/validate') {
       sendJson(res, 200, await service.validateDraft());
+      return true;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/onboarding/review') {
+      sendJson(res, 200, { review: service.getReviewState() });
+      return true;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/onboarding/review') {
+      sendJson(res, 200, await service.submitReview(await readJson(req) as never));
       return true;
     }
 

@@ -2,24 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type { SuperHelperConfig } from '../config.js';
 import { getModelProvider } from '../config.js';
-import type { DiagnosticRequest, DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
-import { createEmbeddingProvider, createRerankProvider } from '../embedding/index.js';
-import type { EmbeddingProvider, RerankProvider } from '../embedding/index.js';
+import type { DiagnosticRequest, DiagnosticResult, DiagnosticRun, UserPersona } from '../domain.js';
 import type { PreflightDecision } from '../preflight.js';
 import type { AgentModelClient } from '../model.js';
 import { createModelClient } from '../model.js';
 import type { ClaudeWorker } from '../claude-worker.js';
 import type { FileMemoryStore, StoredCase } from '../storage.js';
 import {
-  discoverKnowledgeDocuments,
   knowledgeRoot,
   resolveKnowledgeWorkspaceRoot,
-  routeKnowledgeQuestion,
-  searchKnowledge,
-  searchKnowledgeWithRag,
-  type KnowledgeEvidencePack,
-  type KnowledgeRoute,
-  type KnowledgeVisibility,
 } from '../knowledge/index.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import {
@@ -42,10 +33,18 @@ import {
 } from './presenter.js';
 import { resolveAgentConfig } from './agent-configs.js';
 import { findExperienceMatch } from './experience-agent.js';
-import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
-import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from './case-curator.js';
-import { nextDeepQueryPivot } from './query-correction.js';
+import {
+  attachKnowledgeCodeEscalationContext,
+  diagnosticResultFromKnowledge,
+  prepareKnowledgeDiagnosis,
+} from './knowledge-diagnosis.js';
+import { parseAgentModelJson } from './agent-model-review.js';
+import {
+  applyWorkerResponseToRun,
+  createRunningDiagnosticRun,
+  prepareDeepQueryRetry,
+} from './worker-turn.js';
 
 export interface AgentResponse {
   caseSession: StoredCase;
@@ -180,21 +179,16 @@ export class DiagnosticRuntime {
 
     caseSession.status = 'diagnosing';
     this.events.preflightDispatch(caseSession, decision.request);
-    const run: DiagnosticRun = {
-      id: decision.request.runId,
-      caseId: caseSession.id,
-      status: 'running',
+    const run = createRunningDiagnosticRun({
       request: decision.request,
-    };
+      caseId: caseSession.id,
+    });
     this.store.addRun(caseSession, run);
     this.events.diagnosticRequestCreated(caseSession, decision.request);
     this.store.appendDailyMemory(`- ${new Date().toISOString()} ${caseSession.id} dispatch ${run.id}`);
 
     const workerResponse = await this.worker.diagnose(decision.request);
-    const result = workerResponse.result;
-    run.status = result.status;
-    run.result = result;
-    run.workerTrace = workerResponse.trace;
+    const result = applyWorkerResponseToRun({ run, response: workerResponse });
     caseSession.status = caseStatusFromDiagnosticResult(result);
     this.store.saveCase(caseSession);
     this.events.workerTrace(caseSession, workerResponse.trace);
@@ -246,18 +240,14 @@ export class DiagnosticRuntime {
             correctionActions: deepRetry.retry.deepQuery.correctionActions,
           });
         }
-      const followUpRun: DiagnosticRun = {
-        id: followUpRequest.runId,
-        caseId: caseSession.id,
-        status: 'running',
+      const followUpRun = createRunningDiagnosticRun({
         request: followUpRequest,
-      };
+        caseId: caseSession.id,
+      });
       this.store.addRun(caseSession, followUpRun);
       this.events.diagnosticRequestCreated(caseSession, followUpRequest, { followUp: true });
       const followUpResponse = await this.worker.diagnose(followUpRequest);
-      followUpRun.status = followUpResponse.result.status;
-      followUpRun.result = followUpResponse.result;
-      followUpRun.workerTrace = followUpResponse.trace;
+      applyWorkerResponseToRun({ run: followUpRun, response: followUpResponse });
       caseSession.status = caseStatusFromDiagnosticResult(followUpResponse.result);
       this.store.saveCase(caseSession);
       this.events.workerTrace(caseSession, followUpResponse.trace);
@@ -417,16 +407,18 @@ export class DiagnosticRuntime {
     request: DiagnosticRequest,
   ): Promise<AgentResponse | undefined> {
     const workspaceRoot = this.knowledgeWorkspaceRootFor(caseSession.workspaceId);
-    if (!existsSync(knowledgeRoot(workspaceRoot))) {
-      return undefined;
-    }
-    const docs = discoverKnowledgeDocuments(workspaceRoot);
-    if (docs.length === 0) {
+    this.events.knowledgeRouterStarted(caseSession, userMessage);
+    const diagnosis = await prepareKnowledgeDiagnosis({
+      config: this.config,
+      workspaceRoot,
+      question: userMessage,
+      persona: caseSession.userPersona,
+    });
+    if (!diagnosis) {
       return undefined;
     }
 
-    this.events.knowledgeRouterStarted(caseSession, userMessage);
-    const route = routeKnowledgeQuestion({ workspaceRoot, question: userMessage });
+    const { route, evidencePack, judge } = diagnosis;
     this.events.knowledgeRouterResult(caseSession, route);
     this.events.knowledgeSearchStarted(caseSession, {
       workspaceRoot,
@@ -435,38 +427,17 @@ export class DiagnosticRuntime {
       intentCandidates: route.intentCandidates,
       sourceTypes: route.sourceTypes,
     });
-    let evidencePack = await this.searchKnowledgeForRuntime({
-      workspaceRoot,
-      query: userMessage,
-      moduleCandidates: route.moduleCandidates,
-      intentCandidates: route.intentCandidates,
-      sourceTypes: route.sourceTypes,
-      visibility: knowledgeVisibilityForPersona(caseSession.userPersona),
-      limit: 8,
-    });
-    if (evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
-      evidencePack = await this.searchKnowledgeForRuntime({
-        workspaceRoot,
-        query: userMessage,
-        moduleCandidates: route.moduleCandidates,
-        intentCandidates: route.intentCandidates,
-        visibility: knowledgeVisibilityForPersona(caseSession.userPersona),
-        limit: 8,
-      });
-    }
     this.events.knowledgeSearchResult(caseSession, evidencePack);
     this.events.evidenceJudgeStarted(caseSession, evidencePack);
-    const judge = judgeKnowledgeEvidence({ route, evidencePack, question: userMessage });
     this.events.evidenceJudgeResult(caseSession, judge);
 
     if (!judge.answerable || judge.need_code_escalation) {
-      const deepQuery = planDeepQuery({ question: userMessage, route, evidencePack, judge });
-      attachDeepQueryContext({
+      attachKnowledgeCodeEscalationContext({
         request,
+        question: userMessage,
         route,
         evidencePack,
         judge,
-        deepQuery,
       });
       this.events.codeEscalationRequested(caseSession, request);
       return undefined;
@@ -490,41 +461,6 @@ export class DiagnosticRuntime {
     this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
     this.events.finalReplyCreated(caseSession, reply, review.decision);
     return { caseSession, assistantMessage: reply, decision: review.decision };
-  }
-
-  private async searchKnowledgeForRuntime(input: Parameters<typeof searchKnowledge>[0]): Promise<KnowledgeEvidencePack> {
-    const embedding = this.createRuntimeEmbeddingProvider();
-    const rerank = this.createRuntimeRerankProvider();
-    if (!embedding && !rerank) {
-      return searchKnowledge(input);
-    }
-    return searchKnowledgeWithRag({
-      ...input,
-      embedding: embedding ? { provider: embedding } : undefined,
-      rerank: rerank ? { provider: rerank, topN: this.config.rerank?.topN } : undefined,
-    });
-  }
-
-  private createRuntimeEmbeddingProvider(): EmbeddingProvider | undefined {
-    if (this.config.embedding?.enabled !== true) {
-      return undefined;
-    }
-    try {
-      return createEmbeddingProvider(this.config.embedding);
-    } catch {
-      return undefined;
-    }
-  }
-
-  private createRuntimeRerankProvider(): RerankProvider | undefined {
-    if (this.config.rerank?.enabled !== true) {
-      return undefined;
-    }
-    try {
-      return createRerankProvider(this.config.rerank);
-    } catch {
-      return undefined;
-    }
   }
 
   private workspaceRootFor(workspaceId: string): string | undefined {
@@ -588,7 +524,7 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
       },
     ], { json: true });
 
-    const parsed = parseJsonObject<{
+    const parsed = parseAgentModelJson<{
       action?: 'ask_user' | 'dispatch';
       reason?: string;
       missingInfo?: string[];
@@ -722,7 +658,7 @@ Rules:
       },
     ], { json: true });
 
-    const parsed = parseJsonObject<{
+    const parsed = parseAgentModelJson<{
       outcome?: 'ask_user' | 'partial' | 'final_answer' | 'escalate_to_human';
       reply?: string;
     }>(response);
@@ -738,169 +674,6 @@ Rules:
       decision: decisionFromReviewOutcome(parsed.outcome, result),
     };
   }
-}
-
-type DeepQueryContext = NonNullable<NonNullable<DiagnosticRequest['context']>['deepQuery']>;
-
-function prepareDeepQueryRetry(input: {
-  previousRequest: DiagnosticRequest;
-  previousResult: DiagnosticResult;
-  workerTrace?: { error?: string; exitCode?: number };
-  reviewDecision: AgentResponse['decision'];
-}): {
-  retry?: { deepQuery: DeepQueryContext };
-  stop?: {
-    reason: string;
-    attempt: number;
-    maxAttempts?: number;
-    previousArtifactTargets?: string[];
-    nextArtifactTargets?: string[];
-    failedReasons?: string[];
-    correctionActions?: string[];
-  };
-} {
-  const previousDeepQuery = input.previousRequest.context?.deepQuery;
-  if (!previousDeepQuery) {
-    return {};
-  }
-
-  const attempt = previousDeepQuery.attempt ?? 1;
-  const maxAttempts = previousDeepQuery.maxAttempts ?? 2;
-  const previousArtifactTargets = previousDeepQuery.artifactTargets ?? [];
-  const failedReasons = Array.from(new Set([
-    ...(previousDeepQuery.failedReasons ?? []),
-    ...deriveDeepQueryFailedReasons(input.previousResult, input.workerTrace),
-  ]));
-
-  if (input.workerTrace?.error || input.workerTrace?.exitCode) {
-    return {
-      stop: {
-        reason: 'worker_failure',
-        attempt,
-        maxAttempts,
-        previousArtifactTargets,
-        failedReasons,
-      },
-    };
-  }
-
-  if (input.reviewDecision === 'escalate') {
-    return {
-      stop: {
-        reason: 'human_escalation',
-        attempt,
-        maxAttempts,
-        previousArtifactTargets,
-        failedReasons,
-      },
-    };
-  }
-
-  if (input.previousResult.recommendedNextAction === 'ask_user') {
-    return {
-      stop: {
-        reason: 'needs_user',
-        attempt,
-        maxAttempts,
-        previousArtifactTargets,
-        failedReasons,
-      },
-    };
-  }
-
-  const judge = input.previousRequest.context?.knowledge?.judge as { answerable?: boolean; blockers?: string[] } | undefined;
-  const pivot = nextDeepQueryPivot({
-    previousArtifactTargets,
-    workerResultSummary: input.previousResult.summary,
-    judgeResult: judge
-      ? {
-          answerable: Boolean(judge.answerable),
-          blockers: judge.blockers ?? [],
-        }
-      : undefined,
-    attempt,
-    maxAttempts,
-  });
-
-  if (pivot.stopReason) {
-    return {
-      stop: {
-        reason: pivot.stopReason,
-        attempt,
-        maxAttempts,
-        previousArtifactTargets,
-        nextArtifactTargets: pivot.nextArtifactTargets,
-        failedReasons,
-        correctionActions: pivot.correctionActions,
-      },
-    };
-  }
-
-  if (sameStringSet(previousArtifactTargets, pivot.nextArtifactTargets)) {
-    return {
-      stop: {
-        reason: 'no_new_pivot',
-        attempt,
-        maxAttempts,
-        previousArtifactTargets,
-        nextArtifactTargets: pivot.nextArtifactTargets,
-        failedReasons,
-        correctionActions: pivot.correctionActions,
-      },
-    };
-  }
-
-  const nextAttempt = attempt + 1;
-  return {
-    retry: {
-      deepQuery: {
-        ...previousDeepQuery,
-        attempt: nextAttempt,
-        maxAttempts,
-        previousArtifactTargets,
-        artifactTargets: pivot.nextArtifactTargets,
-        correctionActions: pivot.correctionActions,
-        failedReasons,
-        triedQueries: Array.from(new Set([...(previousDeepQuery.triedQueries ?? []), input.previousRequest.userGoal])),
-        nextPivot: pivot.nextArtifactTargets[0],
-        stopReason: undefined,
-      },
-    },
-  };
-}
-
-function deriveDeepQueryFailedReasons(result: DiagnosticResult, trace?: { error?: string }): string[] {
-  const reasons: string[] = [];
-  if (result.summary) {
-    reasons.push(result.summary.slice(0, 160));
-  }
-  for (const item of result.missingInfo) {
-    reasons.push(`missing:${item}`);
-  }
-  if (trace?.error) {
-    reasons.push(`worker:${trace.error}`);
-  }
-  return reasons;
-}
-
-function sameStringSet(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  const rightSet = new Set(right);
-  return left.every((item) => rightSet.has(item));
-}
-
-function parseJsonObject<T>(text: string): T {
-  const cleaned = text
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  const jsonText = start >= 0 && end >= start ? cleaned.slice(start, end + 1) : cleaned;
-  return JSON.parse(jsonText) as T;
 }
 
 function titleFromMessage(message: string): string {
@@ -920,59 +693,4 @@ function findPendingUserMessageId(caseSession: StoredCase, userMessage: string):
   );
   const matching = caseSession.messages.filter((message) => message.role === 'user' && message.body === userMessage);
   return matching.find((message) => !answered.has(message.id))?.id ?? matching.at(-1)?.id;
-}
-
-function diagnosticResultFromKnowledge(input: {
-  evidencePack: KnowledgeEvidencePack;
-  judge: EvidenceJudgeResult;
-  route: KnowledgeRoute;
-}): DiagnosticResult {
-  const answerEvidence = input.evidencePack.results.filter((result) => result.status === 'active');
-  const evidence: Evidence[] = answerEvidence.slice(0, 6).map((result) => ({
-    id: result.evidence_id,
-    kind: 'knowledge',
-    source: sourceLabel(result),
-    summary: `${result.title}：${result.excerpt || result.summary}`,
-    confidence: result.confidence,
-  }));
-  const top = answerEvidence[0];
-  const summary = top
-    ? `知识库命中「${top.title}」，可回答：${top.excerpt || top.summary}`
-    : '知识库证据足够回答当前问题。';
-
-  return {
-    status: 'concluded',
-    summary,
-    missingInfo: [],
-    evidence,
-    claims: [
-      {
-        type: 'fact',
-        text: summary,
-        evidenceIds: evidence.map((item) => item.id),
-      },
-      {
-        type: 'inference',
-        text: `Evidence Judge 判定知识证据可直接回答，answer_score=${input.judge.answer_score}，模块候选：${input.route.moduleCandidates.join('、') || '未限定'}`,
-        evidenceIds: evidence.map((item) => item.id),
-      },
-    ],
-    recommendedNextAction: 'final_answer',
-  };
-}
-
-function sourceLabel(result: KnowledgeEvidencePack['results'][number]): string {
-  const pages = result.source_pages?.length ? ` pages=${result.source_pages.join(',')}` : '';
-  const sourceDocument = result.source_document ? ` source=${result.source_document}` : '';
-  return `${result.source}${sourceDocument}${pages}`;
-}
-
-function knowledgeVisibilityForPersona(persona: UserPersona): KnowledgeVisibility[] {
-  if (persona === 'customer') {
-    return ['customer_safe'];
-  }
-  if (persona === 'operations') {
-    return ['customer_safe', 'internal'];
-  }
-  return ['customer_safe', 'internal', 'support'];
 }

@@ -9,14 +9,36 @@ import { renderSetupApp } from '../dist/setup-ui.js';
 import { draftInputFixture } from './helpers/onboarding-fixtures.mjs';
 
 class FakeOnboardingService {
-  constructor(completed = false) {
+  constructor(completed = false, needsReview = false) {
     this.completed = completed;
+    this.review = {
+      required: needsReview,
+      pendingCount: needsReview ? 1 : 0,
+      blockedCount: 0,
+      items: needsReview ? [{
+        id: 'drf_pending',
+        sourceDocumentId: 'src_pending',
+        title: 'Pending slice',
+        module: 'general',
+        path: 'knowledge/_pipeline/drafts/src_pending/001.md',
+        qualitySeverity: 'warn',
+        issues: [],
+        excerptPreview: 'preview',
+      }] : [],
+    };
     this.draft = undefined;
     this.run = undefined;
     this.listeners = new Set();
   }
   getState() {
-    return { completed: this.completed, draft: this.draft, latestRun: this.run };
+    return { completed: this.completed, needsReview: this.review.required, draft: this.draft, latestRun: this.run, review: this.review };
+  }
+  getReviewState() {
+    return this.review;
+  }
+  async submitReview() {
+    this.review = { required: false, pendingCount: 0, blockedCount: 0, items: [] };
+    return { review: this.review, publishedSlices: 1, indexedDocuments: 1, indexedChunks: 1 };
   }
   async saveDraft(input) {
     this.draft = {
@@ -77,7 +99,7 @@ async function startOnboardingServer(options = {}) {
   config.server.host = '127.0.0.1';
   config.server.port = 0;
   if (options.completed) config.onboarding.completedAt = new Date().toISOString();
-  const service = new FakeOnboardingService(Boolean(options.completed));
+  const service = new FakeOnboardingService(Boolean(options.completed), Boolean(options.needsReview));
   const server = await startServer({ config, onboarding: service });
   return {
     ...server,
@@ -122,6 +144,25 @@ test('setup UI contains QuickStart, advanced settings, progress, and retry contr
   assert.match(html, /EventSource/);
   assert.match(html, /从失败阶段重试/);
   assert.match(html, /可信内网/);
+  assert.match(html, /审核知识切片/);
+  assert.match(html, /开始使用/);
+});
+
+test('setup UI exposes the renamed path labels and directory picker buttons', () => {
+  const html = renderSetupApp();
+  assert.match(html, /项目目录/);
+  assert.match(html, /知识库目录/);
+  assert.match(html, /知识源目录/);
+  assert.match(html, /id="workspacePath"/);
+  assert.match(html, /id="knowledgeRoot"/);
+  assert.match(html, /id="sourceDir"/);
+  assert.match(html, /class="pathBrowse secondary"[\s\S]*?data-target="workspacePath"/);
+  assert.match(html, /class="pathBrowse secondary"[\s\S]*?data-target="knowledgeRoot"/);
+  assert.match(html, /class="pathBrowse secondary"[\s\S]*?data-target="sourceDir"/);
+  assert.match(html, /\/api\/fs\/dirs/);
+  assert.match(html, /placeholder="被 super helper 管理的代码根目录/);
+  assert.match(html, /placeholder="知识库输出根目录/);
+  assert.match(html, /placeholder="放你的产品\/技术文档的地方/);
 });
 
 test('root redirects to setup until onboarding is completed', async () => {
@@ -130,6 +171,36 @@ test('root redirects to setup until onboarding is completed', async () => {
     const response = await fetch(`${fixture.url}/`, { redirect: 'manual' });
     assert.equal(response.status, 302);
     assert.equal(response.headers.get('location'), '/setup');
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('root redirects to setup while onboarding review is pending', async () => {
+  const fixture = await startOnboardingServer({ completed: true, needsReview: true });
+  try {
+    const response = await fetch(`${fixture.url}/`, { redirect: 'manual' });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), '/setup');
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('onboarding review API exposes and clears pending review state', async () => {
+  const fixture = await startOnboardingServer({ completed: true, needsReview: true });
+  try {
+    const pending = await fetch(`${fixture.url}/api/onboarding/review`).then((res) => res.json());
+    assert.equal(pending.review.required, true);
+    assert.equal(pending.review.pendingCount, 1);
+
+    const reviewed = await fetch(`${fixture.url}/api/onboarding/review`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'accept_warnings', notes: 'accepted in test' }),
+    }).then((res) => res.json());
+    assert.equal(reviewed.review.required, false);
+    assert.equal(reviewed.publishedSlices, 1);
   } finally {
     await fixture.close();
   }

@@ -33,35 +33,64 @@
 | --- | --- | --- |
 | `domain/contracts` | 稳定类型、端口、跨模块契约、纯领域概念 | 厂商 API 协议、HTTP DTO、文件路径策略、CLI 输出、runtime 编排 |
 | `config/secrets` | 配置加载、默认值、配置合并、SecretRef materialize、持久化脱敏 | provider 调用、worker 调用、runtime 决策、HTTP route 行为 |
+| `settings` | 设置页/设置 API 的配置合并、SecretRef 应用、public settings 映射、model/embedding/rerank smoke test 编排 | HTTP request/response、provider 厂商协议、runtime 诊断决策 |
 | `gateway` | HTTP、路由、DTO、请求响应序列化、状态码 | Preflight、worker dispatch、检索策略、provider 协议、证据审核、最终回复 |
-| `cli` | 命令参数解释、命令组合、用户可读输出、进程退出码 | provider adapter、RAG 策略、runtime 诊断决策、knowledge 索引内部算法、HTTP route |
+| `cli` | `main.ts` 分发、`command-*` 参数解释、命令组合、用户可读输出、进程退出码 | provider adapter、RAG/recall 策略、runtime 诊断决策、knowledge 索引内部算法、HTTP route |
 | `runtime` | 用户回合编排、Agent 决策、Preflight、Evidence Review、降级/升级路径、生命周期事件 | HTTP DTO、厂商协议、原始文件持久化细节、knowledge 索引实现、CLI 输出 |
 | `knowledge` | 本地知识文件、schema、Markdown/frontmatter、source metadata、本地 keyword index、本地 vector artifact build/read/compatibility、本地 evidence pack | 远程 provider API 调用、runtime 编排、最终回答、Claude Code 执行、HTTP route 决策、retrieval ranking/rerank 策略 |
-| `embedding` | embedding/rerank provider contracts、factory、远程 provider adapters、smoke tests、安全错误归一化 | knowledge 目录结构、知识索引策略、runtime 决策、HTTP DTO、CLI 输出、最终回复 |
-| `retrieval` | 跨 `knowledge` + `embedding` 的检索编排、query embedding、候选融合、rerank、fallback、retrieval trace | 用户最终回复、Evidence Review、HTTP DTO、provider 厂商协议实现、knowledge artifact 写入 |
+| `providers` | embedding/rerank provider contracts、factory、远程 provider adapters、smoke tests、安全错误归一化 | knowledge 目录结构、检索策略、runtime 决策、HTTP DTO、CLI 输出、最终回复 |
+| `embedding` | 旧 import path 的兼容 re-export | 新 provider 实现、rerank 实现、厂商协议、业务流程 |
+| `retrieval` | 跨 `knowledge` + `providers` 的多策略召回、query embedding、候选融合、rerank、fallback、retrieval trace | 用户最终回复、Evidence Review、HTTP DTO、provider 厂商协议实现、knowledge artifact 写入 |
 | `sessions` | case repository port、case context、会话上下文构建、session storage scope | worker/model 调用、最终回复、HTTP DTO、provider 调用 |
 | `workers` | worker port、具体 worker adapter、CLI/tool 执行、worker 输出解析 | case 编排、用户回复、HTTP route、Evidence Review |
 | `observability` | 日志展示结构、log block 转换、UI 可观测性数据 | 诊断流程决策、worker 执行、provider 调用 |
 | `ui` | 浏览器 UI 渲染、客户端交互、展示状态 | server route、runtime 决策、worker 行为、provider 协议 |
 
-`retrieval` 是目标层。当前代码如果还没有该目录，新增 RAG、rerank、hybrid recall、candidate fusion、query embedding 编排时，必须优先创建该层或在 OpenSpec design 中说明过渡方案，不能继续塞进 `knowledge` 或 provider adapter。
+新增 BM25、embedding、业务规则召回、hybrid recall、candidate fusion、query embedding 编排、rerank 编排时，必须放在 `src/retrieval/` 对应层级，不能继续塞进 `knowledge`、`providers` 或旧 `embedding` 兼容门面。
 
 ## 适配器模式硬规则
 
 任何外部厂商、模型服务、工具服务都必须按适配器模式接入。
 
+Provider 能力统一放在 `src/providers/`。Embedding 与 rerank 是同级能力，目录必须体现这种关系：
+
+```text
+src/providers/
+  errors.ts
+  redaction.ts
+  http.ts
+  embedding/
+    contract.ts
+    factory.ts
+    smoke-test.ts
+    fake.ts
+    siliconflow/
+      adapter.ts
+      endpoint.ts
+      protocol.ts
+  rerank/
+    contract.ts
+    factory.ts
+    smoke-test.ts
+    fake.ts
+    siliconflow/
+      adapter.ts
+      endpoint.ts
+      protocol.ts
+```
+
 每类 provider 至少拆成以下责任：
 
 - `types` / `contract`：只定义端口、输入输出、健康检查结果和稳定错误类型。
 - `factory`：只做 provider 选择、基础配置校验、返回端口实现。
-- `providers/<vendor>`：只实现该厂商协议、request body、response mapping、状态码映射、超时和网络错误转换。
+- `<capability>/<vendor>`：只实现该厂商协议、request body、response mapping、状态码映射、超时和网络错误转换。
 - `errors` / `redaction`：统一安全错误、脱敏、retryable 分类。
 - `smoke-test`：只通过端口验证连通性，不暴露原始向量、原始文档、secret、完整 provider payload。
 
 禁止：
 
 - 把 SiliconFlow、Qwen、MiniMax、Gemini 等多个厂商实现混在 factory 文件。
-- 把 rerank 当作 embedding provider 的附属实现；rerank 和 embedding 是同级 provider 能力。
+- 把 rerank 当作 embedding provider 的附属实现；rerank 和 embedding 必须是同级 provider 能力。
 - 让 provider adapter import `knowledge`、`runtime`、`gateway`、`cli`、`ui`。
 - 在 provider adapter 内读取 file SecretRef。SecretRef 必须在 `config/secrets` 或 onboarding/config 边界 materialize 成运行时配置。
 - 在 provider adapter 内决定检索策略、证据排序、是否能直接回答用户。
@@ -151,23 +180,59 @@ CLI 不可以：
 - 复制 gateway route 的 DTO 逻辑。
 - 在一个大入口文件中持续堆新子命令。
 
-新增复杂子命令时，必须放到 `src/cli/<name>-command.ts` 或所属业务模块的 service 中，入口文件只保留分发。
+CLI 目录使用 `command-*` 前缀，方便目录列表中聚合命令适配器：
 
-## Knowledge / Retrieval / Embedding 边界
+```text
+src/cli/
+  main.ts
+  command-server.ts
+  command-status.ts
+  command-doctor.ts
+  command-knowledge.ts
+  command-retrieval.ts
+  command-provider.ts
+  command-config.ts
+  command-accept.ts
+```
+
+新增复杂子命令时，必须放到 `src/cli/command-<name>.ts` 或所属业务模块的 service 中，入口文件只保留分发。根入口 `src/cli.ts` 只能是 shebang 兼容包装。
+
+## Knowledge / Retrieval / Providers 边界
 
 这三层最容易混淆，必须严格区分：
 
 - `knowledge` 只管本地知识资产和本地 evidence pack。
-- `embedding` 只管 provider 端口和厂商调用。
-- `retrieval` 负责编排 keyword recall、vector recall、candidate merge、rerank 和 fallback。
+- `providers` 只管 embedding/rerank provider 端口和厂商调用。
+- `retrieval` 负责编排 BM25、embedding、keyword compatibility、未来业务策略等 recall，candidate merge、rerank 和 fallback。
 - `runtime` 负责决定 retrieval 结果是否进入 Evidence Judge、是否直接回答、是否升级到 Claude Code。
 
 具体要求：
 
 - `knowledge` 可以读取 `vectors.jsonl`、`vector-manifest.json`，但不能自己调用远程 embedding 或 rerank provider。
-- `embedding` 可以返回向量或 rerank scores，但不能知道 chunk、document、case、persona、Evidence Judge。
-- `retrieval` 可以依赖 `knowledge` 的本地 search/read API 和 `embedding` 的 provider port，但不能生成用户可见最终回复。
+- `knowledge/indexes/` 可以维护 chunks、keyword、BM25、vector 等可重建 artifact；artifact 读写不等于召回策略所有权。
+- `retrieval/recall/bm25/` 与 `retrieval/recall/embedding/` 必须是同级策略。BM25 是召回策略，不应藏在 embedding 或 knowledge indexer 里。
+- `providers` 可以返回向量或 rerank scores，但不能知道 chunk、document、case、persona、Evidence Judge。
+- `retrieval` 可以依赖 `knowledge` 的本地 search/read API 和 `providers` 的 provider port，但不能生成用户可见最终回复。
 - `runtime` 可以创建或注入 retrieval service，但不得直接实现厂商 request/response mapping。
+
+多路召回的目录应表达扩展点：
+
+```text
+src/retrieval/
+  service.ts
+  registry.ts
+  recall/
+    contract.ts
+    bm25/
+    embedding/
+    keyword/
+  fusion/
+  rerank/
+  evidence-pack.ts
+  trace.ts
+```
+
+新增或删除召回策略时，优先新增/删除 `retrieval/recall/<strategy>/` 并调整 registry，不要在 runtime 或 CLI 中增加策略分支。
 
 ## OpenSpec 和 PR 验收清单
 
@@ -213,8 +278,8 @@ CLI 不可以：
 
 当前已知需要后续单独创建 OpenSpec 的方向：
 
-- 拆分 `src/embedding/rerank-provider.ts` 的 factory、fake provider、SiliconFlow adapter、协议解析和错误映射。
-- 将 RAG / rerank 编排从 `src/knowledge/indexer.ts` 移到 `retrieval` 或 runtime 注入边界。
-- 为 provider / retrieval / knowledge 边界增加 contract tests，防止回退。
+- 将旧 `src/embedding/` 兼容 re-export 的使用方逐步迁移到 `src/providers/`。
+- 为新增召回策略补充 registry 级别的 enable/disable 配置和观测字段。
+- 为 provider / retrieval / knowledge / settings / CLI 边界持续增加 contract tests，防止回退。
 
 这些是后续修复 spec 的输入，不是本规范文档本身要实施的代码改动。

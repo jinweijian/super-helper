@@ -509,3 +509,37 @@ test('one dashboard run configures providers, publishes clean knowledge, and com
     await fixture.close();
   }
 });
+
+test('dashboard review accepts warning slices before starting daily use', async () => {
+  const fixture = await fullOnboardingFixture({
+    sources: {
+      'short.md': '# 短切片\n\n内容较短。',
+    },
+  });
+  try {
+    await fixture.saveDraft();
+    const run = await fixture.startAndWait();
+    assert.equal(run.status, 'completed', run.safeError?.message);
+    assert.equal(run.counters.pendingReviewSlices, 1);
+
+    const pending = fixture.getReviewState();
+    assert.equal(pending.required, true);
+    assert.equal(pending.pendingCount, 1);
+
+    const reviewed = await fixture.submitReview({
+      action: 'accept_warnings',
+      reviewer: 'tester',
+      notes: 'accepted warning slice in regression test',
+    });
+    assert.equal(reviewed.review.required, false);
+    assert.equal(reviewed.publishedSlices, 1);
+    assert.ok(reviewed.indexedDocuments >= 1);
+
+    const state = fixture.getState();
+    assert.equal(state.completed, true);
+    assert.equal(state.needsReview, false);
+    assert.equal(state.latestRun.counters.pendingReviewSlices, 0);
+  } finally {
+    await fixture.close();
+  }
+});

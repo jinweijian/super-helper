@@ -1,12 +1,5 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import {
-  embeddingConfigFingerprint,
-  formatEmbeddingSafeError,
-  hashEmbeddingText,
-  isEmbeddingManifestCompatible,
-} from '../embedding/index.js';
-import type { EmbeddingDocumentInput, EmbeddingProvider, EmbeddingProviderConfig } from '../embedding/index.js';
 import { chunksPath, indexesDir, vectorBuildReportPath, vectorManifestPath, vectorsPath } from './paths.js';
 import type {
   KnowledgeChunk,
@@ -14,6 +7,43 @@ import type {
   KnowledgeVectorManifest,
   KnowledgeVectorRecord,
 } from './types.js';
+
+export interface KnowledgeEmbeddingDocumentInput {
+  id: string;
+  text: string;
+  contentHash?: string;
+  source?: string;
+  documentId?: string;
+  chunkId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KnowledgeEmbeddingProviderLike {
+  readonly id: string;
+  readonly model: string;
+  readonly dimensions: number;
+  readonly distance: string;
+  embedDocuments(input: KnowledgeEmbeddingDocumentInput[], options?: { batchSize?: number }): Promise<{
+    results: Array<{
+      id: string;
+      provider: string;
+      model: string;
+      dimensions: number;
+      distance: string;
+      vector: number[];
+      contentHash?: string;
+      metadata?: Record<string, unknown>;
+    }>;
+  }>;
+}
+
+export interface KnowledgeEmbeddingConfigLike {
+  provider: string;
+  model: string;
+  dimensions: number;
+  distance: string;
+  batchSize?: number;
+}
 
 export interface LoadKnowledgeChunksForEmbeddingResult {
   chunks: KnowledgeChunk[];
@@ -23,8 +53,8 @@ export interface LoadKnowledgeChunksForEmbeddingResult {
 
 export interface BuildKnowledgeVectorIndexInput {
   workspaceRoot: string;
-  provider: EmbeddingProvider;
-  config: EmbeddingProviderConfig;
+  provider: KnowledgeEmbeddingProviderLike;
+  config: KnowledgeEmbeddingConfigLike;
   onProgress?: (progress: { processed: number; total: number }) => void;
 }
 
@@ -65,7 +95,7 @@ export function loadKnowledgeChunksForEmbedding(workspaceRoot: string): LoadKnow
   return { chunks, failures, chunksPath: path };
 }
 
-export function chunkToEmbeddingDocumentInput(chunk: KnowledgeChunk): EmbeddingDocumentInput {
+export function chunkToEmbeddingDocumentInput(chunk: KnowledgeChunk): KnowledgeEmbeddingDocumentInput {
   return {
     id: chunk.chunk_id,
     text: chunk.text,
@@ -107,7 +137,7 @@ export async function buildKnowledgeVectorIndex(input: BuildKnowledgeVectorIndex
     chunkId: `line_${failure.line}`,
     error: failure.error,
   }));
-  const eligibleInputs: EmbeddingDocumentInput[] = [];
+  const eligibleInputs: KnowledgeEmbeddingDocumentInput[] = [];
   const eligibleChunks: KnowledgeChunk[] = [];
 
   for (const chunk of loaded.chunks) {
@@ -235,7 +265,7 @@ export function readKnowledgeVectorRecords(workspaceRoot: string): {
 
 export function checkKnowledgeVectorCompatibility(input: {
   workspaceRoot: string;
-  embeddingConfig: EmbeddingProviderConfig;
+  embeddingConfig: KnowledgeEmbeddingConfigLike;
 }): KnowledgeVectorCompatibilityResult {
   const manifest = readKnowledgeVectorManifest(input.workspaceRoot);
   if (!manifest || !existsSync(vectorsPath(input.workspaceRoot))) {
@@ -276,4 +306,62 @@ function sanitizeVectorMetadata(metadata?: Record<string, unknown>): Record<stri
     }
   }
   return allowed;
+}
+
+function embeddingConfigFingerprint(config: KnowledgeEmbeddingConfigLike): string {
+  return [
+    'embedding-v1',
+    config.provider,
+    config.model,
+    String(config.dimensions),
+    config.distance,
+  ].join(':');
+}
+
+function hashEmbeddingText(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function isEmbeddingManifestCompatible(
+  manifest: KnowledgeVectorManifest,
+  config: KnowledgeEmbeddingConfigLike,
+): { compatible: boolean; mismatches: Array<'provider' | 'model' | 'dimensions' | 'distance'> } {
+  const mismatches: Array<'provider' | 'model' | 'dimensions' | 'distance'> = [];
+  if (manifest.provider !== config.provider) mismatches.push('provider');
+  if (manifest.model !== config.model) mismatches.push('model');
+  if (manifest.dimensions !== config.dimensions) mismatches.push('dimensions');
+  if (manifest.distance !== config.distance) mismatches.push('distance');
+  return { compatible: mismatches.length === 0, mismatches };
+}
+
+function formatEmbeddingSafeError(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'provider' in error && 'code' in error && 'safeMessage' in error) {
+    const value = error as { provider?: unknown; code?: unknown; status?: unknown; safeMessage?: unknown };
+    const status = typeof value.status === 'number' ? ` status=${value.status}` : '';
+    return redactKnowledgeVectorError(`${String(value.provider)}:${String(value.code)}${status}: ${String(value.safeMessage)}`);
+  }
+  if (error instanceof Error) {
+    return redactKnowledgeVectorError(error.message);
+  }
+  return redactKnowledgeVectorError(error);
+}
+
+function redactKnowledgeVectorError(value: unknown): string {
+  return safeSerialize(value)
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/(authorization["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
+    .replace(/(api[-_ ]?key["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
+    .replace(/(token["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]+\b/g, '[REDACTED]');
+}
+
+function safeSerialize(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }

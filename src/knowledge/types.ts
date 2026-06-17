@@ -552,18 +552,6 @@ export interface KnowledgeSearchQuery {
   limit?: number;
 }
 
-export interface KnowledgeRagSearchQuery extends KnowledgeSearchQuery {
-  retrievalLimit?: number;
-  embedding?: {
-    provider: import('../embedding/index.js').EmbeddingProvider;
-    limit?: number;
-  };
-  rerank?: {
-    provider: import('../embedding/index.js').RerankProvider;
-    topN?: number;
-  };
-}
-
 export interface KnowledgeRoute {
   normalizedQuestion: string;
   moduleCandidates: string[];

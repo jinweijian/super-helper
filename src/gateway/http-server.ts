@@ -6,6 +6,7 @@ import { renderApp } from '../ui.js';
 import { sendHtml, sendJson, sendRedirect } from './http-utils.js';
 import { GatewayApplicationContext } from './application-context.js';
 import { handleChatRoutes } from './routes/chat-routes.js';
+import { handleFsRoutes } from './routes/fs-routes.js';
 import { handleKnowledgeRoutes } from './routes/knowledge-routes.js';
 import { handleLogRoutes } from './routes/log-routes.js';
 import { handleOnboardingRoutes } from './routes/onboarding-routes.js';
@@ -81,7 +82,8 @@ async function route(
   }
 
   if (req.method === 'GET' && url.pathname === '/') {
-    if (!onboarding.getState().completed) {
+    const onboardingState = onboarding.getState();
+    if (!onboardingState.completed || onboardingState.needsReview) {
       sendRedirect(res, '/setup');
       return;
     }
@@ -90,6 +92,9 @@ async function route(
   }
 
   if (await handleOnboardingRoutes(req, res, url, onboarding)) {
+    return;
+  }
+  if (await handleFsRoutes(req, res, url)) {
     return;
   }
   if (await handleSettingsRoutes(req, res, url, config, secrets)) {

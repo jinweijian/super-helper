@@ -132,9 +132,11 @@ export interface OnboardingProgressEvent {
 
 export interface PublicOnboardingState {
   completed: boolean;
+  needsReview: boolean;
   draft?: Record<string, unknown>;
   latestRun?: OnboardingRun;
   validation?: OnboardingValidationResult;
+  review?: OnboardingReviewState;
 }
 
 export interface OnboardingValidationIssue {
@@ -158,4 +160,49 @@ export interface OnboardingPlanStage {
 export interface OnboardingPlan {
   stages: OnboardingPlanStage[];
   stage(id: OnboardingStageId): OnboardingPlanStage;
+}
+
+export type OnboardingReviewAction = 'approve' | 'reject' | 'request_edits' | 'accept_warnings';
+
+export interface OnboardingReviewIssue {
+  code: string;
+  severity: 'info' | 'warn' | 'error';
+  message: string;
+  source?: string;
+}
+
+export interface OnboardingReviewItem {
+  id: string;
+  sourceDocumentId: string;
+  title: string;
+  module: string;
+  path: string;
+  qualitySeverity: 'warn' | 'error';
+  qualityStatus?: string;
+  pipelineStatus?: string;
+  issues: OnboardingReviewIssue[];
+  excerptPreview: string;
+}
+
+export interface OnboardingReviewState {
+  required: boolean;
+  pendingCount: number;
+  blockedCount: number;
+  items: OnboardingReviewItem[];
+}
+
+export interface OnboardingReviewInput {
+  action: OnboardingReviewAction;
+  reviewer?: string;
+  notes?: string;
+  sourceDocumentId?: string;
+  ids?: string[];
+}
+
+export interface OnboardingReviewResult {
+  review: OnboardingReviewState;
+  publishedSlices: number;
+  indexedDocuments: number;
+  indexedChunks: number;
+  vectorCount?: number;
 }

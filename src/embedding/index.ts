@@ -3,20 +3,20 @@ export {
   formatEmbeddingSafeError,
   isEmbeddingProviderError,
   redactEmbeddingErrorMessage,
-} from './errors.js';
-export type { EmbeddingProviderErrorCode } from './errors.js';
+} from '../providers/errors.js';
+export type { EmbeddingProviderErrorCode } from '../providers/errors.js';
 export { FakeEmbeddingProvider } from './fake.js';
 export { GeminiEmbeddingProvider } from './gemini.js';
 export { MiniMaxEmbeddingProvider } from './minimax.js';
 export { QwenEmbeddingProvider } from './qwen.js';
 export { SiliconFlowEmbeddingProvider } from './siliconflow.js';
-export { runEmbeddingSmokeTest } from './smoke-test.js';
-export { runRerankSmokeTest } from './rerank-smoke-test.js';
+export { runEmbeddingSmokeTest } from '../providers/embedding/smoke-test.js';
+export { runRerankSmokeTest } from '../providers/rerank/smoke-test.js';
 export {
   createRerankProvider,
   FakeRerankProvider,
   SiliconFlowRerankProvider,
-} from './rerank-provider.js';
+} from '../providers/rerank/index.js';
 export {
   assertEmbeddingDimensions,
   embeddingConfigFingerprint,
@@ -30,7 +30,7 @@ export type {
 export {
   createEmbeddingProvider,
   validateEmbeddingProviderConfig,
-} from './provider.js';
+} from '../providers/embedding/factory.js';
 export type {
   EmbeddingBatchResult,
   EmbeddingDistanceMetric,

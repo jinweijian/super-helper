@@ -1,12 +1,22 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import type { SuperHelperConfig } from '../config.js';
 import { createEmbeddingProvider } from '../embedding/index.js';
 import {
+  buildKnowledgeVectorIndex,
   checkKnowledgeVectorCompatibility,
   discoverSourceFiles,
   initKnowledgeWorkspace,
+  parseMarkdownDocument,
+  publishApprovedDraftSlices,
+  readDraftSlices,
+  readKnowledgeQualityReport,
   resolveKnowledgeWorkspaceRoot,
+  reviewDraftSlices,
+  updateKnowledgeIndex,
 } from '../knowledge/index.js';
+import type { KnowledgeFrontmatter, KnowledgeQualityIssue, KnowledgeQualityReport } from '../knowledge/index.js';
 import { commitOnboardingConfig } from './config-commit.js';
 import { FileOnboardingDraftRepository } from './draft-repository.js';
 import { runOnboardingKnowledgePipeline } from './knowledge-pipeline.js';
@@ -20,6 +30,10 @@ import type {
   OnboardingDraft,
   OnboardingDraftInput,
   OnboardingProgressEvent,
+  OnboardingReviewInput,
+  OnboardingReviewItem,
+  OnboardingReviewResult,
+  OnboardingReviewState,
   OnboardingRun,
   OnboardingValidationResult,
   PublicOnboardingState,
@@ -39,11 +53,14 @@ export class OnboardingService {
 
   getState(): PublicOnboardingState {
     const draft = this.dependencies.drafts.load();
+    const review = draft ? this.getReviewState() : emptyReviewState();
     return {
       completed: Boolean(this.dependencies.config.onboarding.completedAt),
+      needsReview: review.required,
       draft: draft ? sanitizeDraft(draft, this.dependencies.secrets) : undefined,
       latestRun: this.dependencies.runs.latest(),
       validation: draft ? this.dependencies.validate(draft) : undefined,
+      review,
     };
   }
 
@@ -63,6 +80,57 @@ export class OnboardingService {
       };
     }
     return this.dependencies.validate(draft);
+  }
+
+  getReviewState(): OnboardingReviewState {
+    const draft = this.dependencies.drafts.load();
+    if (!draft) {
+      return emptyReviewState();
+    }
+    return buildReviewState({
+      workspaceRoot: knowledgeWorkspaceRootForDraft(draft, this.dependencies.config),
+    });
+  }
+
+  async submitReview(input: OnboardingReviewInput): Promise<OnboardingReviewResult> {
+    const draft = this.dependencies.drafts.load();
+    if (!draft) {
+      throw new Error('onboarding draft is required');
+    }
+    const action = normalizeReviewAction(input.action);
+    const reviewer = input.reviewer?.trim() || 'super-helper-dashboard';
+    const notes = input.notes?.trim() || (action === 'accept_warnings'
+      ? 'Dashboard reviewer accepted warning-quality slices for publish.'
+      : 'Dashboard reviewer updated onboarding draft slices.');
+    const workspaceRoot = knowledgeWorkspaceRootForDraft(draft, this.dependencies.config);
+    const current = buildReviewState({ workspaceRoot });
+    const targets = selectReviewTargets(current.items, input);
+    if (targets.length === 0) {
+      return {
+        review: current,
+        publishedSlices: 0,
+        indexedDocuments: 0,
+        indexedChunks: 0,
+      };
+    }
+    const blocked = targets.filter((item) => item.qualitySeverity === 'error');
+    if (blocked.length > 0 && (action === 'approve' || action === 'accept_warnings')) {
+      throw new Error(`blocked slices cannot be approved without repair: ${blocked.map((item) => item.id).join(', ')}`);
+    }
+
+    const bySource = groupReviewTargets(targets);
+    for (const [sourceDocumentId, ids] of bySource.entries()) {
+      reviewDraftSlices({
+        workspaceRoot,
+        sourceDocumentId,
+        action,
+        reviewer,
+        notes,
+        ids,
+      });
+    }
+
+    return this.refreshReviewArtifacts(draft, workspaceRoot);
   }
 
   async startRun(): Promise<OnboardingRun> {
@@ -133,6 +201,71 @@ export class OnboardingService {
     }
     return draft;
   }
+
+  private async refreshReviewArtifacts(
+    draft: OnboardingDraft,
+    workspaceRoot: string,
+  ): Promise<OnboardingReviewResult> {
+    const publish = publishApprovedDraftSlices({
+      workspaceRoot,
+      qualityGate: 'warn',
+    });
+    const index = updateKnowledgeIndex({ workspaceRoot });
+    let vectorCount: number | undefined;
+    if (draft.knowledge.buildVectorIndex && draft.embedding.enabled) {
+      const executionDraft = materializeDraftSecrets(draft, this.dependencies.secrets);
+      const provider = createEmbeddingProvider(executionDraft.embedding);
+      const vector = await buildKnowledgeVectorIndex({
+        workspaceRoot,
+        provider,
+        config: executionDraft.embedding,
+      });
+      vectorCount = vector.vectorCount;
+    }
+    const review = buildReviewState({ workspaceRoot });
+    this.updateLatestRunCounters({
+      pendingReviewSlices: review.pendingCount,
+      blockedSlices: review.blockedCount,
+      publishedSlicesDelta: publish.publishedIds.length,
+      indexedDocuments: index.documentCount,
+      indexedChunks: index.chunkCount,
+      vectorCount,
+    });
+    return {
+      review,
+      publishedSlices: publish.publishedIds.length,
+      indexedDocuments: index.documentCount,
+      indexedChunks: index.chunkCount,
+      vectorCount,
+    };
+  }
+
+  private updateLatestRunCounters(input: {
+    pendingReviewSlices: number;
+    blockedSlices: number;
+    publishedSlicesDelta: number;
+    indexedDocuments: number;
+    indexedChunks: number;
+    vectorCount?: number;
+  }): void {
+    const latest = this.dependencies.runs.latest();
+    if (!latest) {
+      return;
+    }
+    this.dependencies.runs.save({
+      ...latest,
+      counters: {
+        ...latest.counters,
+        pendingReviewSlices: input.pendingReviewSlices,
+        blockedSlices: input.blockedSlices,
+        publishedSlices: (latest.counters.publishedSlices ?? 0) + input.publishedSlicesDelta,
+        indexedDocuments: input.indexedDocuments,
+        indexedChunks: input.indexedChunks,
+        ...(input.vectorCount === undefined ? {} : { vectorCount: input.vectorCount }),
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  }
 }
 
 export function createOnboardingService(input: {
@@ -173,7 +306,10 @@ export function createOnboardingService(input: {
       currentConfig: input.config,
       runId,
     }),
-    onConfigCommitted: input.onConfigCommitted,
+    onConfigCommitted: async (config) => {
+      Object.assign(input.config, config);
+      await input.onConfigCommitted?.(config);
+    },
   });
   return new OnboardingService({
     config: input.config,
@@ -184,6 +320,150 @@ export function createOnboardingService(input: {
     runner,
     validate: (draft) => validateOnboardingDraft(draft, { resolveSecret: (ref) => secrets.resolve(ref) }),
   });
+}
+
+function emptyReviewState(): OnboardingReviewState {
+  return {
+    required: false,
+    pendingCount: 0,
+    blockedCount: 0,
+    items: [],
+  };
+}
+
+function buildReviewState(input: { workspaceRoot: string }): OnboardingReviewState {
+  const draftsRoot = join(input.workspaceRoot, 'knowledge', '_pipeline', 'drafts');
+  if (!existsSync(draftsRoot)) {
+    return emptyReviewState();
+  }
+  const quality = readKnowledgeQualityReport(input.workspaceRoot);
+  const items: OnboardingReviewItem[] = [];
+  const sourceDocumentIds = readdirSync(draftsRoot)
+    .filter((name) => {
+      const fullPath = join(draftsRoot, name);
+      return statSync(fullPath).isDirectory();
+    })
+    .sort();
+
+  for (const sourceDocumentId of sourceDocumentIds) {
+    for (const slice of readDraftSlices(input.workspaceRoot, sourceDocumentId)) {
+      const parsed = parseMarkdownDocument(readFileSync(slice.path, 'utf8'), slice.path);
+      if (isReviewFinished(parsed.frontmatter.pipeline_status)) {
+        continue;
+      }
+      const issues = qualityIssuesForSlice(quality, parsed.frontmatter, sourceDocumentId);
+      const severity = reviewSeverity(parsed.frontmatter, issues);
+      if (severity === 'ok') {
+        continue;
+      }
+      items.push({
+        id: parsed.frontmatter.id,
+        sourceDocumentId,
+        title: parsed.frontmatter.title,
+        module: parsed.frontmatter.module,
+        path: relative(input.workspaceRoot, slice.path).replaceAll('\\', '/'),
+        qualitySeverity: severity,
+        qualityStatus: parsed.frontmatter.quality_status,
+        pipelineStatus: parsed.frontmatter.pipeline_status,
+        issues: issues.map((issue) => ({
+          code: issue.code,
+          severity: issue.severity,
+          message: issue.message,
+          source: issue.source,
+        })),
+        excerptPreview: previewBody(parsed.body),
+      });
+    }
+  }
+
+  const pendingCount = items.filter((item) => item.qualitySeverity === 'warn').length;
+  const blockedCount = items.filter((item) => item.qualitySeverity === 'error').length;
+  return {
+    required: items.length > 0,
+    pendingCount,
+    blockedCount,
+    items,
+  };
+}
+
+function isReviewFinished(status: KnowledgeFrontmatter['pipeline_status']): boolean {
+  return status === 'approved' || status === 'published' || status === 'rejected';
+}
+
+function qualityIssuesForSlice(
+  quality: KnowledgeQualityReport | undefined,
+  frontmatter: KnowledgeFrontmatter,
+  sourceDocumentId: string,
+): KnowledgeQualityIssue[] {
+  if (!quality) {
+    return [];
+  }
+  return quality.issues.filter((issue) => {
+    if (issue.documentId === frontmatter.id) return true;
+    if (issue.sourceDocument === sourceDocumentId) return true;
+    if (issue.sourceDocument === frontmatter.source_document_id) return true;
+    if (issue.source === frontmatter.source_document) return true;
+    return false;
+  });
+}
+
+function reviewSeverity(
+  frontmatter: KnowledgeFrontmatter,
+  issues: KnowledgeQualityIssue[],
+): 'ok' | 'warn' | 'error' {
+  if (frontmatter.quality_status === 'error' || frontmatter.pipeline_status === 'quality_error') {
+    return 'error';
+  }
+  if (issues.some((issue) => issue.severity === 'error')) {
+    return 'error';
+  }
+  if (
+    frontmatter.quality_status === 'warn' ||
+    frontmatter.pipeline_status === 'quality_warn' ||
+    frontmatter.pipeline_status === 'review_required' ||
+    issues.some((issue) => issue.severity === 'warn')
+  ) {
+    return 'warn';
+  }
+  return 'ok';
+}
+
+function previewBody(body: string): string {
+  return body
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+}
+
+function normalizeReviewAction(action: OnboardingReviewInput['action']): OnboardingReviewInput['action'] {
+  if (!['approve', 'reject', 'request_edits', 'accept_warnings'].includes(action)) {
+    throw new Error(`invalid review action: ${action}`);
+  }
+  return action;
+}
+
+function selectReviewTargets(
+  items: OnboardingReviewItem[],
+  input: OnboardingReviewInput,
+): OnboardingReviewItem[] {
+  const ids = new Set(input.ids ?? []);
+  return items.filter((item) => {
+    if (input.sourceDocumentId && item.sourceDocumentId !== input.sourceDocumentId) {
+      return false;
+    }
+    if (ids.size > 0 && !ids.has(item.id)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function groupReviewTargets(items: OnboardingReviewItem[]): Map<string, string[]> {
+  const bySource = new Map<string, string[]>();
+  for (const item of items) {
+    bySource.set(item.sourceDocumentId, [...(bySource.get(item.sourceDocumentId) ?? []), item.id]);
+  }
+  return bySource;
 }
 
 function knowledgeWorkspaceRootForDraft(draft: OnboardingDraft, currentConfig: SuperHelperConfig): string {

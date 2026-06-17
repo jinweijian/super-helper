@@ -1,10 +1,11 @@
-import { formatEmbeddingSafeError, isEmbeddingProviderError } from './errors.js';
-import { createRerankProvider } from './rerank-provider.js';
-import type { EmbeddingFetch, RerankProviderConfig, RerankProviderHealthCheckResult } from './types.js';
+import { formatEmbeddingSafeError, isEmbeddingProviderError } from '../errors.js';
+import type { ProviderFetch } from '../http.js';
+import type { RerankProviderConfig, RerankProviderHealthCheckResult } from './contract.js';
+import { createRerankProvider } from './factory.js';
 
 export async function runRerankSmokeTest(input: {
   config: RerankProviderConfig;
-  fetch?: EmbeddingFetch;
+  fetch?: ProviderFetch;
   force?: boolean;
 }): Promise<RerankProviderHealthCheckResult> {
   const startedAt = Date.now();

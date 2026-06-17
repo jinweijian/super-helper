@@ -11,16 +11,18 @@ The system must support arbitrary project `workspace` configuration and arbitrar
 The current MVP keeps the public import surface stable while separating product responsibilities into explicit modules:
 
 - `src/gateway/http-server.ts` owns HTTP server startup and route composition.
-- `src/gateway/routes/` owns route handlers for chat, sessions, settings, and logs.
-- `src/gateway/dto.ts` owns public response shapes for settings, sessions, and model settings.
-- `src/cli/` owns `dashboard`, `onboard`, `status`, and `doctor` command composition.
+- `src/gateway/routes/` owns route handlers for chat, sessions, settings, and logs; settings routes delegate config merge and smoke-test orchestration to `src/settings/service.ts`.
+- `src/gateway/dto.ts` owns public response shapes for sessions and compatibility DTO exports.
+- `src/settings/` owns settings config merge, SecretRef application, public settings mapping, and model/embedding/rerank smoke orchestration.
+- `src/cli/` owns `main.ts` command dispatch and `command-*` adapters for dashboard/onboard/status/doctor/knowledge/retrieval/provider/config/accept commands.
 - `src/onboarding/` owns Setup drafts, validation, run records, progress events, recovery, provider tests, knowledge pipeline orchestration, local secrets, and config commit.
 - `src/agents/` owns product Agent configs and `registry.json` stage pairings.
 - `src/runtime/diagnostic-runtime.ts` owns one user turn from input receipt through final presentation.
-- `src/runtime/preflight-gate.ts`, `request-builder.ts`, `review-gate.ts`, and `presenter.ts` own runtime decisions and formatting helpers.
+- `src/runtime/knowledge-diagnosis.ts`, `worker-turn.ts`, `agent-model-review.ts`, `preflight-gate.ts`, `request-builder.ts`, `review-gate.ts`, and `presenter.ts` own focused runtime decisions and formatting helpers.
 - `src/runtime/event-recorder.ts` owns lifecycle log event creation for Agent, Claude, and system phases.
-- `src/knowledge/` owns the enterprise knowledge workspace skeleton, Markdown/frontmatter parsing, source metadata, local keyword chunk index, and local evidence-pack search.
-- `src/embedding/` owns embedding/rerank provider contracts, provider factories, SiliconFlow provider calls, provider smoke tests, and provider error normalization.
+- `src/knowledge/` owns the enterprise knowledge workspace skeleton, Markdown/frontmatter parsing, source metadata, local indexes/artifacts, and local knowledge evidence helpers.
+- `src/retrieval/` owns BM25/embedding/keyword recall strategies, multi-route recall orchestration, candidate fusion, optional rerank, retrieval trace, and evidence-pack conversion.
+- `src/providers/embedding/` and `src/providers/rerank/` own sibling provider contracts, factories, fake providers, SiliconFlow adapters, smoke tests, and provider error normalization. `src/embedding/` is a compatibility re-export surface during migration.
 - `src/sessions/` owns case repository ports and request context construction.
 - `src/workers/diagnostic-worker.ts` defines the stable worker port.
 - `src/workers/claude/` owns the Claude Code adapter implementation, prompts, policy, CLI execution, and output parsing.
@@ -123,7 +125,7 @@ Gateway chat route
   -> DiagnosticRuntime.startUserTurn
   -> Experience Agent
   -> Preflight Gate
-  -> Knowledge Router / Knowledge Search / Evidence Judge
+  -> Knowledge Router / Retrieval Service / Evidence Judge
        -> knowledge direct answer (when evidence is answerable)
        -> or continuation to Claude Code escalation
   -> DiagnosticRequest builder
@@ -138,7 +140,7 @@ Gateway chat route
 
 Route code must not embed preflight, worker, review, or presentation decisions. It validates HTTP input, invokes the runtime, and serializes response DTOs.
 
-Same-case async turns are serialized in the runtime so every accepted user message receives its own helper reply.
+Same-case async turns are serialized in the runtime so every accepted user message receives its own helper reply. Runtime calls the retrieval service for knowledge evidence; it does not instantiate embedding or rerank providers directly.
 
 ## Dashboard Onboarding
 
@@ -151,7 +153,7 @@ pnpm status
 pnpm doctor
 ```
 
-`onboard` and `dashboard` both start the HTTP service. `onboard` always opens `/setup`; `dashboard` opens `/setup` until onboarding is completed and opens `/` afterwards. `--bind loopback` listens on `127.0.0.1`; `--bind lan` listens on `0.0.0.0` and prints a trusted-LAN warning. The MVP intentionally does not enforce access tokens yet, so LAN mode is only for trusted internal networks.
+`onboard` and `dashboard` both start the HTTP service. `onboard` always opens `/setup`; `dashboard` opens `/setup` until onboarding is completed and opens `/` afterwards. If a completed onboarding run leaves warning-quality draft slices pending review, `/` redirects back to `/setup` so the user can review, publish, and reindex those slices before entering the daily Dashboard. `--bind loopback` listens on `127.0.0.1`; `--bind lan` listens on `0.0.0.0` and prints a trusted-LAN warning. The MVP intentionally does not enforce access tokens yet, so LAN mode is only for trusted internal networks.
 
 Setup state is persisted under `storage.rootDir`:
 
@@ -163,7 +165,7 @@ secrets.json
 config.json
 ```
 
-The HTTP routes under `/api/onboarding/*` are transport adapters only. They save drafts, start/retry runs, expose run snapshots, and stream progress through Server-Sent Events. The recoverable execution model belongs to `src/onboarding/runner.ts`; route code must not run provider calls or knowledge pipeline steps directly.
+The HTTP routes under `/api/onboarding/*` are transport adapters only. They save drafts, start/retry runs, expose run snapshots, stream progress through Server-Sent Events, and expose the onboarding review action for warning-quality draft slices. The review action is owned by `src/onboarding/service.ts`, which calls `src/knowledge/` review, publish, and index operations; route code must not run provider calls or knowledge pipeline steps directly. The recoverable execution model belongs to `src/onboarding/runner.ts`.
 
 Submitted API keys are stored outside `config.json` and referenced through `SecretRef`. `config.json` may contain `apiKeyRef` or environment variable references, while `secrets.json` contains local file-backed values with restricted permissions. Public DTOs expose only `hasApiKey` and never return raw secret values or file secret keys.
 
@@ -196,9 +198,9 @@ Quality reports are written next to the indexes and reports directories. Severit
 - `knowledge/reports/source-quality-report.json`: parser failures, unknown-block ratio, table/list preservation, heading structure, and source provenance issues.
 - Knowledge search reads the chunk-quality-report.json and attaches `quality: { severity, issues }` to each evidence result. Evidence with `error` severity is excluded from direct-answer candidates; `warn` lowers judge confidence.
 
-## Embedding Provider and Vector Artifacts
+## Providers, Vector Artifacts, and Retrieval
 
-Embeddings are configured independently from the Agent chat model. The default config keeps embedding disabled and points at SiliconFlow only as the primary real provider for this implementation:
+Embeddings and rerank are configured independently from the Agent chat model. The default config keeps both disabled and points at SiliconFlow only as the primary real provider for this implementation:
 
 ```json
 {
@@ -221,12 +223,43 @@ Embeddings are configured independently from the Agent chat model. The default c
 }
 ```
 
-`src/embedding/` is the only module that should call remote embedding or rerank provider APIs. It normalizes missing credentials, timeout, rate-limit, invalid request, provider failure, malformed response, and dimension mismatch errors without exposing API keys, bearer headers, cookies, raw provider payloads, raw vectors, or source chunk text.
+Provider code is split by capability under `src/providers/`:
 
-`src/knowledge/` owns only local vector artifacts:
+```text
+src/providers/
+  errors.ts
+  redaction.ts
+  http.ts
+  embedding/
+    contract.ts
+    factory.ts
+    smoke-test.ts
+    fake.ts
+    siliconflow/
+      adapter.ts
+      endpoint.ts
+      protocol.ts
+  rerank/
+    contract.ts
+    factory.ts
+    smoke-test.ts
+    fake.ts
+    siliconflow/
+      adapter.ts
+      endpoint.ts
+      protocol.ts
+```
+
+Provider factories select adapters and validate basic config. Vendor adapters own HTTP endpoints, request/response mapping, status mapping, timeouts, and safe provider errors. They must not know about chunks, documents, cases, personas, Evidence Judge, or user-facing replies. Shared provider primitives live directly at `src/providers/errors.ts`, `src/providers/redaction.ts`, and `src/providers/http.ts`; there is no extra `providers/shared/` layer.
+
+`src/knowledge/` owns local derived index artifacts:
 
 ```text
 knowledge/indexes/
+  chunks.jsonl
+  keyword-index.json
+  bm25-index.json
+  manifest.json
   vectors.jsonl
   vector-manifest.json
   vector-build-report.json
@@ -234,17 +267,34 @@ knowledge/indexes/
 
 `knowledge vector build` reads the existing `chunks.jsonl`, skips restricted or inactive chunks before calling the provider, writes vector records, and records provider/model/dimensions/distance/source manifest hash in the manifest. Compatibility checks refuse to use stale or mismatched vector artifacts and report that a rebuild is required.
 
-Runtime retrieval uses a RAG-style flow. Keyword/frontmatter recall runs first. When embedding is enabled and compatible vector artifacts exist, vector recall adds semantically similar chunks. The merged candidate set is then passed through the configured rerank provider when rerank is enabled. Evidence Judge receives the reranked evidence pack and decides whether it is sufficient for a direct answer or whether the turn should escalate to Claude Code.
+Runtime retrieval uses `src/retrieval/` as the business-flow owner:
 
-Current embedding commands:
+```text
+query
+  -> recall registry
+       -> bm25 lexical recall
+       -> embedding semantic recall
+       -> keyword compatibility recall
+       -> future business recall strategies
+  -> strategy-neutral fusion and dedupe
+  -> optional rerank after fusion
+  -> evidence pack + retrieval trace
+  -> runtime Evidence Judge
+```
+
+BM25 and embedding recall are sibling strategies under `src/retrieval/recall/`. Adding or removing a recall route should require a new `retrieval/recall/<strategy>/` implementation and registry change, not runtime or gateway edits. Rerank runs only after fused candidates exist and is optional: missing credentials, disabled config, or safe provider failure returns the fused ordering and records trace status.
+
+Current provider and retrieval commands:
 
 ```bash
 node dist/cli.js embedding test --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
 node dist/cli.js rerank test --enable --provider siliconflow --model BAAI/bge-reranker-v2-m3 --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY
 node dist/cli.js knowledge vector build --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
+node dist/cli.js retrieval search --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --query "课程发布后为什么学员端看不到"
+node dist/cli.js retrieval debug --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --query "课程发布后为什么学员端看不到"
 ```
 
-The settings drawer exposes the same checks through `测试 Embedding` and `测试 Rerank`; gateway routes remain DTO/config endpoints and do not own provider request logic.
+The settings drawer exposes the same checks through `测试 Embedding` and `测试 Rerank`. Gateway routes remain body/status/serialization endpoints; `src/settings/service.ts` owns settings merge, SecretRef application, public settings mapping, model smoke tests, embedding smoke tests, and rerank smoke tests.
 
 ## Live Knowledge Acceptance
 
@@ -323,9 +373,11 @@ super-helper knowledge init --workspace /path/to/workspace --knowledge-root /pat
 super-helper knowledge update --workspace /path/to/workspace
 super-helper knowledge vector build --workspace /path/to/workspace --knowledge-root /path/to/knowledge-base --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
 super-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
+super-helper retrieval search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
+super-helper retrieval debug --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 ```
 
-`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime searches the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
+`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. `knowledge search` remains a compatibility local search command; `retrieval search/debug` exercises the retrieval service boundary and can show retrieval trace details. Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime asks `src/retrieval/` for evidence from the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
 
 The browser health panel can operate the same service-scoped knowledge workspace through gateway endpoints:
 

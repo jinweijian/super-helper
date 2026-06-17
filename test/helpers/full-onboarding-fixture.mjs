@@ -48,6 +48,15 @@ export async function fullOnboardingFixture({ sources }) {
     get runtimeConfig() {
       return runtimeConfig;
     },
+    getState() {
+      return service.getState();
+    },
+    getReviewState() {
+      return service.getReviewState();
+    },
+    submitReview(input) {
+      return service.submitReview(input);
+    },
     async saveDraft() {
       return service.saveDraft({
         ...draftInputFixture({

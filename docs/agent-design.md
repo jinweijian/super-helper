@@ -71,13 +71,14 @@ Concrete implementation:
 
 ## Knowledge-First Skeleton
 
-The current knowledge-first runtime is fully wired into the agent pipeline. Knowledge Router, Knowledge Search, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are all live runtime stages that run after Preflight and before Claude Code escalation.
+The current knowledge-first runtime is fully wired into the agent pipeline. Knowledge Router, Retrieval Service, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are all live runtime stages that run after Preflight and before Claude Code escalation.
 
 Implemented local commands:
 
 - `super-helper knowledge init --workspace <project-path> [--knowledge-root <path>]` creates the isolated knowledge workspace structure and runs intake, extract, normalize, draft slice, audit, and index for already-published formal documents. It does not publish unchecked drafts unless `--legacy-active-publish` is explicitly passed.
 - `super-helper knowledge update --workspace <project-path> [--knowledge-root <path>]` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from formal published Markdown parent slices.
-- `super-helper knowledge search --workspace <project-path> --query <question> [--knowledge-root <path>]` performs local keyword search, attaches optional quality metadata, and expands chunk hits back to parent slice evidence.
+- `super-helper knowledge search --workspace <project-path> --query <question> [--knowledge-root <path>]` remains a compatibility local search command that attaches optional quality metadata and expands chunk hits back to parent slice evidence.
+- `super-helper retrieval search|debug --workspace <project-path> --query <question> [--knowledge-root <path>]` exercises the retrieval service boundary for BM25/embedding/keyword recall, fusion, optional rerank, and trace inspection.
 - `super-helper knowledge extract` / `normalize` / `slice` / `audit` / `repair` / `review` / `publish` / `eval` run individual pipeline stages and write their own artifacts under `knowledge/_pipeline/` and `knowledge/reports/`.
 - `super-helper accept knowledge` (alias `pnpm accept:knowledge`) runs a repeatable local acceptance check and writes a redacted acceptance report.
 
@@ -85,8 +86,8 @@ Runtime behavior:
 
 - `--workspace` and runtime workspace selection point to the project/service directory used for code and MCP inspection.
 - Knowledge files are stored under the configured knowledge root, isolated by the same workspace key strategy used for session storage; they are not created inside the project code directory by default.
-- After an Experience miss, the runtime searches the resolved knowledge workspace. Answerable knowledge evidence still passes Evidence Judge, Output Review, and Presentation; insufficient evidence is attached to `DiagnosticRequest.context.deepQuery` and triggers bounded Deep Query retry / pivot before code escalation.
-- Knowledge Router, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are registered configs and wired into the current knowledge-first runtime path.
+- After an Experience miss, runtime calls `src/retrieval/` against the resolved knowledge workspace. Answerable knowledge evidence still passes Evidence Judge, Output Review, and Presentation; insufficient evidence is attached to `DiagnosticRequest.context.deepQuery` and triggers bounded Deep Query retry / pivot before code escalation.
+- Knowledge Router, Retrieval Service handoff, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are wired into the current knowledge-first runtime path.
 - Solved case drafts are written with `status: review_required` and require explicit approval before becoming `active` knowledge.
 
 ## Non-Guessing Contract

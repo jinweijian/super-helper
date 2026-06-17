@@ -14,6 +14,22 @@ export {
   vectorManifestPath,
   vectorsPath,
 } from './paths.js';
+export {
+  readKnowledgeChunks,
+  writeKnowledgeChunks,
+} from './indexes/chunks.js';
+export type { ReadKnowledgeChunksResult } from './indexes/chunks.js';
+export {
+  readKnowledgeKeywordIndex,
+  writeKnowledgeKeywordIndex,
+} from './indexes/keyword-index.js';
+export type { KnowledgeKeywordIndex } from './indexes/keyword-index.js';
+export {
+  bm25IndexPath,
+  readKnowledgeBm25Index,
+  writeKnowledgeBm25Index,
+} from './indexes/bm25-index.js';
+export type { KnowledgeBm25Index, KnowledgeBm25IndexEntry } from './indexes/bm25-index.js';
 export { resolveKnowledgeWorkspaceRoot, workspaceKnowledgeKey } from './storage-scope.js';
 export {
   discoverKnowledgeDocuments,
@@ -85,7 +101,6 @@ export type {
   KnowledgeIndexManifest,
   KnowledgeIngestReport,
   KnowledgeInitResult,
-  KnowledgeRagSearchQuery,
   KnowledgeRoute,
   KnowledgeSearchQuery,
   KnowledgeSourceDocument,
