@@ -11,18 +11,24 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
     return 'Claude Code 返回了没有证据支撑的事实判断，我不会把它作为结论展示。\n\n请补充更多可验证信息，或查看诊断日志让技术支持复核。';
   }
 
+  const evidence = result.evidence.length
+    ? result.evidence.map((item, index) => `${index + 1}. ${item.summary}（来源：${item.source}，可信度：${item.confidence}）`).join('\n')
+    : '暂无可展示证据。';
+  const supported = supportedClaims.length
+    ? `\n\n已支持判断：\n${supportedClaims.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
+    : '';
+
   if (result.recommendedNextAction === 'ask_user' || result.status === 'need_input') {
     const missing = result.missingInfo.length > 0 ? result.missingInfo.join('、') : '可验证证据';
+    if (result.status !== 'need_input' && (result.evidence.length > 0 || supportedClaims.length > 0)) {
+      return `目前只能给出初步判断：${result.summary}\n\n支撑证据：\n${evidence}${supported}\n\n还缺少：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
+    }
     return `目前证据不足，还不能最终定位。\n\n请补充：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
   }
 
   if (/Q2|event_v2|finished_prompt|CourseTaskEventV2/i.test(userGoal ?? result.summary)) {
     return formatQ2Result(result, unsupportedFacts);
   }
-
-  const evidence = result.evidence.length
-    ? result.evidence.map((item, index) => `${index + 1}. ${item.summary}（来源：${item.source}，可信度：${item.confidence}）`).join('\n')
-    : '暂无可展示证据。';
 
   const assumptions = result.claims.filter((claim) => claim.type === 'assumption' || claim.type === 'inference');
   const caution = assumptions.length
@@ -35,7 +41,7 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
   const omitted = unsupportedFacts.length
     ? `\n\n未采纳的无证据说法：\n${unsupportedFacts.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
     : '';
-  return `${intro}\n\n支撑证据：\n${evidence}${caution}${omitted}`;
+  return `${intro}\n\n支撑证据：\n${evidence}${supported}${caution}${omitted}`;
 }
 
 export function formatReviewFailureFallback(
@@ -43,28 +49,13 @@ export function formatReviewFailureFallback(
   persona: UserPersona,
   userGoal: string | undefined,
   trace: WorkerTrace | undefined,
-  reviewError: string,
+  _reviewError: string,
 ): string {
   if (trace && workerFailedBeforeResult(trace)) {
     return formatWorkerFailureResult(result, trace);
   }
 
-  const rawResult = extractWorkerResultText(trace?.stdout) ?? trace?.stdout.trim();
-  if (rawResult) {
-    return [
-      '美化输出 Agent 调用模型失败，先直接展示 Claude Code 返回的原始内容。',
-      `失败原因：${reviewError}`,
-      '<pre>',
-      rawResult,
-      '</pre>',
-    ].join('\n\n');
-  }
-
-  return [
-    `美化输出 Agent 调用模型失败：${reviewError}`,
-    '没有可展示的 Claude Code 原始内容，已退回本地审核结果。',
-    ruleBasedReviewAndFormat(result, persona, userGoal),
-  ].join('\n\n');
+  return ruleBasedReviewAndFormat(result, persona, userGoal);
 }
 
 export function personaName(persona: UserPersona): string {
@@ -177,22 +168,4 @@ function formatWorkerFailureResult(result: DiagnosticResult, trace: WorkerTrace)
     `错误结果：${result.summary}`,
     details ? `错误详情：\n\n<pre>\n${details}\n</pre>` : '',
   ].filter(Boolean).join('\n\n');
-}
-
-function extractWorkerResultText(stdout?: string): string | undefined {
-  const raw = stdout?.trim();
-  if (!raw) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as { result?: unknown };
-    if (typeof parsed.result === 'string' && parsed.result.trim()) {
-      return parsed.result.trim();
-    }
-  } catch {
-    return undefined;
-  }
-
-  return undefined;
 }

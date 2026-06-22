@@ -2239,7 +2239,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
   }
 });
 
-test('agent falls back to a preformatted raw Claude result when presentation model fails', async () => {
+test('agent falls back to local reviewed formatting when presentation model returns malformed JSON after a structured result', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
   const rawClaudeResult = `The \`org.create\` event has no depth check before the fenced result.
@@ -2252,9 +2252,7 @@ test('agent falls back to a preformatted raw Claude result when presentation mod
 }
 \`\`\``;
 
-  globalThis.fetch = async () => {
-    throw new Error('Model request timed out after 10ms');
-  };
+  globalThis.fetch = async () => chatResponse('{"outcome":"final_answer","reply":"未闭合的模型回复');
 
   try {
     const config = baseConfig(dir);
@@ -2309,11 +2307,14 @@ test('agent falls back to a preformatted raw Claude result when presentation mod
     });
 
     assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /美化输出 Agent 调用模型失败/);
-    assert.match(response.assistantMessage, /<pre>/);
-    assert.match(response.assistantMessage, /The `org\.create` event has no depth check/);
-    assert.match(response.assistantMessage, /"summary": "创建入口按 15 级限制展示按钮"/);
+    assert.match(response.assistantMessage, /目前判断：结构化诊断结果已产生。/);
+    assert.match(response.assistantMessage, /部门创建入口按 15 级限制展示。/);
+    assert.match(response.assistantMessage, /org-manage\/index\.html\.twig:82/);
+    assert.doesNotMatch(response.assistantMessage, /美化输出 Agent 调用模型失败/);
+    assert.doesNotMatch(response.assistantMessage, /<pre>/);
+    assert.doesNotMatch(response.assistantMessage, /The `org\.create` event has no depth check/);
     assert.doesNotMatch(response.assistantMessage, /来源：run_01/);
+    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
   } finally {
     globalThis.fetch = originalFetch;
     rmSync(dir, { recursive: true, force: true });
