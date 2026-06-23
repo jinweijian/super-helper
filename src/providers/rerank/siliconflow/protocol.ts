@@ -1,4 +1,4 @@
-import { EmbeddingProviderError } from '../../errors.js';
+import { ProviderError } from '../../errors.js';
 import { isProviderObject } from '../../http.js';
 import type {
   RerankDocumentResult,
@@ -17,7 +17,7 @@ export function buildSiliconFlowRerankRequest(input: RerankRequestInput, model: 
 
 export function mapSiliconFlowRerankResponse(value: unknown, input: RerankRequestInput): RerankDocumentResult[] {
   if (!isProviderObject(value) || !Array.isArray(value.results)) {
-    throw new EmbeddingProviderError({
+    throw new ProviderError({
       provider: 'siliconflow',
       code: 'malformed_response',
       retryable: false,
@@ -26,7 +26,7 @@ export function mapSiliconFlowRerankResponse(value: unknown, input: RerankReques
   }
   return value.results.map((item) => {
     if (!isProviderObject(item) || typeof item.index !== 'number' || typeof item.relevance_score !== 'number') {
-      throw new EmbeddingProviderError({
+      throw new ProviderError({
         provider: 'siliconflow',
         code: 'malformed_response',
         retryable: false,
@@ -35,7 +35,7 @@ export function mapSiliconFlowRerankResponse(value: unknown, input: RerankReques
     }
     const document = input.documents[item.index];
     if (!document) {
-      throw new EmbeddingProviderError({
+      throw new ProviderError({
         provider: 'siliconflow',
         code: 'malformed_response',
         retryable: false,

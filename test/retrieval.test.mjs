@@ -9,6 +9,9 @@ import {
   createEmbeddingRecallStrategy,
   createRetrievalService,
 } from '../dist/retrieval/index.js';
+import { defaultConfig } from '../dist/config.js';
+import { createEmbeddingProvider } from '../dist/providers/embedding/index.js';
+import { searchKnowledge } from '../dist/knowledge/index.js';
 
 function tempWorkspace() {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-retrieval-'));
@@ -186,6 +189,216 @@ test('retrieval service applies optional rerank only after fusion', async () => 
   assert.deepEqual(seenByReranker, [['chk_first', 'chk_second']]);
   assert.deepEqual(result.candidates.map((item) => item.chunkId), ['chk_second', 'chk_first']);
   assert.equal(result.trace.rerank.status, 'ran');
+});
+
+test('configured retrieval always runs BM25 while remote providers are disabled', async () => {
+  const { workspaceRoot, indexesRoot } = tempWorkspace();
+  try {
+    writeChunks(indexesRoot, [
+      baseChunk({
+        chunk_id: 'chk_configured_bm25',
+        text: 'Configured retrieval must find the local deadline reminder through BM25.',
+      }),
+    ]);
+    const configured = await import('../dist/retrieval/configured-search.js');
+    assert.equal(typeof configured.createConfiguredRetrievalService, 'function');
+
+    const config = defaultConfig();
+    config.embedding.enabled = false;
+    config.rerank.enabled = false;
+    const service = configured.createConfiguredRetrievalService(config);
+    const result = await service.retrieve({
+      workspaceRoot,
+      query: 'local deadline reminder',
+      limit: 3,
+    });
+
+    assert.equal(result.candidates[0]?.chunkId, 'chk_configured_bm25');
+    assert.equal(result.trace.strategies.find((item) => item.id === 'bm25')?.status, 'ran');
+    assert.equal(result.trace.strategies.find((item) => item.id === 'embedding')?.status, 'skipped');
+    assert.equal(result.trace.rerank.status, 'skipped');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('configured retrieval fuses BM25 with configured fake embedding', async () => {
+  const { workspaceRoot, indexesRoot } = tempWorkspace();
+  try {
+    writeChunks(indexesRoot, [
+      baseChunk({
+        chunk_id: 'chk_configured_hybrid',
+        text: 'Hybrid configured retrieval exact semantic target.',
+      }),
+      baseChunk({
+        chunk_id: 'chk_configured_other',
+        text: 'Unrelated invoice export details.',
+      }),
+    ]);
+    const config = defaultConfig();
+    config.embedding = {
+      enabled: true,
+      provider: 'fake',
+      model: 'configured-fake-vector',
+      dimensions: 8,
+      distance: 'cosine',
+    };
+    config.rerank.enabled = false;
+    const provider = createEmbeddingProvider(config.embedding);
+    await buildKnowledgeVectorIndex({ workspaceRoot, provider, config: config.embedding });
+
+    const configured = await import('../dist/retrieval/configured-search.js');
+    assert.equal(typeof configured.createConfiguredRetrievalService, 'function');
+    const result = await configured.createConfiguredRetrievalService(config).retrieve({
+      workspaceRoot,
+      query: 'Hybrid configured retrieval exact semantic target.',
+      limit: 3,
+    });
+
+    assert.equal(result.trace.strategies.find((item) => item.id === 'bm25')?.status, 'ran');
+    assert.equal(result.trace.strategies.find((item) => item.id === 'embedding')?.status, 'ran');
+    assert.deepEqual(
+      result.candidates[0]?.strategyScores?.map((item) => item.strategyId).sort(),
+      ['bm25', 'embedding'],
+    );
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('configured retrieval records invalid embedding safely and preserves BM25', async () => {
+  const { workspaceRoot, indexesRoot } = tempWorkspace();
+  try {
+    writeChunks(indexesRoot, [
+      baseChunk({
+        chunk_id: 'chk_configured_fallback',
+        text: 'Local fallback evidence survives invalid remote configuration.',
+      }),
+    ]);
+    const config = defaultConfig();
+    config.embedding = {
+      ...config.embedding,
+      enabled: true,
+      provider: 'unknown-provider-sk-secret',
+    };
+    const configured = await import('../dist/retrieval/configured-search.js');
+    assert.equal(typeof configured.createConfiguredRetrievalService, 'function');
+    const result = await configured.createConfiguredRetrievalService(config).retrieve({
+      workspaceRoot,
+      query: 'fallback evidence invalid remote configuration',
+      limit: 3,
+    });
+
+    assert.equal(result.candidates[0]?.chunkId, 'chk_configured_fallback');
+    const embeddingTrace = result.trace.strategies.find((item) => item.id === 'embedding');
+    assert.equal(embeddingTrace?.status, 'skipped');
+    assert.match(embeddingTrace?.reason ?? '', /unavailable|invalid|unsupported/i);
+    assert.doesNotMatch(JSON.stringify(result.trace), /sk-secret/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('configured retrieval rejects stale vector artifacts and preserves BM25', async () => {
+  const { workspaceRoot, indexesRoot } = tempWorkspace();
+  try {
+    writeChunks(indexesRoot, [
+      baseChunk({
+        chunk_id: 'chk_configured_stale',
+        text: 'Original vector source text.',
+      }),
+    ]);
+    const config = defaultConfig();
+    config.embedding = {
+      enabled: true,
+      provider: 'fake',
+      model: 'configured-stale-vector',
+      dimensions: 8,
+      distance: 'cosine',
+    };
+    config.rerank.enabled = false;
+    const provider = createEmbeddingProvider(config.embedding);
+    await buildKnowledgeVectorIndex({ workspaceRoot, provider, config: config.embedding });
+    writeChunks(indexesRoot, [
+      baseChunk({
+        chunk_id: 'chk_configured_stale',
+        text: 'Updated local fallback text after vector build.',
+      }),
+    ]);
+
+    const configured = await import('../dist/retrieval/configured-search.js');
+    const result = await configured.createConfiguredRetrievalService(config).retrieve({
+      workspaceRoot,
+      query: 'updated local fallback text',
+      limit: 3,
+    });
+
+    assert.equal(result.candidates[0]?.chunkId, 'chk_configured_stale');
+    const embeddingTrace = result.trace.strategies.find((item) => item.id === 'embedding');
+    assert.equal(embeddingTrace?.status, 'failed');
+    assert.match(embeddingTrace?.reason ?? '', /source_chunks|rebuild/i);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('retrieval keeps fused candidates and redacts rerank failure trace', async () => {
+  const service = createRetrievalService({
+    strategies: [
+      stubStrategy({
+        id: 'bm25',
+        kind: 'lexical',
+        candidates: [stubCandidate('chk_safe_fallback', 0.9)],
+      }),
+    ],
+    reranker: {
+      async rerank() {
+        throw new Error('Authorization: Bearer sk-rerank-secret');
+      },
+    },
+  });
+
+  const result = await service.retrieve({
+    workspaceRoot: '/tmp/not-used',
+    query: 'safe rerank fallback',
+    limit: 1,
+  });
+
+  assert.deepEqual(result.candidates.map((item) => item.chunkId), ['chk_safe_fallback']);
+  assert.equal(result.trace.rerank.status, 'failed');
+  assert.doesNotMatch(result.trace.rerank.reason ?? '', /sk-rerank-secret/);
+});
+
+test('legacy knowledge search delegates to retrieval compatibility search without behavior drift', async () => {
+  const { workspaceRoot } = tempWorkspace();
+  const documentRoot = join(workspaceRoot, 'knowledge', 'faq');
+  mkdirSync(documentRoot, { recursive: true });
+  writeFileSync(join(documentRoot, 'password-reset.md'), `---
+id: faq_password_reset
+title: Password reset guide
+type: faq
+module: account
+intent: how_to
+source_type: faq
+status: active
+confidence: high
+visibility: internal
+last_verified_at: 2026-06-01
+related_terms:
+  - reset password
+product_versions: []
+---
+
+Use the account settings page to reset a forgotten password.
+`, 'utf8');
+  try {
+    const compatibility = await import('../dist/retrieval/compatibility-search.js');
+    assert.equal(typeof compatibility.searchKnowledgeCompatibility, 'function');
+    const input = { workspaceRoot, query: 'reset password', limit: 3 };
+    assert.deepEqual(compatibility.searchKnowledgeCompatibility(input), searchKnowledge(input));
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 function directionalEmbeddingProvider(targetChunkId) {

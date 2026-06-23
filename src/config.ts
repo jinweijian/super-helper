@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { SecretRef, UserPersona } from './domain.js';
-import type { EmbeddingProviderConfig, RerankProviderConfig } from './embedding/types.js';
+import type { EmbeddingProviderConfig } from './providers/embedding/contract.js';
+import type { RerankProviderConfig } from './providers/rerank/contract.js';
 import { writeJsonAtomic } from './onboarding/atomic-json.js';
 
 export interface ModelProviderConfig {

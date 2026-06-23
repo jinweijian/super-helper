@@ -1,4 +1,4 @@
-import { createEmbeddingProvider } from '../embedding/index.js';
+import { createEmbeddingProvider } from '../providers/embedding/factory.js';
 import {
   approveQualityCleanDraftSlices,
   auditKnowledgeQuality,

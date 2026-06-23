@@ -65,7 +65,7 @@ export function isEmbeddingProviderError(error: unknown): error is EmbeddingProv
 export function formatProviderSafeError(error: unknown): string {
   if (isProviderError(error)) {
     const status = error.status === undefined ? '' : ` status=${error.status}`;
-    return `${error.provider}:${error.code}${status}: ${error.safeMessage}`;
+    return redactProviderErrorMessage(`${error.provider}:${error.code}${status}: ${error.safeMessage}`);
   }
 
   return redactProviderErrorMessage(error);

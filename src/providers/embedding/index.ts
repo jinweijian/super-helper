@@ -20,3 +20,16 @@ export {
 } from './factory.js';
 export { runEmbeddingSmokeTest } from './smoke-test.js';
 export { SiliconFlowEmbeddingProvider } from './siliconflow/adapter.js';
+export { GeminiEmbeddingProvider } from './gemini/adapter.js';
+export { MiniMaxEmbeddingProvider } from './minimax/adapter.js';
+export { QwenEmbeddingProvider } from './qwen/adapter.js';
+export {
+  assertEmbeddingDimensions,
+  embeddingConfigFingerprint,
+  hashEmbeddingText,
+  isEmbeddingManifestCompatible,
+} from './metadata.js';
+export type {
+  EmbeddingCompatibilityResult,
+  EmbeddingManifestLike,
+} from './metadata.js';

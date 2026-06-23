@@ -1,4 +1,4 @@
-import { EmbeddingProviderError, isEmbeddingProviderError, redactEmbeddingErrorMessage } from '../../errors.js';
+import { ProviderError, isProviderError } from '../../errors.js';
 import {
   isAbortError,
   parseJsonBody,
@@ -8,6 +8,7 @@ import {
   type ProviderFetch,
   type ProviderRequestOptions,
 } from '../../http.js';
+import { redactProviderErrorMessage } from '../../redaction.js';
 import type {
   RerankBatchResult,
   RerankProvider,
@@ -34,7 +35,7 @@ export class SiliconFlowRerankProvider implements RerankProvider {
   async rerank(input: RerankRequestInput, options: ProviderRequestOptions = {}): Promise<RerankBatchResult> {
     const apiKey = resolveApiKey(this.config);
     if (!apiKey) {
-      throw new EmbeddingProviderError({
+      throw new ProviderError({
         provider: this.id,
         code: 'missing_credentials',
         retryable: false,
@@ -80,11 +81,11 @@ export class SiliconFlowRerankProvider implements RerankProvider {
         warnings: [],
       };
     } catch (error) {
-      if (isEmbeddingProviderError(error)) {
+      if (isProviderError(error)) {
         throw error;
       }
       if (isAbortError(error)) {
-        throw new EmbeddingProviderError({
+        throw new ProviderError({
           provider: this.id,
           code: 'timeout',
           retryable: true,
@@ -92,11 +93,11 @@ export class SiliconFlowRerankProvider implements RerankProvider {
           cause: error,
         });
       }
-      throw new EmbeddingProviderError({
+      throw new ProviderError({
         provider: this.id,
         code: 'network_error',
         retryable: true,
-        safeMessage: `SiliconFlow rerank network error: ${redactEmbeddingErrorMessage(error)}`,
+        safeMessage: `SiliconFlow rerank network error: ${redactProviderErrorMessage(error)}`,
         cause: error,
       });
     } finally {

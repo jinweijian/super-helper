@@ -1,6 +1,5 @@
 import type { KnowledgeEvidencePack, KnowledgeSearchQuery } from '../knowledge/types.js';
-import { createEmbeddingRecallStrategy } from './recall/embedding/strategy.js';
-import { createKeywordRecallStrategy } from './recall/keyword/strategy.js';
+import { createDefaultRetrievalStrategies } from './registry.js';
 import { createProviderReranker } from './rerank/service.js';
 import { createRetrievalService } from './service.js';
 
@@ -27,17 +26,13 @@ export interface KnowledgeRagSearchQuery extends KnowledgeSearchQuery {
 export async function searchKnowledgeWithRag(input: KnowledgeRagSearchQuery): Promise<KnowledgeEvidencePack> {
   const finalLimit = input.limit ?? 8;
   const retrievalLimit = input.retrievalLimit ?? Math.max(finalLimit * 4, 20);
-  const strategies = [
-    createKeywordRecallStrategy(),
-    ...(input.embedding?.provider
-      ? [createEmbeddingRecallStrategy({
-        provider: input.embedding.provider,
-        embeddingConfig: { enabled: true },
-      })]
-      : []),
-  ];
   const service = createRetrievalService({
-    strategies,
+    strategies: createDefaultRetrievalStrategies({
+      includeBm25: false,
+      includeKeywordCompatibility: true,
+      embeddingProvider: input.embedding?.provider,
+      embeddingConfig: { enabled: Boolean(input.embedding?.provider) },
+    }),
     reranker: createProviderReranker({
       provider: input.rerank?.provider,
       topN: input.rerank?.topN ?? finalLimit,

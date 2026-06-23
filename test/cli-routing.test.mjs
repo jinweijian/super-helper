@@ -113,6 +113,44 @@ test('CLI routes embedding and rerank smoke tests without network when disabled'
   }
 });
 
+test('knowledge CLI preserves invalid quality gate, disabled vector, and unknown subcommand exits', () => {
+  const workspace = tempRoot('super-helper-cli-knowledge-errors-');
+  const knowledgeRoot = join(workspace, 'knowledge-root');
+  try {
+    const invalidGate = runCli([
+      'knowledge',
+      'update',
+      '--workspace',
+      workspace,
+      '--knowledge-root',
+      knowledgeRoot,
+      '--quality-gate',
+      'invalid',
+    ]);
+    assert.equal(invalidGate.status, 1);
+    assert.match(invalidGate.stderr, /Invalid --quality-gate\. Expected warn\|strict\|off\./);
+
+    const disabledVector = runCli([
+      'knowledge',
+      'vector',
+      'build',
+      '--workspace',
+      workspace,
+      '--knowledge-root',
+      knowledgeRoot,
+    ]);
+    assert.equal(disabledVector.status, 1);
+    assert.match(disabledVector.stdout, /embedding disabled/);
+    assert.match(disabledVector.stdout, /provider: siliconflow/);
+
+    const unknown = runCli(['knowledge', 'does-not-exist', '--workspace', workspace, '--knowledge-root', knowledgeRoot]);
+    assert.equal(unknown.status, 1);
+    assert.match(unknown.stderr, /Usage: super-helper knowledge/);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test('CLI preserves unknown command exit behavior and usage output', () => {
   const result = runCli(['does-not-exist']);
 

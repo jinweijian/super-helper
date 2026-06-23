@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import type {
+  EmbeddingArtifactConfig,
+  EmbeddingDocumentContract,
+  EmbeddingDocumentPort,
+} from '../contracts/embedding.js';
 import { chunksPath, indexesDir, vectorBuildReportPath, vectorManifestPath, vectorsPath } from './paths.js';
 import type {
   KnowledgeChunk,
@@ -8,42 +13,9 @@ import type {
   KnowledgeVectorRecord,
 } from './types.js';
 
-export interface KnowledgeEmbeddingDocumentInput {
-  id: string;
-  text: string;
-  contentHash?: string;
-  source?: string;
-  documentId?: string;
-  chunkId?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface KnowledgeEmbeddingProviderLike {
-  readonly id: string;
-  readonly model: string;
-  readonly dimensions: number;
-  readonly distance: string;
-  embedDocuments(input: KnowledgeEmbeddingDocumentInput[], options?: { batchSize?: number }): Promise<{
-    results: Array<{
-      id: string;
-      provider: string;
-      model: string;
-      dimensions: number;
-      distance: string;
-      vector: number[];
-      contentHash?: string;
-      metadata?: Record<string, unknown>;
-    }>;
-  }>;
-}
-
-export interface KnowledgeEmbeddingConfigLike {
-  provider: string;
-  model: string;
-  dimensions: number;
-  distance: string;
-  batchSize?: number;
-}
+export type KnowledgeEmbeddingDocumentInput = EmbeddingDocumentContract;
+export type KnowledgeEmbeddingProviderLike = EmbeddingDocumentPort;
+export type KnowledgeEmbeddingConfigLike = EmbeddingArtifactConfig;
 
 export interface LoadKnowledgeChunksForEmbeddingResult {
   chunks: KnowledgeChunk[];

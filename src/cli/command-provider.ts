@@ -1,10 +1,12 @@
 import { ensureConfig } from '../config.js';
 import {
   runEmbeddingSmokeTest,
-  runRerankSmokeTest,
   type EmbeddingProviderConfig,
+} from '../providers/embedding/index.js';
+import {
+  runRerankSmokeTest,
   type RerankProviderConfig,
-} from '../embedding/index.js';
+} from '../providers/rerank/index.js';
 import { hasFlag, readNumberOption, readOption } from './args.js';
 
 export async function runProviderCommand(input: {

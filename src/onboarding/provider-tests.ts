@@ -1,9 +1,11 @@
 import {
   runEmbeddingSmokeTest,
-  runRerankSmokeTest,
   type EmbeddingProviderHealthCheckResult,
+} from '../providers/embedding/index.js';
+import {
+  runRerankSmokeTest,
   type RerankProviderHealthCheckResult,
-} from '../embedding/index.js';
+} from '../providers/rerank/index.js';
 import { runModelSmokeTest, type ModelSmokeTestResult } from '../model-smoke-test.js';
 import type { OnboardingDraft } from './types.js';
 

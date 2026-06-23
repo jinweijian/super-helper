@@ -1,4 +1,4 @@
-import { EmbeddingProviderError } from '../errors.js';
+import { ProviderError } from '../errors.js';
 import type { ProviderFactoryOptions } from '../http.js';
 import type {
   RerankProvider,
@@ -17,7 +17,7 @@ export function createRerankProvider(
   if (config.provider === 'fake') {
     return new FakeRerankProvider(config);
   }
-  throw new EmbeddingProviderError({
+  throw new ProviderError({
     provider: config.provider,
     code: 'unsupported_provider',
     retryable: false,

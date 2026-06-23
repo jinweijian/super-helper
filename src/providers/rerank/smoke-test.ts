@@ -1,4 +1,4 @@
-import { formatEmbeddingSafeError, isEmbeddingProviderError } from '../errors.js';
+import { formatProviderSafeError, isProviderError } from '../errors.js';
 import type { ProviderFetch } from '../http.js';
 import type { RerankProviderConfig, RerankProviderHealthCheckResult } from './contract.js';
 import { createRerankProvider } from './factory.js';
@@ -46,7 +46,7 @@ export async function runRerankSmokeTest(input: {
       model: input.config.model,
       ok: false,
       durationMs: Date.now() - startedAt,
-      error: isEmbeddingProviderError(error)
+      error: isProviderError(error)
         ? {
           code: error.code,
           status: error.status,
@@ -56,7 +56,7 @@ export async function runRerankSmokeTest(input: {
         : {
           code: 'unknown',
           retryable: false,
-          safeMessage: formatEmbeddingSafeError(error),
+          safeMessage: formatProviderSafeError(error),
         },
     };
   }

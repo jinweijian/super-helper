@@ -8,16 +8,22 @@ export interface RetrievalRegistryOptions {
   embeddingProvider?: {
     embedQuery(input: { id?: string; text: string; metadata?: Record<string, unknown> }): Promise<{ vector: number[] }>;
   };
-  embeddingConfig?: Pick<EmbeddingProviderConfig, 'enabled'>;
+  embeddingConfig?: Pick<EmbeddingProviderConfig, 'enabled'> & Partial<Pick<
+    EmbeddingProviderConfig,
+    'provider' | 'model' | 'dimensions' | 'distance'
+  >>;
+  embeddingUnavailableReason?: string;
+  includeBm25?: boolean;
   includeKeywordCompatibility?: boolean;
 }
 
 export function createDefaultRetrievalStrategies(options: RetrievalRegistryOptions = {}): RecallStrategy[] {
   return [
-    createBm25RecallStrategy(),
+    ...(options.includeBm25 === false ? [] : [createBm25RecallStrategy()]),
     createEmbeddingRecallStrategy({
       provider: options.embeddingProvider,
       embeddingConfig: options.embeddingConfig,
+      unavailableReason: options.embeddingUnavailableReason,
     }),
     ...(options.includeKeywordCompatibility ? [createKeywordRecallStrategy()] : []),
   ];

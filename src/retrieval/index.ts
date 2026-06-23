@@ -28,5 +28,9 @@ export { scoreBm25 } from './recall/bm25/scorer.js';
 export { createProviderReranker } from './rerank/service.js';
 export type { RetrievalReranker } from './rerank/service.js';
 export { retrievalCandidatesToEvidencePack } from './evidence-pack.js';
+export {
+  keywordsFromQuery as compatibilityKeywordsFromQuery,
+  searchKnowledgeCompatibility,
+} from './compatibility-search.js';
 export { searchKnowledgeWithRag } from './legacy-rag.js';
 export type { KnowledgeRagSearchQuery } from './legacy-rag.js';

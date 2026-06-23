@@ -1,5 +1,5 @@
 import type { ModelProviderConfig } from './config.js';
-import { redactEmbeddingErrorMessage } from './embedding/index.js';
+import { redactProviderErrorMessage } from './providers/redaction.js';
 import { createModelClient } from './model.js';
 
 export interface ModelSmokeTestResult {
@@ -34,7 +34,7 @@ export async function runModelSmokeTest(config: ModelProviderConfig): Promise<Mo
       ok: false,
       model: config.model,
       durationMs: Date.now() - startedAt,
-      error: redactEmbeddingErrorMessage(error),
+      error: redactProviderErrorMessage(error),
     };
   }
 }

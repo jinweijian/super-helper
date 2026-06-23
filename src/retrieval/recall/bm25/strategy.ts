@@ -13,7 +13,13 @@ export function createBm25RecallStrategy(): RecallStrategy {
       const loaded = readKnowledgeChunks(input.workspaceRoot);
       const queryTokens = tokenizeForBm25(input.query);
       const documents = loaded.chunks
-        .filter((chunk) => chunk.status === 'active')
+        .filter((chunk) => (
+          chunk.status === 'active' &&
+          (!input.moduleCandidates?.length || input.moduleCandidates.includes(chunk.module)) &&
+          (!input.intentCandidates?.length || input.intentCandidates.includes(chunk.intent)) &&
+          (!input.sourceTypes?.length || input.sourceTypes.includes(chunk.source_type)) &&
+          (!input.visibility?.length || input.visibility.includes(chunk.visibility ?? 'internal'))
+        ))
         .map((chunk) => ({
           id: chunk.chunk_id,
           tokens: tokenizeForBm25([

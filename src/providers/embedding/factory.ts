@@ -1,8 +1,8 @@
-import { EmbeddingProviderError } from '../errors.js';
+import { ProviderError } from '../errors.js';
 import { FakeEmbeddingProvider } from './fake.js';
-import { GeminiEmbeddingProvider } from '../../embedding/gemini.js';
-import { MiniMaxEmbeddingProvider } from '../../embedding/minimax.js';
-import { QwenEmbeddingProvider } from '../../embedding/qwen.js';
+import { GeminiEmbeddingProvider } from './gemini/adapter.js';
+import { MiniMaxEmbeddingProvider } from './minimax/adapter.js';
+import { QwenEmbeddingProvider } from './qwen/adapter.js';
 import { SiliconFlowEmbeddingProvider } from './siliconflow/adapter.js';
 import type {
   EmbeddingDistanceMetric,
@@ -47,7 +47,7 @@ export function validateEmbeddingProviderConfig(config: EmbeddingProviderConfig)
     throw unsupportedProviderError(config.provider);
   }
   if (!config.model?.trim()) {
-    throw new EmbeddingProviderError({
+    throw new ProviderError({
       provider: config.provider,
       code: 'invalid_request',
       retryable: false,
@@ -55,7 +55,7 @@ export function validateEmbeddingProviderConfig(config: EmbeddingProviderConfig)
     });
   }
   if (!Number.isInteger(config.dimensions) || config.dimensions <= 0) {
-    throw new EmbeddingProviderError({
+    throw new ProviderError({
       provider: config.provider,
       code: 'invalid_request',
       retryable: false,
@@ -63,7 +63,7 @@ export function validateEmbeddingProviderConfig(config: EmbeddingProviderConfig)
     });
   }
   if (!SUPPORTED_DISTANCES.includes(config.distance as EmbeddingDistanceMetric)) {
-    throw new EmbeddingProviderError({
+    throw new ProviderError({
       provider: config.provider,
       code: 'invalid_request',
       retryable: false,
@@ -72,8 +72,8 @@ export function validateEmbeddingProviderConfig(config: EmbeddingProviderConfig)
   }
 }
 
-function unsupportedProviderError(provider: string): EmbeddingProviderError {
-  return new EmbeddingProviderError({
+function unsupportedProviderError(provider: string): ProviderError {
+  return new ProviderError({
     provider,
     code: 'unsupported_provider',
     retryable: false,

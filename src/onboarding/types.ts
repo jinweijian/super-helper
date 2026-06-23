@@ -1,6 +1,7 @@
 import type { SecretRef } from '../domain.js';
 import type { ModelProviderConfig } from '../config.js';
-import type { EmbeddingProviderConfig, RerankProviderConfig } from '../embedding/types.js';
+import type { EmbeddingProviderConfig } from '../providers/embedding/contract.js';
+import type { RerankProviderConfig } from '../providers/rerank/contract.js';
 
 type EnvSecretRef = Extract<SecretRef, { source: 'env' }>;
 

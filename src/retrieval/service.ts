@@ -1,4 +1,5 @@
 import { retrievalCandidatesToEvidencePack } from './evidence-pack.js';
+import { redactProviderErrorMessage } from '../providers/redaction.js';
 import { fuseWithRrf } from './fusion/rrf.js';
 import { normalizeStrategyCandidates } from './fusion/normalize.js';
 import type { RecallStrategy } from './recall/contract.js';
@@ -17,6 +18,7 @@ export interface RetrievalService {
 export function createRetrievalService(input: {
   strategies: RecallStrategy[];
   reranker?: RetrievalReranker;
+  rerankerUnavailableReason?: string;
 }): RetrievalService {
   return {
     async retrieve(request) {
@@ -51,7 +53,7 @@ export function createRetrievalService(input: {
             candidateCount: normalized.length,
           });
         } catch (error) {
-          const reason = error instanceof Error ? error.message : String(error);
+          const reason = redactProviderErrorMessage(error);
           filteredOut.push({ reason: `${strategy.id}_failed`, count: 1 });
           trace.strategies.push({
             id: strategy.id,
@@ -88,7 +90,7 @@ export function createRetrievalService(input: {
         } catch (error) {
           trace.rerank = {
             status: 'failed',
-            reason: error instanceof Error ? error.message : String(error),
+            reason: redactProviderErrorMessage(error),
             inputCount: candidates.length,
             outputCount: candidates.length,
           };
@@ -96,7 +98,7 @@ export function createRetrievalService(input: {
       } else {
         trace.rerank = {
           status: 'skipped',
-          reason: input.reranker ? 'no candidates' : 'not configured',
+          reason: input.reranker ? 'no candidates' : input.rerankerUnavailableReason ?? 'not configured',
           inputCount: candidates.length,
           outputCount: candidates.length,
         };

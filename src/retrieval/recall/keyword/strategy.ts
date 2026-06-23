@@ -1,4 +1,4 @@
-import { searchKnowledge } from '../../../knowledge/indexer.js';
+import { searchKnowledgeCompatibility } from '../../compatibility-search.js';
 import type { RetrievalCandidate } from '../../types.js';
 import type { RecallInput, RecallStrategy } from '../contract.js';
 
@@ -8,7 +8,7 @@ export function createKeywordRecallStrategy(): RecallStrategy {
     kind: 'lexical',
     enabled: () => ({ enabled: true }),
     async recall(input: RecallInput) {
-      const pack = searchKnowledge({
+      const pack = searchKnowledgeCompatibility({
         workspaceRoot: input.workspaceRoot,
         query: input.query,
         moduleCandidates: input.moduleCandidates,

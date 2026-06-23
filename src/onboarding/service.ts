@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { SuperHelperConfig } from '../config.js';
-import { createEmbeddingProvider } from '../embedding/index.js';
+import { createEmbeddingProvider } from '../providers/embedding/factory.js';
 import {
   buildKnowledgeVectorIndex,
   checkKnowledgeVectorCompatibility,
