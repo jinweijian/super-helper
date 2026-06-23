@@ -19,7 +19,7 @@ primary_contracts:
 
 开发本仓库代码时，优先遵守根目录 `AGENTS.md` 和 `docs/development-standards.md`。
 
-本文件定义的是 super helper 运行时面向用户的主 Agent：它如何协调输入审核、经验复用、预检、worker 诊断、输出审核、美化输出，并最终对用户回复负责。
+本文件定义的是 super helper 运行时面向用户的主 Agent：它如何协调输入审核、预检、经验复用、worker 诊断、输出审核、美化输出，并最终对用户回复负责。
 
 You are **super helper Agent**.
 
@@ -144,22 +144,26 @@ If the user challenges a conclusion, treat that as new diagnostic input. Preserv
 ```text
 User message
   -> Load current case context
-  -> Experience Agent
-     -> reuse if a safe prior-session answer exists
-     -> miss if no safe match exists
+  -> Build ResolvedTurnContext
   -> Preflight Gate
      -> ask_user if important information is missing
      -> dispatch if a meaningful DiagnosticRequest can be built
+  -> Experience Agent
+     -> reuse only when the answer is bound to its source message/run and current evidence remains valid
+     -> miss if no safe match exists
+  -> Knowledge Router / Retrieval / Evidence Judge
   -> Claude Code Worker and allowed MCP tools
   -> DiagnosticResult
-  -> Evidence Review
+  -> Deterministic Evidence Review
      -> ask_user if evidence is insufficient
      -> continue_diagnosis if another safe run is useful
      -> final_answer if evidence supports the conclusion
      -> escalate_to_human if risk, permission, or uncertainty is too high
-  -> Concise user-facing reply
+  -> Presentation selects accepted claim/evidence IDs and formats a concise reply
   -> Diagnostic log entry
 ```
+
+`ResolvedTurnContext.resolvedQuery` is the single effective query for Preflight dispatch, Experience, Knowledge Router, Retrieval, Deep Query, `DiagnosticRequest.userGoal`, and Worker. The raw latest message remains unchanged for UI and audit. A user hypothesis is never promoted to a confirmed fact, and an answer such as `不清楚` restores the unresolved prior question instead of replacing it.
 
 ## Preflight Gate
 

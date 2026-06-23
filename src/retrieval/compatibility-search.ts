@@ -2,6 +2,7 @@ import { loadKnowledgeChunksForSearch } from '../knowledge/documents/chunks.js';
 import { discoverKnowledgeDocuments } from '../knowledge/documents/discovery.js';
 import { extractKnowledgeTerms, normalizeKnowledgeText } from '../knowledge/documents/terms.js';
 import { loadChunkQualityMap } from '../knowledge/quality.js';
+import { selectAnswerSpan } from './answer-span.js';
 import type {
   KnowledgeChunk,
   KnowledgeDocument,
@@ -40,7 +41,7 @@ export function searchKnowledgeCompatibility(input: KnowledgeSearchQuery): Knowl
   const filteredOut = new Map<string, number>();
   const qualityMap = loadChunkQualityMap(input.workspaceRoot);
 
-  const results = chunks
+  const rankedResults = chunks
     .map((chunk) => {
       const parent = docById.get(chunk.parent_id);
       if (!parent) {
@@ -61,8 +62,8 @@ export function searchKnowledgeCompatibility(input: KnowledgeSearchQuery): Knowl
       return toEvidenceResult(chunk, parent, scoreInfo.score, scoreInfo.matchedTerms, qualityMap);
     })
     .filter((item): item is KnowledgeEvidenceResult => Boolean(item))
-    .sort((left, right) => right.score - left.score)
-    .slice(0, input.limit ?? 8);
+    .sort((left, right) => right.score - left.score);
+  const results = dedupeEvidenceByParent(rankedResults).slice(0, input.limit ?? 8);
 
   return {
     query: {
@@ -80,6 +81,15 @@ export function searchKnowledgeCompatibility(input: KnowledgeSearchQuery): Knowl
   };
 }
 
+function dedupeEvidenceByParent(results: KnowledgeEvidenceResult[]): KnowledgeEvidenceResult[] {
+  const seen = new Set<string>();
+  return results.filter((result) => {
+    if (seen.has(result.parent_id)) return false;
+    seen.add(result.parent_id);
+    return true;
+  });
+}
+
 export const searchKnowledge = searchKnowledgeCompatibility;
 
 export function keywordsFromQuery(value: string): string[] {
@@ -93,7 +103,8 @@ function toEvidenceResult(
   matchedTerms: string[],
   qualityMap: Map<string, { severity: 'ok' | 'info' | 'warn' | 'error'; issues: string[] }>,
 ): KnowledgeEvidenceResult {
-  const quality = qualityMap.get(parent.frontmatter.id);
+  const quality = qualityMap.get(parent.frontmatter.id) ?? qualityFromFrontmatter(parent);
+  const excerpt = excerptFor(parent.body, matchedTerms);
   return {
     evidence_id: `ev_kb_${chunk.chunk_id.replace(/^chk_/, '')}`,
     document_id: parent.frontmatter.id,
@@ -103,6 +114,8 @@ function toEvidenceResult(
     source_document: parent.frontmatter.source_document ?? chunk.source_document,
     source_document_id: parent.frontmatter.source_document_id ?? chunk.source_document_id,
     source_pages: parent.frontmatter.source_pages ?? chunk.source_pages ?? [],
+    source_block_ids: parent.frontmatter.source_block_ids,
+    section_path: parent.frontmatter.section_path,
     title: parent.frontmatter.title,
     type: parent.frontmatter.type,
     module: parent.frontmatter.module,
@@ -114,10 +127,22 @@ function toEvidenceResult(
     last_verified_at: parent.frontmatter.last_verified_at,
     matched_terms: matchedTerms,
     summary: `${parent.frontmatter.title} 命中：${matchedTerms.join('、') || parent.frontmatter.module}`,
-    excerpt: excerptFor(parent.body, matchedTerms),
+    excerpt,
+    answer_span: selectAnswerSpan({ text: parent.body, matchedTerms }),
     score,
+    retrieval: { source: 'keyword', keywordScore: score },
     quality,
   };
+}
+
+function qualityFromFrontmatter(
+  parent: KnowledgeDocument,
+): KnowledgeEvidenceResult['quality'] {
+  const severity = parent.frontmatter.quality_status;
+  if (!severity || severity === 'unchecked') {
+    return undefined;
+  }
+  return { severity, issues: [] };
 }
 
 function scoreChunk(

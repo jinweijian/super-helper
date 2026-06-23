@@ -11,7 +11,10 @@ export type EvidenceJudgeBlocker =
   | 'missing_answer_bearing_sentence'
   | 'no_active_evidence'
   | 'ambiguity'
-  | 'low_signal_terms';
+  | 'low_signal_terms'
+  | 'missing_provenance'
+  | 'low_retrieval_confidence'
+  | 'unknown_module';
 
 export interface EvidenceJudgeScoreBreakdown {
   relevance: number;
@@ -131,7 +134,7 @@ export function judgeKnowledgeEvidence(input: {
   // Generic keyword false-positive control
   const matchedGeneric = input.route.keywords.filter((kw) => GENERIC_KEYWORDS.includes(kw));
   const topMatchedTerms = results[0]?.matched_terms ?? [];
-  const topNonGenericTerms = topMatchedTerms.filter((term) => !GENERIC_KEYWORDS.includes(term));
+  const topNonGenericTerms = topMatchedTerms.filter((term) => isSpecificTerm(term));
   if (matchedGeneric.length >= 1 && results[0] && (topMatchedTerms.length < 2 || topNonGenericTerms.length === 0)) {
     blockers.push('generic_keyword_only');
     ambiguity.push(`仅泛词命中：${matchedGeneric.join('、')}`);
@@ -141,18 +144,35 @@ export function judgeKnowledgeEvidence(input: {
   if (input.route.moduleCandidates.length > 0 && results[0] && !input.route.moduleCandidates.includes(results[0].module)) {
     blockers.push('module_mismatch');
   }
+  if (input.route.moduleCandidates.length > 0 && results[0]?.taxonomy_known === false) {
+    blockers.push('unknown_module');
+  }
 
-  // Answer-bearing check
-  if (results[0] && !hasAnswerBearingSentence(results[0].excerpt + ' ' + results[0].title + ' ' + results[0].summary)) {
+  const top = results[0];
+
+  // Direct answers require an explicit span selected from the canonical parent.
+  if (top && (!top.answer_span || !hasAnswerBearingSentence(top.answer_span))) {
     blockers.push('missing_answer_bearing_sentence');
   }
 
-  // Low quality evidence
-  if (results[0]?.quality?.severity === 'error') {
+  // Only reviewed ok/info evidence may cross the direct-answer boundary.
+  if (!top?.quality || top.quality.severity === 'warn' || top.quality.severity === 'error') {
     blockers.push('low_quality_evidence');
-    qualityIssues.push(...(results[0].quality.issues ?? []));
-  } else if (results[0]?.quality?.severity === 'warn') {
-    qualityIssues.push(...(results[0].quality.issues ?? []));
+    qualityIssues.push(...(top?.quality?.issues ?? ['missing_quality_status']));
+  } else {
+    qualityIssues.push(...(top.quality.issues ?? []));
+  }
+
+  if (top && !hasCompleteProvenance(top)) {
+    blockers.push('missing_provenance');
+  }
+
+  if (top && topNonGenericTerms.length < 2) {
+    blockers.push('low_signal_terms');
+  }
+
+  if (top && !passesRetrievalConfidenceGate(top, input.question, topNonGenericTerms)) {
+    blockers.push('low_retrieval_confidence');
   }
 
   // Conflict
@@ -194,7 +214,7 @@ export function judgeKnowledgeEvidence(input: {
   }
 
   // Stale
-  if (stale.length > 0 && active.length === 0) {
+  if (top && isStale(top)) {
     blockers.push('stale_knowledge');
     return buildResult({
       results,
@@ -415,12 +435,44 @@ function isStale(result: KnowledgeEvidenceResult): boolean {
   if (result.status === 'deprecated' || result.status === 'archived' || result.status === 'review_required' || result.status === 'draft') {
     return true;
   }
-  const verifiedAt = Date.parse(result.last_verified_at);
+  const verifiedAt = Date.parse(result.last_verified_at ?? '');
   if (!Number.isFinite(verifiedAt)) {
     return true;
   }
   const days = (Date.now() - verifiedAt) / 86_400_000;
   return days > 180;
+}
+
+function hasCompleteProvenance(result: KnowledgeEvidenceResult): boolean {
+  return Boolean(
+    result.source_document &&
+    result.source_document_id &&
+    result.source_block_ids?.length &&
+    result.section_path?.length &&
+    !(result.grounding_issues?.length),
+  );
+}
+
+function passesRetrievalConfidenceGate(
+  result: KnowledgeEvidenceResult,
+  question: string,
+  specificTerms: string[],
+): boolean {
+  if (result.retrieval?.source === 'rerank') {
+    return (result.retrieval.rerankScore ?? 0) >= 0.7;
+  }
+  const normalizedQuestion = normalizeForExactMatch(question);
+  const normalizedTitle = normalizeForExactMatch(result.title);
+  return normalizedTitle.length >= 4 && normalizedQuestion.includes(normalizedTitle) && specificTerms.length >= 2;
+}
+
+function normalizeForExactMatch(value: string): string {
+  return value.toLowerCase().replace(/[\s，。！？、,.!?：:；;（）()\[\]【】《》<>"'“”‘’_-]+/g, '');
+}
+
+function isSpecificTerm(term: string): boolean {
+  const normalized = term.trim();
+  return normalized.length >= 2 && !GENERIC_KEYWORDS.includes(normalized);
 }
 
 function hasAnswerBearingSentence(text: string): boolean {

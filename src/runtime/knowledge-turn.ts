@@ -38,7 +38,7 @@ export class KnowledgeTurnService {
       return undefined;
     }
 
-    const { route, evidencePack, judge } = diagnosis;
+    const { route, evidencePack, judge, retrievalTrace } = diagnosis;
     this.events.knowledgeRouterResult(caseSession, route);
     this.events.knowledgeSearchStarted(caseSession, {
       workspaceRoot,
@@ -48,6 +48,7 @@ export class KnowledgeTurnService {
       sourceTypes: route.sourceTypes,
     });
     this.events.knowledgeSearchResult(caseSession, evidencePack);
+    this.events.knowledgeRetrievalTrace(caseSession, retrievalTrace);
     this.events.evidenceJudgeStarted(caseSession, evidencePack);
     this.events.evidenceJudgeResult(caseSession, judge);
 

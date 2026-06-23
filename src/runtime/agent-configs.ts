@@ -13,6 +13,8 @@ export type AgentStage =
   | 'output_review'
   | 'presentation';
 
+export type AgentExecutionMode = 'deterministic' | 'model_assisted' | 'presentation_only';
+
 export interface AgentRegistryEntry {
   id: string;
   role: string;
@@ -20,6 +22,7 @@ export interface AgentRegistryEntry {
   configPath: string;
   required: boolean;
   mayProduceUserFacingText: boolean;
+  executionMode?: AgentExecutionMode;
   summary: string;
 }
 
@@ -40,6 +43,7 @@ export interface PublicAgentConfig {
   configPath: string;
   required: boolean;
   mayProduceUserFacingText: boolean;
+  executionMode?: AgentExecutionMode;
   summary: string;
   title: string;
   responsibility: string;

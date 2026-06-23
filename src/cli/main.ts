@@ -77,7 +77,7 @@ export async function main(): Promise<void> {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|vector build>|retrieval <search|debug>|embedding test|rerank test|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|migration-report|vector build>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 
 export function runCli(): void {

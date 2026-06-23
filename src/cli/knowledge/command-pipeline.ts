@@ -5,6 +5,7 @@ import {
   evaluateQualityGate,
   extractSourceBlocks,
   generateKnowledgeRepairPlan,
+  generateKnowledgeMigrationReport,
   loadSourceDocuments,
   normalizeSourceBlocks,
   publishApprovedDraftSlices,
@@ -173,6 +174,16 @@ export async function runKnowledgePipelineCommand(
     if (report.failures.length > 0) {
       console.log(`failures: ${report.failures.length}`);
       process.exit(2);
+    }
+    return true;
+  }
+
+  if (subcommand === 'migration-report') {
+    const report = generateKnowledgeMigrationReport({ workspaceRoot });
+    console.log(`migration report: ${report.reportPath}`);
+    console.log(`review queue: ${report.reviewQueuePath}`);
+    for (const batch of report.batches) {
+      console.log(`batch ${batch.order}: ${batch.module} status=${batch.status} parents=${batch.parentIds.length}`);
     }
     return true;
   }

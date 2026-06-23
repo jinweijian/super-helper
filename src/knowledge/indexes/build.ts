@@ -18,12 +18,17 @@ import {
   writeSourceQualityReport,
 } from '../quality.js';
 import type { KnowledgeChunk, KnowledgeIndexManifest, KnowledgeUpdateResult } from '../types.js';
+import { validateKnowledgeTaxonomyCoverage } from '../taxonomy.js';
 
 export function updateKnowledgeIndex(input: { workspaceRoot: string }): KnowledgeUpdateResult {
   const root = knowledgeRoot(input.workspaceRoot);
   const docs = discoverKnowledgeDocuments(input.workspaceRoot);
   const sourceDocuments = loadSourceDocuments(input.workspaceRoot);
   const chunks = buildKnowledgeChunks(docs);
+  const taxonomy = validateKnowledgeTaxonomyCoverage({
+    workspaceRoot: input.workspaceRoot,
+    modules: docs.map((document) => document.frontmatter.module),
+  });
   const manifest: KnowledgeIndexManifest = {
     version: 1,
     updated_at: new Date().toISOString(),
@@ -40,6 +45,10 @@ export function updateKnowledgeIndex(input: { workspaceRoot: string }): Knowledg
       status: document.frontmatter.status,
       confidence: document.frontmatter.confidence,
     })),
+    taxonomy: {
+      known_modules: taxonomy.knownModules,
+      unknown_modules: taxonomy.unknownModules,
+    },
   };
 
   mkdirSync(join(root, 'indexes'), { recursive: true });
@@ -57,6 +66,7 @@ export function updateKnowledgeIndex(input: { workspaceRoot: string }): Knowledg
     sourceDocumentCount: sourceDocuments.length,
     manifestPath: manifestPath(input.workspaceRoot),
     chunksPath: chunksPath(input.workspaceRoot),
+    taxonomyWarnings: taxonomy.unknownModules.map((module) => `unknown_module:${module}`),
   };
 }
 

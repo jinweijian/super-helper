@@ -1,4 +1,5 @@
 import type { ClaudeWorkerResponse, DiagnosticRequest, DiagnosticResult, DiagnosticRun } from '../domain.js';
+import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 import { nextDeepQueryPivot } from './query-correction.js';
 
 export type WorkerTurnReviewDecision = 'ask_user' | 'dispatched' | 'final' | 'partial' | 'escalate';
@@ -22,7 +23,7 @@ export function applyWorkerResponseToRun(input: {
 }): DiagnosticResult {
   input.run.status = input.response.result.status;
   input.run.result = input.response.result;
-  input.run.workerTrace = input.response.trace;
+  input.run.workerTrace = sanitizeWorkerTrace(input.response.trace);
   return input.response.result;
 }
 

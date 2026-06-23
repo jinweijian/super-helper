@@ -2,6 +2,7 @@ import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRequest, DiagnosticResult } from '../domain.js';
 import { buildDiagnosticRequestContext } from '../sessions/context-builder.js';
 import type { StoredCase } from '../storage.js';
+import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export function buildDiagnosticRequest(input: {
   caseSession: StoredCase;
@@ -10,24 +11,18 @@ export function buildDiagnosticRequest(input: {
   config: SuperHelperConfig;
 }): DiagnosticRequest {
   const { caseSession, userMessage, unknowns, config } = input;
+  const resolvedTurn = buildResolvedTurnContext({ caseSession, latestUserMessage: userMessage });
   const latestRunNumber = caseSession.runs.length + 1;
-  const knownFacts = Array.from(
-    new Set(
-      caseSession.messages
-        .filter((message) => message.role === 'user')
-        .map((message) => message.body.trim())
-        .filter(Boolean),
-    ),
-  );
+  const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
 
   const request: DiagnosticRequest = {
     caseId: caseSession.id,
     runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
     workspaceId: caseSession.workspaceId,
     claudeSessionId: caseSession.claudeSessionId,
-    userGoal: userMessage,
+    userGoal: resolvedTurn.resolvedQuery,
     knownFacts,
-    unknowns,
+    unknowns: Array.from(new Set([...unknowns, ...resolvedTurn.unknowns.map((item) => item.text)])),
     constraints: [
       'Claude Code is an inspection tool and must not respond directly to the user.',
       `User-facing persona is ${caseSession.userPersona}; return evidence for super helper Agent to translate.`,
@@ -39,6 +34,7 @@ export function buildDiagnosticRequest(input: {
     userPersona: caseSession.userPersona,
   };
   attachCaseContext(caseSession, request);
+  request.context!.resolvedTurn = resolvedTurn;
   return request;
 }
 
@@ -69,7 +65,13 @@ export function buildFollowUpDiagnosticRequest(input: {
 }
 
 export function attachCaseContext(caseSession: StoredCase, request: DiagnosticRequest): void {
-  const context = buildDiagnosticRequestContext(caseSession, request.userGoal);
+  const existingResolvedTurn = request.context?.resolvedTurn;
+  const rawMessage = existingResolvedTurn?.latestUserMessage ?? request.context?.currentUserMessage ?? request.userGoal;
+  const context = buildDiagnosticRequestContext(caseSession, rawMessage);
+  context.resolvedTurn = existingResolvedTurn ?? buildResolvedTurnContext({
+    caseSession,
+    latestUserMessage: rawMessage,
+  });
   request.context = context;
   if (context.isFollowUp) {
     request.constraints = Array.from(

@@ -1,10 +1,12 @@
 export function redactProviderErrorMessage(value: unknown): string {
   return serializeForRedaction(value)
+    .replace(/(--?(?:api[-_]?key|token|authorization|cookie|password)\s+)(?:"[^"]*"|'[^']*'|\S+)/gi, '$1[REDACTED]')
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
     .replace(/(authorization["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
     .replace(/(api[-_ ]?key["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
     .replace(/(token["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
     .replace(/(cookie["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
+    .replace(/(password["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, '$1[REDACTED]')
     .replace(/\bsk-[A-Za-z0-9_-]+\b/g, '[REDACTED]')
     .replace(/\b[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]');
 }

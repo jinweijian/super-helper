@@ -24,6 +24,7 @@ may_produce_user_facing_text: true
 - 当前 MCP allowlist
 - 本地规则预检结果
 - 主 Agent 的证据与不乱猜约束
+- runtime 本地生成的 `ResolvedTurnContext`，包括原始消息、统一检索问题、带来源消息 ID 的事实/主张/假设/未知项
 
 ## Output Contract
 
@@ -41,3 +42,5 @@ may_produce_user_facing_text: true
 - 不得调用 Claude Code 或 MCP 工具。
 - 不得生成最终结论。
 - 不得把未知信息补成事实。
+- 模型只能把本地确认事实降级为主张、假设或未知，不能新增确认事实，也不能改写 runtime 已确定的 `resolvedQuery`。
+- `不清楚`、`不知道` 等回答必须保留为 unknown，同时继续使用此前未解决问题作为统一检索问题。

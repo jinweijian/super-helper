@@ -26,7 +26,7 @@ The current MVP keeps the public import surface stable while separating product 
 - `src/sessions/` owns case repository ports and request context construction.
 - `src/workers/diagnostic-worker.ts` defines the stable worker port.
 - `src/workers/claude/` owns the Claude Code adapter implementation, prompts, policy, CLI execution, and output parsing.
-- `src/observability/log-blocks.ts` owns diagnostic log drawer block rendering.
+- `src/observability/log-blocks.ts` owns diagnostic log drawer block rendering; `src/observability/worker-trace.ts` owns bounded redaction for persisted and public worker traces.
 
 Compatibility entry points remain thin:
 
@@ -46,7 +46,7 @@ The product uses one main Agent with configured sub-agents:
 - `output_review`: evidence review Agent
 - `presentation`: persona-aware presentation Agent
 
-`src/agents/registry.json` maps runtime stages to these configs. Runtime code resolves configs through `src/runtime/agent-configs.ts`.
+`src/agents/registry.json` maps runtime stages to these configs and optionally declares `executionMode` (`deterministic`, `model_assisted`, or `presentation_only`). Runtime code resolves configs through `src/runtime/agent-configs.ts`; `/api/agents` exposes the optional metadata without removing existing fields.
 
 Claude Code and MCP are workers/tools, not product sub-agents. They return evidence; product Agents decide whether and how evidence becomes a user-facing reply.
 
@@ -123,16 +123,17 @@ The runtime pipeline is:
 Gateway chat route
   -> SuperHelperAgent facade
   -> DiagnosticRuntime.startUserTurn
-  -> Experience Agent
+  -> ResolvedTurnContext builder
   -> Preflight Gate
+  -> Experience Agent (source-run binding + current-scope evidence revalidation)
   -> Knowledge Router / Retrieval Service / Evidence Judge
        -> knowledge direct answer (when evidence is answerable)
        -> or continuation to Claude Code escalation
   -> DiagnosticRequest builder
   -> DiagnosticWorker port
        -> bounded retry / pivot (Deep Query Correction)
-  -> Review Gate
-  -> Presenter
+  -> deterministic Result Validator / frozen Review Gate
+  -> Presenter (accepted claim/evidence IDs only)
   -> RuntimeEventRecorder
   -> CaseRepository
   -> optional Case Curator (solved case draft, review workflow)
@@ -141,6 +142,10 @@ Gateway chat route
 Route code must not embed preflight, worker, review, or presentation decisions. It validates HTTP input, invokes the runtime, and serializes response DTOs.
 
 Same-case async turns are serialized in the runtime so every accepted user message receives its own helper reply. Runtime calls the retrieval service for knowledge evidence; it does not instantiate embedding or rerank providers directly.
+
+`ResolvedTurnContext.resolvedQuery` is the shared effective query for Preflight dispatch, Experience, Knowledge Router, Retrieval, Deep Query, `DiagnosticRequest.userGoal`, and Worker. `latestUserMessage` remains raw and source message IDs remain attached for UI/audit. Local resolution owns promotion: model-assisted preflight may downgrade a confirmed fact but cannot promote a user hypothesis or unknown to a fact.
+
+Before presentation, the pure result validator enforces unique evidence IDs, existing claim references, and medium/high evidence for facts. It freezes the result and decision. A model may only select accepted claim/evidence IDs; it cannot return an outcome or author factual reply text. Worker command/cwd/stdout/stderr/stack/provider payload stay in bounded redacted diagnostic logs. A pre-result worker failure is shown only as a safe category, diagnosis state, next action, and case/run identity.
 
 ## Dashboard Onboarding
 
@@ -196,7 +201,7 @@ Quality reports are written next to the indexes and reports directories. Severit
 
 - `knowledge/indexes/chunk-quality-report.json`: per-slice and per-chunk issues.
 - `knowledge/reports/source-quality-report.json`: parser failures, unknown-block ratio, table/list preservation, heading structure, and source provenance issues.
-- Knowledge search reads the chunk-quality-report.json and attaches `quality: { severity, issues }` to each evidence result. Evidence with `error` severity is excluded from direct-answer candidates; `warn` lowers judge confidence.
+- Knowledge search reads the chunk-quality-report.json and attaches `quality: { severity, issues }` to each evidence result. Evidence Judge 仅允许 `ok` 或 `info` 质量进入知识直答；`warn`、`error` 或缺少质量状态的证据只能作为调查上下文。
 
 ## Providers, Vector Artifacts, and Retrieval
 
@@ -272,7 +277,7 @@ Runtime retrieval uses `src/retrieval/` as the business-flow owner:
 ```text
 query
   -> recall registry
-       -> bm25 lexical recall
+       -> 中文业务词/bigram 字段加权 BM25（Top 40）
        -> embedding semantic recall
        -> keyword compatibility recall
        -> future business recall strategies
@@ -282,7 +287,17 @@ query
   -> runtime Evidence Judge
 ```
 
+`parent-child-v2` 保持 Markdown parent 为 canonical evidence，并按 section/source-block 生成 300–800 字 child；相邻 child 最多重叠一个完整句子且不超过 120 字，超大不可拆 block 原样保留并标记人工拆分。Child 负责召回，最终结果按 parent 去重，使用最强 answer span 和不超过 1600 字的同章节上下文。
+
+中文 BM25 使用 Latin/alphanumeric、taxonomy/related business terms 和中文 bigram，保留真实词频且默认不召回普通单字。字段权重固定为 title=4、heading/section=3、related terms=3、module/intent=2、body=1；字段贡献进入 evidence/debug 元数据。
+
+Configured Hybrid 固定预算为 BM25 Top 40 + Embedding Top 40，经 RRF `k=60` 保留 Top 20，再交给 Rerank 输出 Top 8。Embedding 在相似度计算前执行 module、intent、source type、visibility、status、quality 和 legacy 过滤；restricted 文本不会进入远程 embedding build。
+
 BM25 and embedding recall are sibling strategies under `src/retrieval/recall/`. Adding or removing a recall route should require a new `retrieval/recall/<strategy>/` implementation and registry change, not runtime or gateway edits. Rerank runs only after fused candidates exist and is optional: missing credentials, disabled config, or safe provider failure returns the fused ordering and records trace status.
+
+BM25/Embedding 命中必须在 retrieval adapter 边界回填 canonical parent 的 freshness、quality、source document、source block、section path 和 answer span。缺失字段保持未知，不允许使用 1970 时间、伪 `active` 或伪质量状态补洞。运行时通过内部 `{ evidencePack, trace }` 信封消费检索结果；旧 Evidence-Pack-only 调用保持兼容，公共 HTTP response 不增加 trace。
+
+Evidence Judge 采用 fail-closed 直答门禁：证据必须为 active、fresh、质量 `ok|info`、来源与区块/章节溯源完整、存在答案片段、模块匹配且无风险/冲突。Rerank 运行时要求 top score 至少 `0.70`；Rerank 不可用时，只允许“问题包含完整标题 + 至少两个非泛化多字符词”的词法回退。BM25、向量相似度和 RRF 分数本身不能授权直答。
 
 Current provider and retrieval commands:
 
@@ -292,6 +307,8 @@ node dist/cli.js rerank test --enable --provider siliconflow --model BAAI/bge-re
 node dist/cli.js knowledge vector build --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
 node dist/cli.js retrieval search --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --query "课程发布后为什么学员端看不到"
 node dist/cli.js retrieval debug --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --query "课程发布后为什么学员端看不到"
+node dist/cli.js retrieval eval --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root --questions /path/to/runtime-eval.json --report /path/to/retrieval-eval-report.json
+node dist/cli.js knowledge migration-report --workspace /path/to/workspace --knowledge-root /path/to/knowledge-root
 ```
 
 The settings drawer exposes the same checks through `测试 Embedding` and `测试 Rerank`. Gateway routes remain body/status/serialization endpoints; `src/settings/service.ts` owns settings merge, SecretRef application, public settings mapping, model smoke tests, embedding smoke tests, and rerank smoke tests.
@@ -375,9 +392,10 @@ super-helper knowledge vector build --workspace /path/to/workspace --knowledge-r
 super-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 super-helper retrieval search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 super-helper retrieval debug --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
+super-helper retrieval eval --workspace /path/to/workspace --questions /path/to/runtime-eval.json --report /path/to/retrieval-eval-report.json
 ```
 
-`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. `knowledge search` remains a compatibility local search command; `retrieval search/debug` exercises the retrieval service boundary and can show retrieval trace details. Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime asks `src/retrieval/` for evidence from the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
+`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. `knowledge search` remains a compatibility local search command; `retrieval search/debug` exercises the retrieval service boundary and can show retrieval trace details. `retrieval eval` 复用生产 Router、configured retrieval 与 Evidence Judge，并以 Recall@5、MRR、直答精度、拒答准确率和必须升级准确率作为门禁；默认 provider 关闭，因此不会发起付费网络请求。Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime asks `src/retrieval/` for evidence from the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
 
 The browser health panel can operate the same service-scoped knowledge workspace through gateway endpoints:
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseSimpleYaml } from './frontmatter.js';
-import { keywordsFromQuery } from './indexer.js';
+import { extractKnowledgeTerms } from './documents/terms.js';
 import { knowledgeRoot } from './paths.js';
 import type { KnowledgeRoute, KnowledgeSourceType } from './types.js';
 
@@ -42,7 +42,7 @@ export function loadKnowledgeTaxonomy(workspaceRoot: string): KnowledgeTaxonomy 
 export function routeKnowledgeQuestion(input: { workspaceRoot: string; question: string }): KnowledgeRoute {
   const taxonomy = loadKnowledgeTaxonomy(input.workspaceRoot);
   const normalizedQuestion = normalize(input.question);
-  const baseKeywords = keywordsFromQuery(input.question);
+  const baseKeywords = extractKnowledgeTerms(input.question);
   const moduleCandidates = new Set<string>();
   const intentCandidates = new Set<string>();
   const sourceTypes = new Set<KnowledgeSourceType>();
@@ -53,7 +53,7 @@ export function routeKnowledgeQuestion(input: { workspaceRoot: string; question:
         moduleCandidates.add(alias.module);
       }
       if (alias.term) {
-        for (const keyword of keywordsFromQuery(alias.term)) {
+        for (const keyword of extractKnowledgeTerms(alias.term)) {
           baseKeywords.push(keyword);
         }
       }
@@ -96,6 +96,18 @@ export function routeKnowledgeQuestion(input: { workspaceRoot: string; question:
     sourceTypes: Array.from(sourceTypes.size ? sourceTypes : defaultSourceTypes),
     codeEscalationSignals,
     risks,
+  };
+}
+
+export function validateKnowledgeTaxonomyCoverage(input: {
+  workspaceRoot: string;
+  modules: string[];
+}): { knownModules: string[]; unknownModules: string[] } {
+  const known = new Set(loadKnowledgeTaxonomy(input.workspaceRoot).modules.map((module) => module.id));
+  const modules = Array.from(new Set(input.modules)).sort();
+  return {
+    knownModules: modules.filter((module) => known.has(module)),
+    unknownModules: modules.filter((module) => !known.has(module)),
   };
 }
 

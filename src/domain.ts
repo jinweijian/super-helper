@@ -115,6 +115,7 @@ export interface DiagnosticRequestContext {
   isFollowUp: boolean;
   currentUserMessage: string;
   recentMessages: Array<{
+    id?: string;
     role: CaseMessage['role'];
     body: string;
     createdAt: string;
@@ -127,6 +128,15 @@ export interface DiagnosticRequestContext {
     missingInfo: string[];
     evidence: Evidence[];
     claims: DiagnosticClaim[];
+  }>;
+  resolvedTurn?: ResolvedTurnContext;
+  experienceCandidates?: Array<{
+    sourceCaseId: string;
+    sourceMessageId: string;
+    sourceReplyId?: string;
+    sourceRunId?: string;
+    score: number;
+    rejectionReason: string;
   }>;
   knowledge?: {
     route?: {
@@ -141,11 +151,26 @@ export interface DiagnosticRequestContext {
     evidence: Array<{
       id: string;
       source: string;
+      sourceDocument?: string;
+      sourceDocumentId?: string;
+      sourceBlockIds?: string[];
+      sectionPath?: string[];
       title: string;
       summary: string;
+      answerSpan?: string;
       confidence: 'low' | 'medium' | 'high';
       status: string;
       matchedTerms: string[];
+      quality?: { severity: 'ok' | 'info' | 'warn' | 'error'; issues: string[] };
+      retrieval?: {
+        source: 'keyword' | 'vector' | 'hybrid' | 'rerank';
+        keywordScore?: number;
+        vectorScore?: number;
+        rerankScore?: number;
+        fieldContributions?: Record<string, number>;
+      };
+      groundingIssues?: string[];
+      taxonomyKnown?: boolean;
     }>;
     judge: {
       answerable: boolean;
@@ -175,6 +200,23 @@ export interface DiagnosticRequestContext {
     stopReason?: 'max_attempts' | 'sufficient_evidence' | 'needs_user' | 'human_escalation';
     previousArtifactTargets?: string[];
   };
+}
+
+export interface ResolvedTurnStatement {
+  text: string;
+  sourceMessageId: string;
+}
+
+export interface ResolvedTurnContext {
+  resolvedQuery: string;
+  latestUserMessage: string;
+  latestUserMessageId?: string;
+  confirmedFacts: ResolvedTurnStatement[];
+  userClaims: ResolvedTurnStatement[];
+  hypotheses: ResolvedTurnStatement[];
+  unknowns: ResolvedTurnStatement[];
+  isFollowUp: boolean;
+  sourceMessageIds: string[];
 }
 
 export interface DiagnosticRun {
@@ -223,9 +265,16 @@ export interface Evidence {
   source: string;
   summary: string;
   confidence: 'low' | 'medium' | 'high';
+  validation?: {
+    status?: 'active' | 'inactive' | 'deprecated' | 'review_required';
+    visibility?: 'customer_safe' | 'internal' | 'support' | 'restricted';
+    lastVerifiedAt?: string;
+    quality?: 'ok' | 'info' | 'warn' | 'error';
+  };
 }
 
 export interface DiagnosticClaim {
+  id?: string;
   type: ClaimType;
   text: string;
   evidenceIds: string[];

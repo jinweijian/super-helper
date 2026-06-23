@@ -4,6 +4,7 @@ import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
 import { buildKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/index.js';
 import type { StoredCase } from '../storage.js';
+import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 
 export type {
   ClaudeSettingsInput,
@@ -78,7 +79,10 @@ export function serializeSession(
   return {
     ...sessionSummary(caseSession, config),
     messages: caseSession.messages,
-    runs: caseSession.runs,
+    runs: caseSession.runs.map((run) => ({
+      ...run,
+      workerTrace: run.workerTrace ? sanitizeWorkerTrace(run.workerTrace) : undefined,
+    })),
     knowledgeHealth: buildKnowledgeHealthSummary({
       config,
       workspaceId: caseSession.workspaceId,

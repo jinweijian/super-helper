@@ -376,6 +376,62 @@ test('siliconflow rerank provider maps document ids without leaking request text
   assert.doesNotMatch(JSON.stringify(result), /登录失败排查步骤|sk-rerank-secret/);
 });
 
+test('siliconflow adapters normalize timeout, rate limit, server, malformed, and bad-index failures', async () => {
+  const abortingFetch = async (_url, init) => new Promise((_, reject) => {
+    init.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+  });
+  const embeddingTimeout = createEmbeddingProvider({
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'Qwen/Qwen3-Embedding-0.6B',
+    apiKey: 'sk-timeout-secret',
+    dimensions: 4,
+    distance: 'cosine',
+    timeoutMs: 1,
+  }, { fetch: abortingFetch });
+  await assert.rejects(
+    () => embeddingTimeout.embedQuery({ text: 'timeout' }),
+    (error) => error.code === 'timeout' && !String(error.safeMessage).includes('sk-timeout-secret'),
+  );
+
+  const rerankConfig = {
+    enabled: true,
+    provider: 'siliconflow',
+    model: 'BAAI/bge-reranker-v2-m3',
+    apiKey: 'sk-rerank-secret',
+    topN: 2,
+  };
+  const request = {
+    query: '登录失败',
+    documents: [{ id: 'doc_a', text: '登录排查' }],
+  };
+  const missing = createRerankProvider({ ...rerankConfig, apiKey: undefined });
+  await assert.rejects(() => missing.rerank(request), (error) => error.code === 'missing_credentials');
+
+  for (const [status, code, retryable] of [[429, 'rate_limited', true], [503, 'provider_error', true]]) {
+    const provider = createRerankProvider(rerankConfig, {
+      fetch: async () => new Response('Authorization: Bearer sk-rerank-secret failed', { status }),
+    });
+    await assert.rejects(
+      () => provider.rerank(request),
+      (error) => error.code === code && error.retryable === retryable && !String(error.safeMessage).includes('sk-rerank-secret'),
+    );
+  }
+
+  const malformed = createRerankProvider(rerankConfig, {
+    fetch: async () => new Response(JSON.stringify({ results: [{}] }), { status: 200 }),
+  });
+  await assert.rejects(() => malformed.rerank(request), (error) => error.code === 'malformed_response');
+
+  const badIndex = createRerankProvider(rerankConfig, {
+    fetch: async () => new Response(JSON.stringify({ results: [{ index: 9, relevance_score: 0.9 }] }), { status: 200 }),
+  });
+  await assert.rejects(() => badIndex.rerank(request), (error) => error.code === 'malformed_response');
+
+  const rerankTimeout = createRerankProvider({ ...rerankConfig, timeoutMs: 1 }, { fetch: abortingFetch });
+  await assert.rejects(() => rerankTimeout.rerank(request), (error) => error.code === 'timeout');
+});
+
 test('minimax provider is docs-gated and does not guess network calls', async () => {
   let fetchCalled = false;
   const provider = createEmbeddingProvider({

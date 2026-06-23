@@ -4,30 +4,21 @@ import type { StoredCase } from '../storage.js';
 export type AgentDecision = 'ask_user' | 'dispatched' | 'final' | 'partial' | 'escalate';
 
 export function decisionFromReviewOutcome(
-  outcome: 'ask_user' | 'partial' | 'final_answer' | 'escalate_to_human' | undefined,
+  _outcome: 'ask_user' | 'partial' | 'final_answer' | 'escalate_to_human' | undefined,
   result: DiagnosticResult,
 ): AgentDecision {
-  if (outcome === 'ask_user') {
-    return 'ask_user';
-  }
-  if (outcome === 'final_answer') {
-    return 'final';
-  }
-  if (outcome === 'escalate_to_human') {
-    return 'escalate';
-  }
-  if (outcome === 'partial') {
-    return 'partial';
-  }
-  return result.recommendedNextAction === 'final_answer' || result.status === 'concluded' ? 'final' : 'partial';
+  return decisionFromDiagnosticResult(result);
 }
 
 export function decisionFromDiagnosticResult(result: DiagnosticResult): AgentDecision {
-  if (result.recommendedNextAction === 'final_answer' || result.status === 'concluded') {
-    return 'final';
+  if (result.recommendedNextAction === 'ask_user' || result.status === 'need_input') {
+    return 'ask_user';
   }
   if (result.recommendedNextAction === 'escalate_to_human') {
     return 'escalate';
+  }
+  if (result.recommendedNextAction === 'final_answer' || result.status === 'concluded') {
+    return 'final';
   }
   return 'partial';
 }

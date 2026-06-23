@@ -1,11 +1,14 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { AgentModelClient } from '../model.js';
 import type { PreflightDecision } from '../preflight.js';
+import { isSafetyPermissionDecision } from '../preflight.js';
+import type { ResolvedTurnContext } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../storage.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from './preflight-gate.js';
 import { buildDiagnosticRequest } from './request-builder.js';
+import { reconcileResolvedTurnContext } from './resolved-turn.js';
 
 export class PreflightService {
   constructor(
@@ -29,6 +32,11 @@ export class PreflightService {
       caseSession,
       userMessage,
     });
+
+    if (isSafetyPermissionDecision(localDecision)) {
+      this.events.localPreflightResult(caseSession, localDecision);
+      return localDecision;
+    }
 
     if (this.config.agent.useModelForPreflight && this.config.agent.modelProvider) {
       try {
@@ -60,13 +68,13 @@ export class PreflightService {
 
 ${this.inputReviewAgentSpec}
 
-Experience Agent config is loaded separately and runs before this Preflight stage:
+Experience Agent config is loaded separately and runs only after this Preflight stage:
 ${this.experienceAgentSpec}
 
 Return JSON only. Use this shape:
 {"action":"ask_user","reason":"...","missingInfo":["..."],"question":"..."}
 or
-{"action":"dispatch","reason":"...","missingInfo":[]}
+{"action":"dispatch","reason":"...","missingInfo":[],"resolvedTurn":{"confirmedFacts":[],"userClaims":[],"hypotheses":[],"unknowns":[]}}
 
 Workspace-aware Preflight Rules:
 - The current workspace is already selected. Do not ask the user to prove which product, system, project, workspace, documentation, or codebase they mean when a current workspace exists.
@@ -105,6 +113,7 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
       reason?: string;
       missingInfo?: string[];
       question?: string;
+      resolvedTurn?: Partial<ResolvedTurnContext>;
     }>(response);
 
     this.events.modelPreflightResult(caseSession, response, parsed);
@@ -118,14 +127,23 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
     }
 
     if (parsed.action === 'dispatch') {
+      const request = buildDiagnosticRequest({
+        caseSession,
+        userMessage,
+        unknowns: parsed.missingInfo ?? [],
+        config: this.config,
+      });
+      const localResolved = request.context?.resolvedTurn;
+      if (localResolved) {
+        const reconciled = reconcileResolvedTurnContext({ local: localResolved, model: parsed.resolvedTurn });
+        request.context!.resolvedTurn = reconciled;
+        request.userGoal = reconciled.resolvedQuery;
+        request.knownFacts = reconciled.confirmedFacts.map((fact) => fact.text);
+        request.unknowns = Array.from(new Set([...request.unknowns, ...reconciled.unknowns.map((item) => item.text)]));
+      }
       return {
         action: 'dispatch',
-        request: buildDiagnosticRequest({
-          caseSession,
-          userMessage,
-          unknowns: parsed.missingInfo ?? [],
-          config: this.config,
-        }),
+        request,
       };
     }
 
@@ -144,6 +162,20 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
     ) {
       this.events.modelPreflightOverriddenByLocalDispatch(caseSession, modelDecision, localDecision);
       return localDecision;
+    }
+
+    if (modelDecision.action === 'dispatch' && localDecision.action === 'dispatch') {
+      const resolvedTurn = modelDecision.request.context?.resolvedTurn ?? localDecision.request.context?.resolvedTurn;
+      modelDecision.request.userGoal = resolvedTurn?.resolvedQuery ?? localDecision.request.userGoal;
+      modelDecision.request.knownFacts = resolvedTurn?.confirmedFacts.map((fact) => fact.text) ?? localDecision.request.knownFacts;
+      modelDecision.request.unknowns = Array.from(new Set([
+        ...localDecision.request.unknowns,
+        ...modelDecision.request.unknowns,
+      ]));
+      modelDecision.request.context = {
+        ...localDecision.request.context!,
+        resolvedTurn,
+      };
     }
 
     return modelDecision;

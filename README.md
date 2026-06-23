@@ -100,14 +100,20 @@ Onboarding 草稿、运行记录和可恢复进度位于：
 运行时知识检索使用多路召回流程：
 
 ```text
-BM25 召回 + Embedding 向量召回 + 兼容关键词召回
-  -> 候选融合与去重
-  -> 可选 Rerank 重排序
-  -> Evidence Judge 判断是否足够回答
+中文字段加权 BM25 Top 40 + Embedding 向量召回 Top 40
+  -> RRF(k=60) 融合并保留 Top 20
+  -> 可选 Rerank 输出 Top 8
+  -> child 命中按 canonical parent 去重并展开 bounded answer span
+  -> canonical parent 补齐质量、来源区块、章节、时效与答案片段
+  -> Evidence Judge 严格判断是否足够回答
   -> 不足时升级到 Claude Code 只读诊断
 ```
 
 召回编排位于 `src/retrieval/`。Embedding 和 Rerank 是同级 provider 能力，分别位于 `src/providers/embedding/` 和 `src/providers/rerank/`；旧 `src/embedding/` 仅保留兼容导出。当前真实 provider 是 SiliconFlow，同时保留 fake provider 便于测试。
+
+中文 BM25 使用业务词、中文 bigram 和 Latin token，不再用普通单字制造假命中，并按标题、章节、related terms、module/intent、正文进行 4/3/3/2/1 字段加权。知识索引使用 `parent-child-v2`：300–800 字 child 负责召回，Markdown parent 继续作为最终证据；旧 chunk 可读但不能伪装成直答合格证据。
+
+知识直答采用 fail-closed 门禁：只有 active、fresh、质量为 `ok|info`、来源/区块/章节溯源完整且有明确答案片段的证据才可能直答。Rerank 已运行时要求 top score 至少 `0.70`；未运行时只允许完整标题和至少两个非泛化多字符词的精确词法回退。缺失元数据不会用默认值伪装为安全证据。
 
 ## 高级 CLI
 
@@ -124,6 +130,7 @@ pnpm knowledge:slice -- --workspace /path/to/project --knowledge-root /path/to/k
 pnpm knowledge:audit -- --workspace /path/to/project --knowledge-root /path/to/knowledge
 pnpm knowledge:review -- --workspace /path/to/project --knowledge-root /path/to/knowledge --source-id <source-id> --action approve --reviewer <name>
 pnpm knowledge:publish -- --workspace /path/to/project --knowledge-root /path/to/knowledge --quality-gate warn
+node dist/cli.js knowledge migration-report --workspace /path/to/project --knowledge-root /path/to/knowledge
 ```
 
 使用 npm 时，把 `pnpm <script>` 换成 `npm run <script>` 即可，例如：
@@ -150,7 +157,15 @@ node dist/cli.js retrieval debug \
   --workspace /path/to/project \
   --knowledge-root /path/to/knowledge \
   --query "这里写你的问题"
+
+node dist/cli.js retrieval eval \
+  --workspace /path/to/project \
+  --knowledge-root /path/to/knowledge \
+  --questions /path/to/runtime-eval.json \
+  --report /path/to/retrieval-eval-report.json
 ```
+
+`retrieval eval` 走与运行时相同的 Router、configured retrieval 和 Evidence Judge，报告 Recall@5、MRR、直答精度、拒答和必须升级准确率。默认配置关闭 Embedding/Rerank，不会产生网络或付费调用；真实 SiliconFlow 只在显式启用并提供仓库外密钥时运行。
 
 模型连通性检查：
 
@@ -160,6 +175,15 @@ node dist/cli.js rerank test --enable --provider siliconflow --api-key-env SILIC
 ```
 
 真实密钥必须留在仓库外。不要把 `.key.yaml`、环境变量值、Authorization header 或任何明文 API key 写入 README、源码、测试、报告或提交产物。
+
+真实 SiliconFlow 验收必须显式执行，不能把 fake/offline 结果当作线上成功：
+
+1. 在 Dashboard 设置中选择 SiliconFlow，通过 SecretRef 或 `SILICONFLOW_API_KEY` 提供密钥，并分别点击“测试 Embedding”和“测试 Rerank”。
+2. 对当前知识工作区运行 `knowledge vector build`，确认 vector manifest 的 provider、model、dimensions、distance 与当前配置兼容。
+3. 运行 `embedding test`、`rerank test`，再运行 `retrieval eval --questions ... --report ...`。
+4. 检查报告的 Recall@5、MRR、直答精度、拒答准确率和必须升级准确率；报告不得包含密钥、Authorization、原始向量、provider 完整 payload 或完整文档正文。
+
+缺少凭证时应记录 `not run`，不要临时把真实验收改写成 fake 成功。
 
 ## 开发
 

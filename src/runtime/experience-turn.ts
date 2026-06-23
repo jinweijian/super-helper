@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { DiagnosticRun } from '../domain.js';
+import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../storage.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
-import { findExperienceMatch } from './experience-agent.js';
+import { findExperienceMatch, findRejectedExperienceCandidates } from './experience-agent.js';
 import { caseStatusFromDiagnosticResult } from './review-gate.js';
 import { ReviewPresentationService } from './review-presentation.js';
 
@@ -16,17 +16,32 @@ export class ExperienceTurnService {
 
   async answer(
     caseSession: StoredCase,
-    userMessage: string,
+    request: DiagnosticRequest,
     replyToMessageId?: string,
   ): Promise<RuntimeTurnResponse | undefined> {
-    this.events.experienceStarted(caseSession, userMessage);
+    this.events.experienceStarted(caseSession, request.userGoal);
     const match = findExperienceMatch({
       store: this.store,
       currentCase: caseSession,
-      userMessage,
+      userMessage: request.userGoal,
     });
 
     if (!match) {
+      const rejectedCandidates = findRejectedExperienceCandidates({
+        store: this.store,
+        currentCase: caseSession,
+        userMessage: request.userGoal,
+      });
+      if (rejectedCandidates.length > 0) {
+        request.context ??= {
+          isFollowUp: false,
+          currentUserMessage: request.userGoal,
+          recentMessages: [],
+          previousRuns: [],
+        };
+        request.context.experienceCandidates = rejectedCandidates;
+        this.events.experienceCandidatesRejected(caseSession, rejectedCandidates);
+      }
       this.events.experienceMiss(caseSession);
       return undefined;
     }
@@ -35,12 +50,14 @@ export class ExperienceTurnService {
       sourceCaseId: match.sourceCaseId,
       sourceMessageId: match.sourceMessageId,
       sourceReplyId: match.sourceReplyId,
+      sourceRunId: match.sourceRunId,
       score: match.score,
     });
     const run: DiagnosticRun = {
       id: `run_${randomUUID().slice(0, 8)}`,
       caseId: caseSession.id,
       status: match.result.status,
+      request,
       result: match.result,
     };
     this.store.addRun(caseSession, run);

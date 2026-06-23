@@ -16,6 +16,8 @@
 - `presentation.md`: 美化输出 / persona-aware presentation Agent。
 - `registry.json`: runtime stage 到 Agent 配置的配对表。
 
+`registry.json` 的可选 `executionMode` 用于说明阶段权威边界：`deterministic`、`model_assisted` 或 `presentation_only`。该字段会通过 `/api/agents` 只读暴露；既有字段保持兼容。
+
 ## Extension Rules
 
 新增 Agent 时：

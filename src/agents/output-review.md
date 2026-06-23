@@ -16,23 +16,25 @@ may_produce_user_facing_text: true
 - 当前 case 最近消息
 - 当前 `DiagnosticRequest`
 - 当前 `DiagnosticResult`
-- worker trace 或 history evidence
+- 已归因并通过当前范围复核的 history evidence
 - 主 Agent 不乱猜与证据约束
 
 ## Output Contract
 
-输出必须是结构化审核判断：
+确定性 validator / Review Gate 先输出冻结的结构化审核判断：
 
 - `ask_user`
 - `partial`
 - `final_answer`
 - `escalate_to_human`
 
-如输出用户可见草稿，必须保留证据、未知项和不确定性。
+模型无权返回或修改 outcome，也无权生成事实文本；可选模型阶段只能从已接受集合中选择 claim/evidence ID。
 
 ## Rules
 
 - 没有证据的 fact 必须视为 unsupported claim，并拒绝或降级。
+- evidence ID 必须唯一；claim 引用必须存在；fact 只能由 medium/high confidence evidence 支撑。
 - 不得将 plausible cause 写成最终结论。
 - 需要继续排查时，可以要求 runtime 追加一轮诊断。
 - 历史经验答案也必须审核，不能因为来自历史会话就直接当作事实。
+- worker command、cwd、stdout、stderr、stack、provider 原始 payload 和内部 prompt 只能进入脱敏且有界的诊断日志，不能进入主回复或模型 Presentation 输入。

@@ -1,50 +1,91 @@
 import { readKnowledgeChunks } from '../../../knowledge/indexes/chunks.js';
 import { readKnowledgeVectorRecords } from '../../../knowledge/indexes/vector-index.js';
+import { loadKnowledgeParentGrounding } from '../../../knowledge/documents/retrieval-grounding.js';
 import type { KnowledgeVectorRecord } from '../../../knowledge/types.js';
 import type { RetrievalCandidate } from '../../types.js';
+import type { RetrievalInput } from '../../types.js';
+import { createKnowledgeRetrievalCandidate } from '../knowledge-candidate.js';
 
 export function searchVectorArtifacts(input: {
   workspaceRoot: string;
   queryVector: number[];
   limit: number;
 }): RetrievalCandidate[] {
+  return searchVectorArtifactsWithFilters(input).candidates;
+}
+
+export function searchVectorArtifactsWithFilters(input: {
+  workspaceRoot: string;
+  queryVector: number[];
+  limit: number;
+  moduleCandidates?: RetrievalInput['moduleCandidates'];
+  intentCandidates?: RetrievalInput['intentCandidates'];
+  sourceTypes?: RetrievalInput['sourceTypes'];
+  visibility?: RetrievalInput['visibility'];
+}): { candidates: RetrievalCandidate[]; filteredOut: Array<{ reason: string; count: number }> } {
   const loadedVectors = readKnowledgeVectorRecords(input.workspaceRoot);
   const loadedChunks = readKnowledgeChunks(input.workspaceRoot);
   const chunkById = new Map(loadedChunks.chunks.map((chunk) => [chunk.chunk_id, chunk]));
+  const parents = loadKnowledgeParentGrounding(input.workspaceRoot);
+  const filtered = new Map<string, number>();
 
-  return loadedVectors.records
+  const candidates = loadedVectors.records
     .map((record): RetrievalCandidate | undefined => {
       const chunk = chunkById.get(record.chunk_id);
-      if (!chunk || chunk.status !== 'active') {
+      if (!chunk) {
+        increment(filtered, 'missing_chunk');
+        return undefined;
+      }
+      const parent = parents.get(chunk.parent_id) ?? parents.get(chunk.source);
+      const frontmatter = parent?.document.frontmatter;
+      const status = frontmatter?.status ?? chunk.status;
+      const visibility = frontmatter?.visibility ?? chunk.visibility ?? 'internal';
+      const module = frontmatter?.module ?? chunk.module;
+      const intent = frontmatter?.intent ?? chunk.intent;
+      const sourceType = frontmatter?.source_type ?? chunk.source_type;
+      const quality = parent?.quality?.severity ?? chunk.quality_status;
+      const reason = status !== 'active'
+        ? `status_${status}`
+        : visibility === 'restricted'
+          ? 'restricted_visibility'
+          : input.moduleCandidates?.length && !input.moduleCandidates.includes(module)
+            ? 'module_filter'
+            : input.intentCandidates?.length && !input.intentCandidates.includes(intent)
+              ? 'intent_filter'
+              : input.sourceTypes?.length && !input.sourceTypes.includes(sourceType)
+                ? 'source_type_filter'
+                : input.visibility?.length && !input.visibility.includes(visibility)
+                  ? 'visibility_filter'
+                  : quality !== 'ok' && quality !== 'info'
+                    ? `quality_${quality ?? 'unknown'}`
+                    : chunk.legacy
+                      ? 'legacy_chunk'
+                      : undefined;
+      if (reason) {
+        increment(filtered, reason);
         return undefined;
       }
       const score = vectorSimilarity(input.queryVector, record);
       if (score <= 0) {
         return undefined;
       }
-      return {
-        id: chunk.chunk_id,
-        chunkId: chunk.chunk_id,
-        documentId: chunk.parent_id,
-        parentId: chunk.parent_id,
-        source: chunk.source,
-        title: chunk.headings[0],
-        module: chunk.module,
-        intent: chunk.intent,
-        sourceType: chunk.source_type,
-        confidence: chunk.confidence,
-        status: chunk.status,
-        visibility: chunk.visibility ?? 'internal',
-        matchedTerms: [],
-        summary: chunk.headings[0] ?? chunk.source,
-        excerpt: chunk.text.slice(0, 500),
-        text: chunk.text,
+      return createKnowledgeRetrievalCandidate({
+        chunk,
+        parent,
         score: Number(score.toFixed(8)),
-      };
+      });
     })
     .filter((item): item is RetrievalCandidate => item !== undefined)
     .sort((left, right) => right.score - left.score)
     .slice(0, input.limit);
+  return {
+    candidates,
+    filteredOut: Array.from(filtered.entries()).map(([reason, count]) => ({ reason, count })),
+  };
+}
+
+function increment(target: Map<string, number>, reason: string): void {
+  target.set(reason, (target.get(reason) ?? 0) + 1);
 }
 
 function vectorSimilarity(queryVector: number[], record: KnowledgeVectorRecord): number {

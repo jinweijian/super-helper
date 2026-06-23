@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { chunksPath } from '../paths.js';
 import type { KnowledgeChunk } from '../types.js';
+import { markLegacyChunk } from '../documents/chunks.js';
 
 export interface ReadKnowledgeChunksResult {
   chunks: KnowledgeChunk[];
@@ -23,7 +24,7 @@ export function readKnowledgeChunks(workspaceRoot: string): ReadKnowledgeChunksR
         return;
       }
       try {
-        chunks.push(JSON.parse(trimmed) as KnowledgeChunk);
+        chunks.push(markLegacyChunk(JSON.parse(trimmed) as KnowledgeChunk));
       } catch (error) {
         failures.push({ line: index + 1, error: error instanceof Error ? error.message : String(error) });
       }

@@ -12,6 +12,7 @@ import type {
   KnowledgeVectorManifest,
   KnowledgeVectorRecord,
 } from './types.js';
+import { markLegacyChunk } from './documents/chunks.js';
 
 export type KnowledgeEmbeddingDocumentInput = EmbeddingDocumentContract;
 export type KnowledgeEmbeddingProviderLike = EmbeddingDocumentPort;
@@ -59,7 +60,7 @@ export function loadKnowledgeChunksForEmbedding(workspaceRoot: string): LoadKnow
         return;
       }
       try {
-        chunks.push(JSON.parse(trimmed) as KnowledgeChunk);
+        chunks.push(markLegacyChunk(JSON.parse(trimmed) as KnowledgeChunk));
       } catch (error) {
         failures.push({ line: index + 1, error: formatEmbeddingSafeError(error) });
       }
@@ -71,7 +72,7 @@ export function chunkToEmbeddingDocumentInput(chunk: KnowledgeChunk): KnowledgeE
   return {
     id: chunk.chunk_id,
     text: chunk.text,
-    contentHash: hashEmbeddingText(chunk.text),
+    contentHash: chunk.text_hash ?? hashEmbeddingText(chunk.text),
     source: chunk.source,
     documentId: chunk.parent_id,
     chunkId: chunk.chunk_id,
@@ -93,6 +94,12 @@ export function isChunkEligibleForRemoteEmbedding(chunk: KnowledgeChunk): { elig
   }
   if (chunk.status !== 'active') {
     return { eligible: false, reason: `status_${chunk.status}` };
+  }
+  if (chunk.legacy || chunk.artifact_version !== 2) {
+    return { eligible: false, reason: 'legacy_chunk' };
+  }
+  if (chunk.quality_status !== 'ok') {
+    return { eligible: false, reason: `quality_${chunk.quality_status ?? 'unknown'}` };
   }
   if (!chunk.text.trim()) {
     return { eligible: false, reason: 'empty_text' };
@@ -262,7 +269,15 @@ export function checkKnowledgeVectorCompatibility(input: {
 
 function sourceChunkManifestHash(chunks: KnowledgeChunk[]): string {
   const payload = chunks
-    .map((chunk) => ({ chunk_id: chunk.chunk_id, text_hash: hashEmbeddingText(chunk.text ?? '') }))
+    .map((chunk) => ({
+      chunk_id: chunk.chunk_id,
+      parent_id: chunk.parent_id,
+      child_order: chunk.child_order,
+      text_hash: chunk.text_hash ?? hashEmbeddingText(chunk.text ?? ''),
+      source_block_ids: chunk.source_block_ids ?? [],
+      section_path: chunk.section_path ?? [],
+      chunking_strategy: chunk.chunking_strategy,
+    }))
     .sort((a, b) => a.chunk_id.localeCompare(b.chunk_id));
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }

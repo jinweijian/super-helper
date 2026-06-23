@@ -27,7 +27,7 @@ Claude Code is a tool. It must not directly reply to the user in the MVP.
 
 ## Preflight Gate
 
-Every user message first goes through a `Preflight Gate`.
+Every user message first gets a runtime-owned `ResolvedTurnContext`, then goes through a `Preflight Gate`.
 
 Concrete implementation:
 
@@ -35,6 +35,7 @@ Concrete implementation:
 - `src/runtime/agent-configs.ts` resolves the `input-review` Agent config from `src/agents/registry.json`.
 - `src/runtime/preflight-gate.ts` owns deterministic local preflight decisions and model/local reconciliation helpers.
 - Model preflight is optional. If it fails, the runtime records the failure and falls back to local rules.
+- The local builder owns `resolvedQuery` and source message identity. A model may downgrade local facts but cannot promote hypotheses/unknowns or replace the resolved query.
 
 The Agent decides whether the message is enough to create a meaningful diagnosis task.
 
@@ -60,14 +61,14 @@ If the input is sufficient:
 
 ## Experience Agent
 
-The `experience` Agent runs after input receipt and before Claude Code dispatch.
+The `experience` Agent runs after safety/permission/resolved-query Preflight and before knowledge/Claude Code dispatch.
 
 Concrete implementation:
 
 - `src/agents/experience.md` defines the Agent role and reuse rules.
-- `src/runtime/experience-agent.ts` searches prior readable case sessions for the same or substantially same question.
+- `src/runtime/experience-agent.ts` searches only the same tenant/user/workspace, requires exact reply-to/source-run attribution, and revalidates visibility/status/freshness/quality/current review constraints.
 - Reused answers become `history` evidence and still pass through Output Review and Presentation.
-- If no safe match exists, the runtime continues through Preflight Gate and normal worker diagnosis.
+- If no safe match exists, the runtime continues through knowledge and normal worker diagnosis.
 
 ## Knowledge-First Skeleton
 
@@ -79,6 +80,8 @@ Implemented local commands:
 - `super-helper knowledge update --workspace <project-path> [--knowledge-root <path>]` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from formal published Markdown parent slices.
 - `super-helper knowledge search --workspace <project-path> --query <question> [--knowledge-root <path>]` remains a compatibility local search command that attaches optional quality metadata and expands chunk hits back to parent slice evidence.
 - `super-helper retrieval search|debug --workspace <project-path> --query <question> [--knowledge-root <path>]` exercises the retrieval service boundary for BM25/embedding/keyword recall, fusion, optional rerank, and trace inspection.
+- `super-helper retrieval eval --workspace <project-path> --questions <json> [--knowledge-root <path>] [--report <json>]` 复用生产 Router、configured retrieval 和 Evidence Judge，验证 Recall@5、MRR、直答精度、拒答与必须升级行为。
+- `super-helper knowledge migration-report` 只读盘点 legacy parent/chunk、生成 `ai-companion -> edusoho-training` 分批状态和人工 review queue；它不会自动迁移或批准语料。
 - `super-helper knowledge extract` / `normalize` / `slice` / `audit` / `repair` / `review` / `publish` / `eval` run individual pipeline stages and write their own artifacts under `knowledge/_pipeline/` and `knowledge/reports/`.
 - `super-helper accept knowledge` (alias `pnpm accept:knowledge`) runs a repeatable local acceptance check and writes a redacted acceptance report.
 
@@ -87,6 +90,10 @@ Runtime behavior:
 - `--workspace` and runtime workspace selection point to the project/service directory used for code and MCP inspection.
 - Knowledge files are stored under the configured knowledge root, isolated by the same workspace key strategy used for session storage; they are not created inside the project code directory by default.
 - After an Experience miss, runtime calls `src/retrieval/` against the resolved knowledge workspace. Answerable knowledge evidence still passes Evidence Judge, Output Review, and Presentation; insufficient evidence is attached to `DiagnosticRequest.context.deepQuery` and triggers bounded Deep Query retry / pivot before code escalation.
+- Retrieval 先用 canonical parent 回填 freshness、quality、source block/section provenance 和 answer span。Evidence Judge 采用严格门禁：只有 active、fresh、`ok|info`、溯源完整、答案片段明确且检索置信条件达标的证据可直答；缺失、`warn|error`、过期、冲突、风险或实现细节均升级只读调查。
+- Rerank top score 必须至少为 `0.70`；未运行 Rerank 时，仅允许完整标题命中且至少两个非泛化多字符词匹配。BM25、向量和 RRF 原始分数不构成直答授权。
+- Runtime 使用 `parent-child-v2` child 召回、parent 去重和 bounded answer span。Hybrid 固定执行 BM25/Embedding Top 40、RRF Top 20、Rerank Top 8；Embedding 的权限、质量和 legacy 过滤发生在相似度排序之前。
+- Taxonomy 必须登记已发布 module。默认模板包含 `ai-companion`、`edusoho-training` 及常用别名；未知 module 会进入 index warning，依赖该 module 的直答必须阻断。
 - Knowledge Router, Retrieval Service handoff, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are wired into the current knowledge-first runtime path.
 - Solved case drafts are written with `status: review_required` and require explicit approval before becoming `active` knowledge.
 
@@ -111,6 +118,7 @@ Concrete implementation:
 - `src/runtime/request-builder.ts` builds first-run and follow-up `DiagnosticRequest` objects.
 - `src/sessions/context-builder.ts` attaches recent messages and prior run evidence under `DiagnosticRequest.context`.
 - `src/domain.ts` defines the request, context, evidence, claim, run, and case session types.
+- `src/runtime/resolved-turn.ts` derives one bounded effective query plus source-bound facts, user claims, hypotheses, and unknowns. Raw chat remains unchanged in the case.
 
 ```json
 {
@@ -176,7 +184,7 @@ Claude Code 不直接回复用户. The Agent reviews this output first.
 
 ## Agent Review Step
 
-After a worker run completes, the Agent checks:
+After a worker run completes, a deterministic validator and Review Gate check:
 
 - Does every conclusion have evidence?
 - Are assumptions clearly labeled?
@@ -185,16 +193,19 @@ After a worker run completes, the Agent checks:
 - Should the user be asked a question before continuing?
 - Should the case be escalated to a human?
 
-Only after this review can the Agent write a user-facing answer.
+Only after this review can Presentation select accepted IDs and the runtime render a user-facing answer. Presentation cannot promote a partial result or author new factual text.
 
 Concrete implementation:
 
-- `src/runtime/review-gate.ts` maps worker result status and model review outcomes into case status and user-facing decisions.
+- `src/runtime/result-validator.ts` rejects invalid evidence references and unsupported facts and records observable validation issues.
+- `src/runtime/review-gate.ts` maps the validated result into a frozen case status and user-facing decision; model output cannot promote it.
 - `src/runtime/agent-configs.ts` resolves the `output-review` Agent config for model review prompts.
 - `src/runtime/presenter.ts` formats preflight questions and persona-aware final replies without inventing unsupported facts.
 - `src/agents/presentation.md` defines presentation constraints; the presentation step must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
 - `src/agent.ts` remains a thin compatibility facade; new orchestration lives in `src/runtime/diagnostic-runtime.ts`.
+
+Worker command, cwd, stdout, stderr, stack, raw provider payload, and internal prompt data are diagnostic-log-only. Logs remain bounded and redacted. If a worker fails before usable evidence exists, the main reply contains only a safe failure category, current diagnosis state, next action, and case/run identity.
 
 ## Initial Built-In Agent Configuration
 

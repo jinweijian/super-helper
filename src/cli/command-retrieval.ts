@@ -1,24 +1,46 @@
-import { defaultConfig, ensureConfig } from '../config.js';
+import { defaultConfig, ensureConfig, type SuperHelperConfig } from '../config.js';
 import { resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
 import {
   createBm25RecallStrategy,
   createRetrievalService,
 } from '../retrieval/index.js';
+import {
+  loadRuntimeRetrievalEvaluationQuestions,
+  runRuntimeRetrievalEvaluation,
+} from '../runtime/retrieval-evaluation.js';
 import { readNumberOption, readOption } from './args.js';
 
 export async function runRetrievalCommand(argv: string[]): Promise<void> {
   const subcommand = argv[0];
-  if (subcommand !== 'search' && subcommand !== 'debug') {
-    console.error('Usage: super-helper retrieval <search|debug> --query <question> [--workspace <path>] [--knowledge-root <path>] [--limit <n>]');
+  if (subcommand !== 'search' && subcommand !== 'debug' && subcommand !== 'eval') {
+    printUsage();
     process.exit(1);
+  }
+  const context = resolveRetrievalContext(argv);
+  if (subcommand === 'eval') {
+    const questionsPath = readOption(argv, '--questions');
+    if (!questionsPath) {
+      printUsage();
+      process.exit(1);
+    }
+    const report = await runRuntimeRetrievalEvaluation({
+      config: context.config,
+      workspaceRoot: context.knowledgeWorkspaceRoot,
+      questions: loadRuntimeRetrievalEvaluationQuestions(questionsPath),
+      reportPath: readOption(argv, '--report'),
+    });
+    console.log(JSON.stringify(report, null, 2));
+    if (!report.passed) {
+      process.exit(1);
+    }
+    return;
   }
   const query = readOption(argv, '--query') ?? argv[1];
   if (!query) {
-    console.error('Usage: super-helper retrieval <search|debug> --query <question> [--workspace <path>] [--knowledge-root <path>] [--limit <n>]');
+    printUsage();
     process.exit(1);
   }
 
-  const context = resolveRetrievalContext(argv);
   const service = createRetrievalService({
     strategies: [createBm25RecallStrategy()],
   });
@@ -39,6 +61,7 @@ export async function runRetrievalCommand(argv: string[]): Promise<void> {
         score: candidate.score,
         finalScore: candidate.finalScore,
         strategyScores: candidate.strategyScores,
+        bm25FieldContributions: candidate.metadata?.bm25FieldContributions,
       })),
     }, null, 2));
     return;
@@ -48,6 +71,7 @@ export async function runRetrievalCommand(argv: string[]): Promise<void> {
 }
 
 function resolveRetrievalContext(argv: string[]): {
+  config: SuperHelperConfig;
   projectWorkspaceRoot: string;
   knowledgeWorkspaceRoot: string;
 } {
@@ -70,7 +94,13 @@ function resolveRetrievalContext(argv: string[]): {
   }
 
   return {
+    config,
     projectWorkspaceRoot: config.workspaces[0]?.rootPath ?? process.cwd(),
     knowledgeWorkspaceRoot: resolveKnowledgeWorkspaceRoot(config, config.workspaces[0]?.id),
   };
+}
+
+function printUsage(): void {
+  console.error('Usage: super-helper retrieval <search|debug> --query <question> [--workspace <path>] [--knowledge-root <path>] [--limit <n>]');
+  console.error('       super-helper retrieval eval --questions <json> [--report <json>] [--workspace <path>] [--knowledge-root <path>]');
 }

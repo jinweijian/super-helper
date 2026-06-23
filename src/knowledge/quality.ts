@@ -498,7 +498,14 @@ function auditChunks(documents: KnowledgeDocument[], workspaceRoot: string, issu
   let parsedChunkCount = 0;
   for (const line of lines) {
     try {
-      const chunk = JSON.parse(line) as { chunk_id: string; parent_id: string };
+      const chunk = JSON.parse(line) as {
+        chunk_id: string;
+        parent_id: string;
+        artifact_version?: number;
+        source_block_ids?: string[];
+        section_path?: string[];
+        manual_split_required?: boolean;
+      };
       parsedChunkCount += 1;
       parentIdsWithChunks.add(chunk.parent_id);
       if (!knownIds.has(chunk.parent_id)) {
@@ -506,6 +513,33 @@ function auditChunks(documents: KnowledgeDocument[], workspaceRoot: string, issu
           code: 'orphan_chunk',
           severity: 'error',
           message: `Chunk ${chunk.chunk_id} references unknown parent_id ${chunk.parent_id}.`,
+          chunkId: chunk.chunk_id,
+        });
+      }
+      if (chunk.artifact_version === 2 && !chunk.source_block_ids?.length) {
+        issues.push({
+          code: 'missing_source_block_ids',
+          severity: 'error',
+          message: `V2 chunk ${chunk.chunk_id} has no source_block_ids.`,
+          documentId: chunk.parent_id,
+          chunkId: chunk.chunk_id,
+        });
+      }
+      if (chunk.artifact_version === 2 && !chunk.section_path?.length) {
+        issues.push({
+          code: 'missing_section_path',
+          severity: 'error',
+          message: `V2 chunk ${chunk.chunk_id} has no section_path.`,
+          documentId: chunk.parent_id,
+          chunkId: chunk.chunk_id,
+        });
+      }
+      if (chunk.manual_split_required) {
+        issues.push({
+          code: 'too_long',
+          severity: 'warn',
+          message: `Chunk ${chunk.chunk_id} preserves an oversized indivisible block and requires manual split.`,
+          documentId: chunk.parent_id,
           chunkId: chunk.chunk_id,
         });
       }

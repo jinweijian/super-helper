@@ -23,7 +23,16 @@ function tempWorkspace() {
 
 function writeChunks(indexes, chunks) {
   mkdirSync(indexes, { recursive: true });
-  writeFileSync(join(indexes, 'chunks.jsonl'), chunks.map((chunk) => JSON.stringify(chunk)).join('\n') + '\n', 'utf8');
+  writeFileSync(join(indexes, 'chunks.jsonl'), chunks.map((chunk, index) => JSON.stringify({
+    artifact_version: 2,
+    chunking_strategy: 'parent-child-v2',
+    legacy: false,
+    child_order: index + 1,
+    source_block_ids: [`blk_${index + 1}`],
+    section_path: ['测试'],
+    quality_status: 'ok',
+    ...chunk,
+  })).join('\n') + '\n', 'utf8');
 }
 
 test('vector builder reports completed eligible batches', async () => {

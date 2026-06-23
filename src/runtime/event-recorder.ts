@@ -12,7 +12,12 @@ import type { PreflightDecision } from '../preflight.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
 import type { StoredCase } from '../storage.js';
 import type { EvidenceJudgeResult } from './evidence-judge.js';
+import type { RetrievalTrace } from '../retrieval/types.js';
 import type { RuntimeEventRecorder } from './ports.js';
+import type { ValidatedDiagnosticResult } from './result-validator.js';
+import { redactProviderErrorMessage } from '../providers/redaction.js';
+import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
+import { decisionFromDiagnosticResult } from './review-gate.js';
 
 export interface ModelPreflightParsed {
   action?: 'ask_user' | 'dispatch';
@@ -22,8 +27,8 @@ export interface ModelPreflightParsed {
 }
 
 export interface ModelReviewParsed {
-  outcome?: 'ask_user' | 'partial' | 'final_answer' | 'escalate_to_human';
-  reply?: string;
+  claimIds?: string[];
+  evidenceIds?: string[];
 }
 
 interface AgentIdentity {
@@ -266,11 +271,32 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       actor: 'agent',
       phase: 'model_review_result',
       label: '输出审核',
-      severity: parsed.outcome === 'final_answer' ? 'ok' : 'warn',
-      summary: 'Agent 模型完成证据审核与用户回复草拟',
+      severity: 'ok',
+      summary: 'Presentation 模型完成已审核 claim/evidence 排列',
       detail: {
-        raw,
+        raw: redactProviderErrorMessage(raw).slice(0, 2000),
         parsed,
+      },
+    });
+  }
+
+  evidenceValidationResult(
+    caseSession: StoredCase,
+    runId: string,
+    validation: ValidatedDiagnosticResult,
+  ): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.outputReview, {
+      actor: 'agent',
+      phase: 'evidence_validation_result',
+      label: '确定性审核',
+      severity: validation.issues.length > 0 ? 'warn' : 'ok',
+      summary: `确定性审核冻结结果：接受 ${validation.acceptedClaimIds.length} 条，拒绝 ${validation.rejectedClaimIds.length} 条`,
+      detail: {
+        runId,
+        frozenDecision: decisionFromDiagnosticResult(validation.result),
+        issues: validation.issues,
+        acceptedClaimIds: validation.acceptedClaimIds,
+        rejectedClaimIds: validation.rejectedClaimIds,
       },
     });
   }
@@ -343,9 +369,30 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     });
   }
 
+  experienceCandidatesRejected(
+    caseSession: StoredCase,
+    candidates: Array<{
+      sourceCaseId: string;
+      sourceMessageId: string;
+      sourceReplyId?: string;
+      sourceRunId?: string;
+      score: number;
+      rejectionReason: string;
+    }>,
+  ): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.experience, {
+      actor: 'agent',
+      phase: 'experience_candidates_rejected',
+      label: '经验',
+      severity: 'warn',
+      summary: `经验 Agent 记录 ${candidates.length} 个未通过当前复核的候选，继续本轮诊断`,
+      detail: { candidates },
+    });
+  }
+
   experienceHit(
     caseSession: StoredCase,
-    detail: { sourceCaseId: string; sourceMessageId: string; sourceReplyId: string; score: number },
+    detail: { sourceCaseId: string; sourceMessageId: string; sourceReplyId: string; sourceRunId: string; score: number },
   ): DiagnosticLogEvent {
     return this.recordAgent(caseSession, agentIdentities.experience, {
       actor: 'agent',
@@ -398,6 +445,17 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       severity: evidencePack.results.length ? 'ok' : 'warn',
       summary: `知识搜索完成，命中 ${evidencePack.results.length} 条证据`,
       detail: evidencePack,
+    });
+  }
+
+  knowledgeRetrievalTrace(caseSession: StoredCase, trace: RetrievalTrace): DiagnosticLogEvent {
+    return this.record(caseSession, {
+      actor: 'system',
+      phase: 'knowledge_retrieval_trace',
+      label: '检索轨迹',
+      severity: trace.strategies.some((strategy) => strategy.status === 'failed') ? 'warn' : 'ok',
+      summary: `检索策略 ${trace.strategies.length} 个，最终候选 ${trace.fusion.finalCandidateCount} 条`,
+      detail: trace,
     });
   }
 
@@ -583,31 +641,32 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
   }
 
   workerTrace(caseSession: StoredCase, trace: WorkerTrace): void {
+    const safeTrace = sanitizeWorkerTrace(trace);
     this.record(caseSession, {
       actor: 'claude',
       phase: 'command',
       label: '调用 CC',
-      severity: trace.error ? 'error' : 'ok',
+      severity: safeTrace.error ? 'error' : 'ok',
       summary: '实际调用 Claude Code 的命令',
       detail: {
-        command: trace.command,
-        cwd: trace.cwd,
-        startedAt: trace.startedAt,
-        finishedAt: trace.finishedAt,
+        command: safeTrace.command,
+        cwd: safeTrace.cwd,
+        startedAt: safeTrace.startedAt,
+        finishedAt: safeTrace.finishedAt,
       },
     });
     this.record(caseSession, {
       actor: 'claude',
       phase: 'raw_output',
       label: '调用 CC',
-      severity: rawOutputSeverity(trace),
+      severity: rawOutputSeverity(safeTrace),
       summary: 'Claude Code 返回的原始数据',
       detail: {
-        stdout: trace.stdout,
-        stderr: trace.stderr,
-        exitCode: trace.exitCode,
-        signal: trace.signal,
-        error: trace.error,
+        stdout: safeTrace.stdout,
+        stderr: safeTrace.stderr,
+        exitCode: safeTrace.exitCode,
+        signal: safeTrace.signal,
+        error: safeTrace.error,
       },
     });
   }

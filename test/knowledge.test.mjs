@@ -60,6 +60,13 @@ ${input.terms.map((term) => `  - ${term}`).join('\n')}
 related_repos: []
 last_verified_at: 2026-06-15
 owner: support
+source_document: knowledge/_sources/manual/test-faq.md
+source_document_id: src_test_faq
+source_block_ids:
+  - blk_${input.id}
+section_path:
+  - ${input.title}
+quality_status: ok
 ---
 
 # ${input.title}
@@ -214,7 +221,7 @@ chunking_strategy: semantic-section-v1
 
     const update = updateKnowledgeIndex({ workspaceRoot: workspace });
     assert.equal(update.documentCount, 1);
-    assert.equal(update.chunkCount, 1);
+    assert.equal(update.chunkCount, 2);
     assert.equal(existsSync(join(knowledgeRoot, 'indexes', 'dirty.flag')), false);
 
     const chunks = readFileSync(join(knowledgeRoot, 'indexes', 'chunks.jsonl'), 'utf8')

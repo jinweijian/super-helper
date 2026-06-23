@@ -1,12 +1,15 @@
 import type { DiagnosticClaim, DiagnosticResult, UserPersona, WorkerTrace } from '../domain.js';
+import { validateDiagnosticResult } from './result-validator.js';
 
 export function formatPreflightQuestion(question: string, missingInfo: string[]): string {
   return `我现在还不能判断原因，缺少关键信息：${missingInfo.join('、')}。\n\n${question}`;
 }
 
 export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: UserPersona, userGoal?: string): string {
+  result = validateDiagnosticResult(result).result;
   const unsupportedFacts = result.claims.filter((claim) => claim.type === 'fact' && claim.evidenceIds.length === 0);
   const supportedClaims = result.claims.filter((claim) => claim.type !== 'fact' || claim.evidenceIds.length > 0);
+  const primaryClaim = supportedClaims.find((claim) => claim.type === 'fact' || claim.type === 'inference')?.text;
   if (unsupportedFacts.length > 0 && supportedClaims.length === 0) {
     return 'Claude Code 返回了没有证据支撑的事实判断，我不会把它作为结论展示。\n\n请补充更多可验证信息，或查看诊断日志让技术支持复核。';
   }
@@ -21,7 +24,7 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
   if (result.recommendedNextAction === 'ask_user' || result.status === 'need_input') {
     const missing = result.missingInfo.length > 0 ? result.missingInfo.join('、') : '可验证证据';
     if (result.status !== 'need_input' && (result.evidence.length > 0 || supportedClaims.length > 0)) {
-      return `目前只能给出初步判断：${result.summary}\n\n支撑证据：\n${evidence}${supported}\n\n还缺少：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
+      return `目前只能给出初步判断：${primaryClaim ?? '现有证据仍不足以形成事实结论'}\n\n支撑证据：\n${evidence}${supported}\n\n还缺少：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
     }
     return `目前证据不足，还不能最终定位。\n\n请补充：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
   }
@@ -35,9 +38,10 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
     ? `\n\n仍需注意：\n${assumptions.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
     : '';
 
+  const groundedConclusion = primaryClaim ?? '当前没有通过审核的事实结论';
   const intro = persona === 'developer'
-    ? `目前判断：${result.summary}`
-    : `目前判断：${result.summary}\n\n我会先讲对业务操作有用的结论；代码路径只作为证据放在下面。`;
+    ? `目前判断：${groundedConclusion}`
+    : `目前判断：${groundedConclusion}\n\n我会先讲对业务操作有用的结论；代码路径只作为证据放在下面。`;
   const omitted = unsupportedFacts.length
     ? `\n\n未采纳的无证据说法：\n${unsupportedFacts.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
     : '';
@@ -50,9 +54,10 @@ export function formatReviewFailureFallback(
   userGoal: string | undefined,
   trace: WorkerTrace | undefined,
   _reviewError: string,
+  identity?: { caseId: string; runId: string },
 ): string {
   if (trace && workerFailedBeforeResult(trace)) {
-    return formatWorkerFailureResult(result, trace);
+    return formatWorkerFailureResult(result, trace, identity);
   }
 
   return ruleBasedReviewAndFormat(result, persona, userGoal);
@@ -125,7 +130,7 @@ function formatQ2Result(result: DiagnosticResult, unsupportedFacts: DiagnosticCl
 
 ## 一句话结论
 
-${result.summary}
+${result.claims.find((claim) => claim.type === 'fact' || claim.type === 'inference')?.text ?? '当前没有通过审核的事实结论。'}
 
 ${section('接口入口', entries)}
 
@@ -154,18 +159,23 @@ function workerFailedBeforeResult(trace: WorkerTrace): boolean {
   return Boolean(trace.error || trace.signal || (trace.exitCode !== undefined && trace.exitCode !== 0));
 }
 
-function formatWorkerFailureResult(result: DiagnosticResult, trace: WorkerTrace): string {
-  const details = [
-    trace.exitCode !== undefined ? `exitCode=${trace.exitCode}` : '',
-    trace.signal ? `signal=${trace.signal}` : '',
-    trace.error ? `error=${trace.error}` : '',
-    trace.stderr.trim() ? `stderr:\n${trace.stderr.trim()}` : '',
-    trace.stdout.trim() ? `stdout:\n${trace.stdout.trim()}` : '',
-  ].filter(Boolean).join('\n\n');
-
+function formatWorkerFailureResult(
+  result: DiagnosticResult,
+  trace: WorkerTrace,
+  identity?: { caseId: string; runId: string },
+): string {
+  const category = trace.signal
+    ? 'worker_interrupted'
+    : trace.error && /timed?\s*out|timeout/i.test(trace.error)
+      ? 'worker_timeout'
+      : 'worker_execution_failed';
+  const nextAction = result.recommendedNextAction === 'ask_user'
+    ? '请补充缺失信息后重试。'
+    : '请稍后重试；若持续失败，请让技术支持查看诊断日志。';
   return [
-    'Claude Code 在产生可展示结果前失败，直接展示错误结果。',
-    `错误结果：${result.summary}`,
-    details ? `错误详情：\n\n<pre>\n${details}\n</pre>` : '',
+    `诊断未完成（${category}）。`,
+    `当前状态：${result.status === 'need_input' ? '等待补充信息' : '未形成可验证结论'}。`,
+    `下一步：${nextAction}`,
+    identity ? `诊断标识：case=${identity.caseId}，run=${identity.runId}。` : '',
   ].filter(Boolean).join('\n\n');
 }

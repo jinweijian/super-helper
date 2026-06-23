@@ -614,6 +614,24 @@ test('public API routes keep compatible response shapes', async () => {
     assert.equal(chat.persona, 'developer');
     assert.equal(typeof chat.contextUsage.estimatedTokens, 'number');
 
+    const scopedStore = new FileMemoryStore(resolveSessionStorageRoot(config, 'current'));
+    const persistedCase = scopedStore.loadCase(chat.caseId);
+    scopedStore.addRun(persistedCase, {
+      id: 'run_legacy_trace',
+      caseId: chat.caseId,
+      status: 'failed',
+      workerTrace: {
+        command: 'claude --api-key legacy-secret',
+        cwd: '/private/workspace',
+        stdout: 'Authorization: Bearer legacy-bearer',
+        stderr: 'cookie=legacy-cookie',
+        error: 'token=legacy-token',
+        exitCode: 1,
+        startedAt: '',
+        finishedAt: '',
+      },
+    });
+
     const session = await originalFetch(`${baseUrl}/api/session?caseId=${chat.caseId}`).then((res) => {
       assert.equal(res.status, 200);
       return res.json();
@@ -621,6 +639,8 @@ test('public API routes keep compatible response shapes', async () => {
     assert.equal(session.session.id, chat.caseId);
     assert.equal(Array.isArray(session.session.messages), true);
     assert.equal(Array.isArray(session.session.runs), true);
+    assert.equal(typeof session.session.runs.find((run) => run.id === 'run_legacy_trace').workerTrace.stdout, 'string');
+    assert.doesNotMatch(JSON.stringify(session.session.runs), /legacy-secret|legacy-bearer|legacy-cookie|legacy-token/);
     assert.equal(typeof session.session.contextUsage.limitTokens, 'number');
 
     const sessions = await originalFetch(`${baseUrl}/api/sessions`).then((res) => {
@@ -657,6 +677,7 @@ test('public API routes keep compatible response shapes', async () => {
     assert.equal(Array.isArray(logs.blocks), true);
     assert.equal(Array.isArray(logs.logs), true);
     assert.ok(logs.blocks.some((block) => block.phase === 'input_received'));
+    assert.doesNotMatch(JSON.stringify(logs), /legacy-secret|legacy-bearer|legacy-cookie|legacy-token/);
   } finally {
     if (server) {
       await server.close();
@@ -1128,7 +1149,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
     const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
     initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
     writeKnowledgeFaq(knowledgeWorkspace, {
-      module: 'ai-study',
+      module: 'ai-companion',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。学习计划生成后包含任务数、学习总时长、学习起止时间、每周学习日和每日学习时长。',
@@ -1140,7 +1161,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
     const agent = new SuperHelperAgent(config, store, worker);
 
     const response = await agent.handleUserMessage({
-      message: 'AI伴学助手怎么制定学习计划？',
+      message: 'AI伴学助手如何制定学习计划？',
       workspaceId: 'current',
     });
 
@@ -1151,8 +1172,14 @@ test('runtime answers directly from knowledge evidence before calling the worker
     assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
     assert.match(response.assistantMessage, /AI伴学助手如何制定学习计划/);
     assert.match(response.assistantMessage, /支撑证据/);
-    assert.match(response.assistantMessage, /来源：knowledge\/faq\/ai-study/);
+    assert.match(response.assistantMessage, /来源：knowledge\/faq\/ai-companion/);
     assert.equal(response.caseSession.logs.some((event) => event.phase === 'knowledge_search_result'), true);
+    const retrievalTrace = response.caseSession.logs.find((event) => event.phase === 'knowledge_retrieval_trace')?.detail;
+    assert.equal(retrievalTrace.strategies.find((item) => item.id === 'bm25')?.status, 'ran');
+    assert.equal(retrievalTrace.strategies.find((item) => item.id === 'embedding')?.status, 'skipped');
+    assert.equal(retrievalTrace.rerank.status, 'skipped');
+    assert.equal(retrievalTrace.fusion.finalCandidateCount > 0, true);
+    assert.deepEqual(retrievalTrace.filters, []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
@@ -1178,7 +1205,7 @@ test('runtime broadens source type filters so whitepaper evidence can answer nat
     const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
     initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
     writeKnowledgeWhitepaper(knowledgeWorkspace, {
-      module: 'ai-study',
+      module: 'ai-companion',
       title: '学习日晚上8点',
       body: '学习日晚上8点未完成当日学习任务时向以对话框消息和APP通知的形式向学员发送学习提醒。',
       terms: ['AI伴学助手', '督学提醒', '学习日晚上8点'],
@@ -1239,7 +1266,7 @@ test('runtime escalates no-hit or implementation-detail knowledge questions with
     const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
     initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
     writeKnowledgeFaq(knowledgeWorkspace, {
-      module: 'ai-study',
+      module: 'ai-companion',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
@@ -1324,7 +1351,7 @@ test('runtime applies deep query pivot on one retry after insufficient code evid
     const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
     initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
     writeKnowledgeFaq(knowledgeWorkspace, {
-      module: 'ai-study',
+      module: 'ai-companion',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
@@ -1571,7 +1598,7 @@ test('runtime curates a review-required solved case after user confirms resoluti
     const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
     initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
     writeKnowledgeFaq(knowledgeWorkspace, {
-      module: 'ai-study',
+      module: 'ai-companion',
       intent: 'how_to',
       title: 'AI伴学助手如何制定学习计划',
       body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。',
@@ -1582,7 +1609,7 @@ test('runtime curates a review-required solved case after user confirms resoluti
     const store = new FileMemoryStore(dir);
     const agent = new SuperHelperAgent(config, store, worker);
     const first = await agent.handleUserMessage({
-      message: 'AI伴学助手怎么制定学习计划？',
+      message: 'AI伴学助手如何制定学习计划？',
       workspaceId: 'current',
     });
 
@@ -1592,7 +1619,7 @@ test('runtime curates a review-required solved case after user confirms resoluti
       workspaceId: 'current',
     });
 
-    const solvedDir = join(knowledgeWorkspace, 'knowledge', 'tickets', 'solved-cases', 'ai-study');
+    const solvedDir = join(knowledgeWorkspace, 'knowledge', 'tickets', 'solved-cases', 'ai-companion');
     const files = readdirSync(solvedDir).filter((file) => file.endsWith('.md'));
     const content = readFileSync(join(solvedDir, files[0]), 'utf8');
 
@@ -2178,8 +2205,8 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
 
     return chatResponse(
       JSON.stringify({
-        outcome: 'final_answer',
-        reply: '模型审核后的用户回复',
+        claimIds: ['claim_1'],
+        evidenceIds: ['ev_01'],
       }),
     );
   };
@@ -2228,9 +2255,10 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
     });
 
     assert.equal(modelCalls.length, 2);
-    assert.match(modelCalls[1][0].content, /最终解释/);
-    assert.match(modelCalls[1][0].content, /支撑证据/);
-    assert.equal(response.assistantMessage, '模型审核后的用户回复');
+    assert.match(modelCalls[1][0].content, /只负责.*claim\/evidence ID/);
+    assert.doesNotMatch(modelCalls[1][1].content, /claude -p|stdout|stderr/);
+    assert.match(response.assistantMessage, /目前判断：存在可验证证据/);
+    assert.match(response.assistantMessage, /存在可验证证据/);
     assert.equal(response.decision, 'final');
     assert.equal(response.caseSession.logs.some((item) => item.actor === 'claude' && item.phase === 'raw_output'), true);
   } finally {
@@ -2307,7 +2335,7 @@ test('agent falls back to local reviewed formatting when presentation model retu
     });
 
     assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /目前判断：结构化诊断结果已产生。/);
+    assert.match(response.assistantMessage, /目前判断：部门创建入口按 15 级限制展示。/);
     assert.match(response.assistantMessage, /部门创建入口按 15 级限制展示。/);
     assert.match(response.assistantMessage, /org-manage\/index\.html\.twig:82/);
     assert.doesNotMatch(response.assistantMessage, /美化输出 Agent 调用模型失败/);
@@ -2321,7 +2349,7 @@ test('agent falls back to local reviewed formatting when presentation model retu
   }
 });
 
-test('agent directly surfaces worker errors when presentation model fails before a result exists', async () => {
+test('agent safely summarizes worker errors when presentation model fails before a result exists', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;
 
@@ -2359,9 +2387,9 @@ test('agent directly surfaces worker errors when presentation model fails before
     });
 
     assert.equal(response.decision, 'escalate');
-    assert.match(response.assistantMessage, /Claude Code 在产生可展示结果前失败/);
-    assert.match(response.assistantMessage, /错误结果：Claude Code 调用失败：API Error: Connection error\./);
-    assert.match(response.assistantMessage, /exitCode=1/);
+    assert.match(response.assistantMessage, /诊断未完成（worker_execution_failed）/);
+    assert.match(response.assistantMessage, /诊断标识：case=.*run=run_01/);
+    assert.doesNotMatch(response.assistantMessage, /API Error|Connection error|exitCode|claude -p/);
   } finally {
     globalThis.fetch = originalFetch;
     rmSync(dir, { recursive: true, force: true });
@@ -2509,9 +2537,8 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
       message: '接口 /course/task/save 返回 500，请定位原因。',
     });
 
-    assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /没有证据支撑/);
-    assert.match(response.assistantMessage, /不会把它作为结论展示/);
+    assert.equal(response.decision, 'ask_user');
+    assert.match(response.assistantMessage, /目前证据不足/);
     assert.doesNotMatch(response.assistantMessage, /这是没有任何 evidenceIds 的事实判断/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -2599,7 +2626,7 @@ test('runtime helper modules expose stable context, request, preflight, review, 
 
     assert.equal(caseStatusFromDiagnosticResult({ ...result, status: 'concluded', recommendedNextAction: 'final_answer' }), 'concluded');
     assert.equal(decisionFromDiagnosticResult({ ...result, status: 'concluded', recommendedNextAction: 'final_answer' }), 'final');
-    assert.equal(decisionFromReviewOutcome('ask_user', result), 'ask_user');
+    assert.equal(decisionFromReviewOutcome('ask_user', result), 'partial');
     assert.equal(shouldRunFollowUp({ reply: '继续', decision: 'partial' }, result, { command: '', cwd: '', stdout: '', stderr: '', startedAt: '', finishedAt: '' }), true);
 
     assert.equal(personaName('developer'), '开发人员');
@@ -2614,7 +2641,7 @@ test('runtime helper modules expose stable context, request, preflight, review, 
         claims: [{ type: 'fact', text: '无证据事实', evidenceIds: [] }],
         recommendedNextAction: 'final_answer',
       }, 'operations'),
-      /没有证据支撑/,
+      /目前证据不足/,
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -2642,8 +2669,8 @@ test('model preflight cannot block an inspectable workspace question with generi
 
     return chatResponse(
       JSON.stringify({
-        outcome: 'final_answer',
-        reply: '已基于当前项目先做只读排查，没有要求用户补充产品名称。',
+        claimIds: ['claim_1'],
+        evidenceIds: ['ev_01'],
       }),
     );
   };
@@ -2699,7 +2726,8 @@ test('model preflight cannot block an inspectable workspace question with generi
     assert.match(workerRequests[0].userGoal, /倍速播放/);
     assert.equal(workerRequests[0].unknowns.length, 0);
     assert.equal(response.decision, 'final');
-    assert.equal(response.assistantMessage, '已基于当前项目先做只读排查，没有要求用户补充产品名称。');
+    assert.match(response.assistantMessage, /目前判断：问题可以通过当前 workspace 先做只读排查/);
+    assert.match(response.assistantMessage, /问题可以通过当前 workspace 先做只读排查/);
     assert.equal(
       response.caseSession.logs.some((item) => item.phase === 'model_preflight_overridden_by_local_dispatch'),
       true,
@@ -2728,16 +2756,16 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
     if (modelCalls.length === 2) {
       return chatResponse(
         JSON.stringify({
-          outcome: 'partial',
-          reply: '证据还不够，需要继续追查。',
+          claimIds: ['claim_1'],
+          evidenceIds: ['ev_01'],
         }),
       );
     }
 
     return chatResponse(
       JSON.stringify({
-        outcome: 'final_answer',
-        reply: '追查后整理出的最终回复，包含证据与解释。',
+        claimIds: ['claim_1'],
+        evidenceIds: ['ev_02'],
       }),
     );
   };
@@ -2827,7 +2855,8 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
     assert.equal(workerRequests.length, 2);
     assert.equal(workerRequests[1].runId, 'run_02');
     assert.equal(workerRequests[1].claudeSessionId, workerRequests[0].claudeSessionId);
-    assert.equal(response.assistantMessage, '追查后整理出的最终回复，包含证据与解释。');
+    assert.match(response.assistantMessage, /目前判断：倍速开关由播放器初始化配置控制/);
+    assert.match(response.assistantMessage, /倍速开关由播放器初始化配置控制/);
     assert.equal(response.decision, 'final');
   } finally {
     globalThis.fetch = originalFetch;
@@ -3029,6 +3058,7 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
   assert.match(resolveAgentConfig('evidence_judge').content, /Evidence Judge Agent/);
   assert.match(resolveAgentConfig('case_curator').content, /Case Curator Agent/);
   assert.equal(listPublicAgentConfigs().some((agent) => agent.stage === 'presentation' && agent.mayProduceUserFacingText), true);
+  assert.equal(listPublicAgentConfigs().find((agent) => agent.stage === 'presentation').executionMode, 'presentation_only');
 });
 
 test('experience agent reuses a prior reviewed answer without dispatching Claude', async () => {
@@ -3044,8 +3074,43 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
       workspaceId: 'current',
       title: '历史问题',
     });
-    store.addMessage(prior, { role: 'user', body: '课程任务保存失败是什么原因？' });
-    store.addMessage(prior, { role: 'helper', body: '历史结论：课程任务保存失败通常需要检查任务配置和接口返回。' });
+    const priorUser = store.addMessage(prior, { role: 'user', body: '课程任务保存失败是什么原因？' });
+    store.addMessage(prior, {
+      role: 'helper',
+      body: '历史结论：课程任务保存失败通常需要检查任务配置和接口返回。',
+      replyToMessageId: priorUser.id,
+    });
+    store.addRun(prior, {
+      id: 'run_prior',
+      caseId: prior.id,
+      status: 'concluded',
+      request: {
+        caseId: prior.id,
+        runId: 'run_prior',
+        workspaceId: prior.workspaceId,
+        claudeSessionId: prior.claudeSessionId,
+        userGoal: priorUser.body,
+        knownFacts: [],
+        unknowns: [],
+        constraints: [],
+        allowedMcpToolIds: [],
+      },
+      result: {
+        status: 'concluded',
+        summary: '历史问题已有工作区证据。',
+        missingInfo: [],
+        evidence: [{
+          id: 'ev_prior',
+          kind: 'workspace',
+          source: 'src/task.ts',
+          summary: '任务保存配置入口。',
+          confidence: 'high',
+          validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' },
+        }],
+        claims: [{ type: 'fact', text: '任务保存配置可在当前工作区核验。', evidenceIds: ['ev_prior'] }],
+        recommendedNextAction: 'final_answer',
+      },
+    });
     prior.status = 'concluded';
     store.saveCase(prior);
     let workerCalls = 0;
@@ -3340,9 +3405,11 @@ test('agents API and settings UI expose configured multi-agent settings', async 
     const html = renderApp();
 
     assert.equal(agents.agents.some((agent) => agent.stage === 'experience'), true);
+    assert.equal(agents.agents.find((agent) => agent.stage === 'experience').executionMode, 'deterministic');
     assert.match(html, /id="agentSettings"/);
     assert.match(html, /\/api\/agents/);
     assert.match(html, /多 Agent 设置/);
+    assert.match(html, /执行模式/);
   } finally {
     if (server) {
       await server.close();
@@ -3372,6 +3439,13 @@ ${input.terms.map((term) => `  - ${term}`).join('\n')}
 related_repos: []
 last_verified_at: 2026-06-13
 owner: support
+source_document: knowledge/_sources/manual/test-faq.md
+source_document_id: src_test_faq
+source_block_ids:
+  - blk_${input.module}_${input.intent}
+section_path:
+  - ${input.title}
+quality_status: ok
 ---
 
 # ${input.title}
@@ -3408,10 +3482,13 @@ owner: product
 source_document: knowledge/_sources/whitepapers/test.docx
 source_document_id: src_test_whitepaper
 source_pages: []
+source_block_ids:
+  - blk_${input.module}_reminder
 section_path:
   - 督学提醒
   - ${input.title}
 chunking_strategy: semantic-section-v1
+quality_status: ok
 ---
 
 # ${input.title}
@@ -3447,9 +3524,11 @@ function knowledgeEvidence(input) {
     document_id: input.id.replace(/^ev_/, 'kb_'),
     parent_id: input.id.replace(/^ev_/, 'kb_'),
     source: `knowledge/faq/course/${input.id}.md`,
-    source_document: undefined,
-    source_document_id: undefined,
+    source_document: 'knowledge/_sources/manual/course-guide.md',
+    source_document_id: 'src_course_guide',
+    source_block_ids: ['blk_course_visibility'],
     source_pages: [],
+    section_path: ['课程管理', '发布与可见性'],
     title: '课程可见性规则',
     type: input.sourceType === 'runbook' ? 'runbook' : 'faq',
     module: 'course',
@@ -3462,6 +3541,9 @@ function knowledgeEvidence(input) {
     matched_terms: input.matchedTerms,
     summary: '课程可见性规则命中',
     excerpt: '课程发布后需要满足可见范围、权限和上架时间条件。',
+    answer_span: '课程发布后，学员需要满足可见范围、权限和上架时间条件。',
     score: input.matchedTerms.length * 10,
+    retrieval: { source: 'rerank', rerankScore: 0.82 },
+    quality: { severity: 'ok', issues: [] },
   };
 }

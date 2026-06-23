@@ -250,7 +250,7 @@ ${input.sourceDocumentPath ? `source_document: ${input.sourceDocumentPath}\n` : 
 ${yamlArray(input.sourceBlockIds)}
 section_path:
 ${yamlArray(input.sectionPath)}
-chunking_strategy: semantic-section-v2
+chunking_strategy: parent-child-v2
 pipeline_stage: ${stage}
 pipeline_status: ${status}
 quality_status: unchecked

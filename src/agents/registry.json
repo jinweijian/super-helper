@@ -8,6 +8,7 @@
       "configPath": "main.md",
       "required": true,
       "mayProduceUserFacingText": true,
+      "executionMode": "deterministic",
       "summary": "主 Agent，负责用户回合编排、子 Agent 配对、证据边界和最终回复责任。"
     },
     {
@@ -17,6 +18,7 @@
       "configPath": "input-review.md",
       "required": true,
       "mayProduceUserFacingText": true,
+      "executionMode": "model_assisted",
       "summary": "输入审核 Agent，负责判断用户问题是否足够诊断，并为 Preflight Gate 提供追问或派发决策。"
     },
     {
@@ -26,6 +28,7 @@
       "configPath": "input-review.md",
       "required": true,
       "mayProduceUserFacingText": true,
+      "executionMode": "model_assisted",
       "summary": "Preflight 阶段复用输入审核 Agent 配置。"
     },
     {
@@ -35,6 +38,7 @@
       "configPath": "experience.md",
       "required": true,
       "mayProduceUserFacingText": false,
+      "executionMode": "deterministic",
       "summary": "经验 Agent，负责查找历史会话中的可复用答案，并以 history evidence 交给输出审核。"
     },
     {
@@ -44,6 +48,7 @@
       "configPath": "knowledge-router.md",
       "required": false,
       "mayProduceUserFacingText": false,
+      "executionMode": "deterministic",
       "summary": "知识路由 Agent，负责归一化问题并识别模块、意图、关键词和代码升级信号。"
     },
     {
@@ -53,6 +58,7 @@
       "configPath": "evidence-judge.md",
       "required": false,
       "mayProduceUserFacingText": false,
+      "executionMode": "deterministic",
       "summary": "证据充分性 Agent，负责判断知识库证据是否足够，或是否需要升级到代码排查。"
     },
     {
@@ -62,6 +68,7 @@
       "configPath": "case-curator.md",
       "required": false,
       "mayProduceUserFacingText": false,
+      "executionMode": "deterministic",
       "summary": "Case 沉淀 Agent，负责在用户确认解决后生成 review_required 的 solved case 草稿。"
     },
     {
@@ -71,6 +78,7 @@
       "configPath": "output-review.md",
       "required": true,
       "mayProduceUserFacingText": true,
+      "executionMode": "deterministic",
       "summary": "输出审核 Agent，负责审核证据、阻止无证据结论，并决定追问、继续、最终回答或升级。"
     },
     {
@@ -80,6 +88,7 @@
       "configPath": "presentation.md",
       "required": true,
       "mayProduceUserFacingText": true,
+      "executionMode": "presentation_only",
       "summary": "美化输出 Agent，负责把审核后的判断转成符合用户视角的中文回复，不新增事实。"
     }
   ]

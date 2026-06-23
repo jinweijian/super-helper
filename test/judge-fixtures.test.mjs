@@ -47,8 +47,11 @@ owner: knowledge-admin
 source_document: knowledge/_sources/whitepapers/test.docx
 source_document_id: src_test_judge
 source_pages: []
+source_block_ids:
+  - blk_direct_faq
 section_path:
   - AI伴学助手
+quality_status: ok
 ---
 
 # AI伴学助手怎么制定学习计划
@@ -81,8 +84,11 @@ owner: knowledge-admin
 source_document: knowledge/_sources/whitepapers/test.docx
 source_document_id: src_test_judge
 source_pages: []
+source_block_ids:
+  - blk_direct_runbook
 section_path:
   - 课程搜索
+quality_status: ok
 ---
 
 # 课程搜索失败排查
@@ -119,8 +125,11 @@ owner: knowledge-admin
 source_document: knowledge/_sources/whitepapers/test.docx
 source_document_id: src_test_judge
 source_pages: []
+source_block_ids:
+  - blk_direct_whitepaper
 section_path:
   - 8点提醒规则
+quality_status: ok
 ---
 
 # 8点提醒规则
@@ -149,8 +158,11 @@ owner: knowledge-admin
 source_document: knowledge/_sources/whitepapers/test.docx
 source_document_id: src_test_judge
 source_pages: []
+source_block_ids:
+  - blk_stale
 section_path:
   - 旧版登录
+quality_status: ok
 ---
 
 # 旧版登录方式
@@ -183,8 +195,11 @@ owner: knowledge-admin
 source_document: knowledge/_sources/whitepapers/test.docx
 source_document_id: src_test_judge
 source_pages: []
+source_block_ids:
+  - blk_conflict
 section_path:
   - 新版登录
+quality_status: ok
 ---
 
 # 新版登录方式
@@ -236,9 +251,9 @@ test('11.3 direct whitepaper success yields high score and no blockers', () => {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-whitepaper.md', DIRECT_WHITEPAPER_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: '学习日晚上8点未完成任务会怎么提醒' });
+    const pack = searchKnowledge({ workspaceRoot: workspace, query: '8点提醒规则：学习日未完成任务会怎么提醒' });
     const route = { normalizedQuestion: '学习日晚上8点未完成任务会怎么提醒', moduleCandidates: ['general'], intentCandidates: ['product_rule'], keywords: ['学习日', '晚上8点', '提醒'], sourceTypes: ['whitepaper'], codeEscalationSignals: [], risks: [] };
-    const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '学习日晚上8点未完成任务会怎么提醒' });
+    const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '8点提醒规则：学习日未完成任务会怎么提醒' });
     assert.equal(judge.answerable, true, `expected answerable, blockers=${judge.blockers.join(',')}`);
   } finally {
     cleanup(workspace);
@@ -259,7 +274,7 @@ test('11.3a reminder how-to routing keeps whitepaper candidates available', () =
   }
 });
 
-test('11.3b answer-bearing whitepaper with warning quality can still direct answer', () => {
+test('11.3b warning-quality whitepaper cannot cross the direct-answer gate', () => {
   const evidence = {
     evidence_id: 'ev_kb_warn_whitepaper',
     document_id: 'doc_warn_whitepaper',
@@ -268,7 +283,9 @@ test('11.3b answer-bearing whitepaper with warning quality can still direct answ
     source: 'knowledge/whitepapers/ai-companion/rule.md',
     source_document: 'knowledge/_sources/whitepapers/ai.docx',
     source_document_id: 'src_ai',
+    source_block_ids: ['blk_ai_reminder'],
     source_pages: [],
+    section_path: ['督学提醒', '学习日晚上8点'],
     title: '学习日晚上8点',
     type: 'whitepaper_slice',
     module: 'ai-companion',
@@ -281,7 +298,9 @@ test('11.3b answer-bearing whitepaper with warning quality can still direct answ
     matched_terms: ['学习日晚上', '学习', '晚上', '提醒', '伴学助手', 'ai'],
     summary: '学习日晚上8点 命中：提醒',
     excerpt: '学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。',
+    answer_span: '学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。',
     score: 266,
+    retrieval: { source: 'rerank', rerankScore: 0.9 },
     quality: { severity: 'warn', issues: ['duplicate_content', 'multi_topic_slice'] },
   };
   const route = {
@@ -307,7 +326,8 @@ test('11.3b answer-bearing whitepaper with warning quality can still direct answ
       coverage: { searched_files: 1, matched_files: 1, filtered_out: [] },
     },
   });
-  assert.equal(judge.answerable, true, `expected answerable, score=${judge.answer_score}, blockers=${judge.blockers.join(',')}`);
+  assert.equal(judge.answerable, false);
+  assert.equal(judge.blockers.includes('low_quality_evidence'), true);
 });
 
 test('11.4 generic keyword false positive is blocked', () => {

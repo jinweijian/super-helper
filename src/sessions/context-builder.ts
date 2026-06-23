@@ -26,6 +26,7 @@ export function buildDiagnosticRequestContext(
     }));
 
   const recentMessages = caseSession.messages.slice(-8).map((message) => ({
+    id: message.id,
     role: message.role,
     body: truncateText(message.body, 1600),
     createdAt: message.createdAt,

@@ -38,6 +38,13 @@ function baseChunk(overrides) {
     headings: overrides.headings ?? [],
     keywords: overrides.keywords ?? [],
     text: overrides.text,
+    artifact_version: 2,
+    chunking_strategy: 'parent-child-v2',
+    legacy: false,
+    child_order: overrides.child_order ?? 1,
+    source_block_ids: overrides.source_block_ids ?? ['blk_test'],
+    section_path: overrides.section_path ?? ['测试'],
+    quality_status: overrides.quality_status ?? 'ok',
   };
 }
 

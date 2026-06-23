@@ -13,5 +13,6 @@ export function createEmptyRetrievalTrace(): RetrievalTrace {
       status: 'skipped',
       reason: 'not configured',
     },
+    filters: [],
   };
 }

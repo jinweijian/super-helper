@@ -1,7 +1,7 @@
 import type { EmbeddingProviderConfig } from '../../../providers/embedding/contract.js';
 import { checkKnowledgeVectorCompatibility } from '../../../knowledge/vector-index.js';
 import type { RecallInput, RecallStrategy } from '../contract.js';
-import { searchVectorArtifacts } from './vector-search.js';
+import { searchVectorArtifactsWithFilters } from './vector-search.js';
 
 type EmbeddingRecallConfig = Pick<EmbeddingProviderConfig, 'enabled'> & Partial<Pick<
   EmbeddingProviderConfig,
@@ -43,12 +43,23 @@ export function createEmbeddingRecallStrategy(input: EmbeddingRecallStrategyOpti
         }
       }
       const queryVector = await input.provider.embedQuery({ text: recallInput.query });
+      const searched = searchVectorArtifactsWithFilters({
+        workspaceRoot: recallInput.workspaceRoot,
+        queryVector: queryVector.vector,
+        limit: recallInput.limit,
+        moduleCandidates: recallInput.moduleCandidates,
+        intentCandidates: recallInput.intentCandidates,
+        sourceTypes: recallInput.sourceTypes,
+        visibility: recallInput.visibility,
+      });
+      const candidates = searched.candidates;
+      const missingParentCount = candidates.filter((candidate) => candidate.groundingIssues?.includes('missing_parent')).length;
       return {
-        candidates: searchVectorArtifacts({
-          workspaceRoot: recallInput.workspaceRoot,
-          queryVector: queryVector.vector,
-          limit: recallInput.limit,
-        }),
+        candidates,
+        filteredOut: [
+          ...searched.filteredOut,
+          ...(missingParentCount > 0 ? [{ reason: 'missing_parent', count: missingParentCount }] : []),
+        ],
       };
     },
   };

@@ -10,15 +10,19 @@ import {
   type KnowledgeSearchQuery,
   type KnowledgeVisibility,
 } from '../knowledge/index.js';
-import { searchKnowledgeWithConfiguredRetrieval } from '../retrieval/configured-search.js';
+import {
+  retrieveKnowledgeWithConfiguredRetrieval,
+  type ConfiguredKnowledgeRetrievalResult,
+} from '../retrieval/configured-search.js';
+import type { RetrievalTrace } from '../retrieval/types.js';
 import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
 import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
 
 export async function searchKnowledgeForRuntime(input: {
   config: SuperHelperConfig;
   query: KnowledgeSearchQuery;
-}): Promise<KnowledgeEvidencePack> {
-  return searchKnowledgeWithConfiguredRetrieval({
+}): Promise<ConfiguredKnowledgeRetrievalResult> {
+  return retrieveKnowledgeWithConfiguredRetrieval({
     config: input.config,
     query: input.query,
   });
@@ -33,6 +37,7 @@ export async function prepareKnowledgeDiagnosis(input: {
   route: KnowledgeRoute;
   evidencePack: KnowledgeEvidencePack;
   judge: EvidenceJudgeResult;
+  retrievalTrace: RetrievalTrace;
 } | undefined> {
   if (!existsSync(knowledgeRoot(input.workspaceRoot))) {
     return undefined;
@@ -46,7 +51,7 @@ export async function prepareKnowledgeDiagnosis(input: {
     workspaceRoot: input.workspaceRoot,
     question: input.question,
   });
-  let evidencePack = await searchKnowledgeForRuntime({
+  let retrieval = await searchKnowledgeForRuntime({
     config: input.config,
     query: {
       workspaceRoot: input.workspaceRoot,
@@ -58,8 +63,8 @@ export async function prepareKnowledgeDiagnosis(input: {
       limit: 8,
     },
   });
-  if (evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
-    evidencePack = await searchKnowledgeForRuntime({
+  if (retrieval.evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
+    retrieval = await searchKnowledgeForRuntime({
       config: input.config,
       query: {
         workspaceRoot: input.workspaceRoot,
@@ -71,12 +76,13 @@ export async function prepareKnowledgeDiagnosis(input: {
       },
     });
   }
+  const { evidencePack, trace: retrievalTrace } = retrieval;
   const judge = judgeKnowledgeEvidence({
     route,
     evidencePack,
     question: input.question,
   });
-  return { route, evidencePack, judge };
+  return { route, evidencePack, judge, retrievalTrace };
 }
 
 export function attachKnowledgeCodeEscalationContext(input: {
@@ -111,12 +117,18 @@ export function diagnosticResultFromKnowledge(input: {
     id: result.evidence_id,
     kind: 'knowledge',
     source: sourceLabel(result),
-    summary: `${result.title}：${result.excerpt || result.summary}`,
+    summary: `${result.title}：${result.answer_span ?? result.excerpt ?? result.summary}`,
     confidence: result.confidence,
+    validation: {
+      status: result.status === 'active' ? 'active' : result.status === 'review_required' ? 'review_required' : result.status === 'deprecated' ? 'deprecated' : 'inactive',
+      visibility: result.visibility,
+      lastVerifiedAt: result.last_verified_at,
+      quality: result.quality?.severity,
+    },
   }));
   const top = answerEvidence[0];
   const summary = top
-    ? `知识库命中「${top.title}」，可回答：${top.excerpt || top.summary}`
+    ? `知识库命中「${top.title}」，可回答：${top.answer_span ?? top.excerpt ?? top.summary}`
     : '知识库证据足够回答当前问题。';
 
   return {

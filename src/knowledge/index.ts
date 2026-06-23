@@ -40,7 +40,7 @@ export {
   updateKnowledgeIndex,
   updateKnowledgeIndexWithQuality,
 } from './indexer.js';
-export { loadKnowledgeTaxonomy, routeKnowledgeQuestion } from './taxonomy.js';
+export { loadKnowledgeTaxonomy, routeKnowledgeQuestion, validateKnowledgeTaxonomyCoverage } from './taxonomy.js';
 export { buildKnowledgeHealthSummary } from './health.js';
 export type { KnowledgeHealthStatus, KnowledgeHealthSummary, KnowledgeSimilarWorkspace } from './health.js';
 export {
@@ -74,6 +74,8 @@ export {
 } from './case-review.js';
 export { runKnowledgeEval, loadQuestions } from './eval.js';
 export type { RunKnowledgeEvalInput } from './eval.js';
+export { generateKnowledgeMigrationReport } from './migration.js';
+export type { KnowledgeMigrationReport } from './migration.js';
 export {
   buildKnowledgeVectorIndex,
   checkKnowledgeVectorCompatibility,

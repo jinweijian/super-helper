@@ -1,4 +1,5 @@
 import type { CaseSession, DiagnosticRequest, HelperAgentConfig } from './domain.js';
+import { buildResolvedTurnContext } from './runtime/resolved-turn.js';
 
 export interface PreflightInput {
   caseSession: CaseSession;
@@ -61,6 +62,13 @@ export function preflight(input: PreflightInput): PreflightDecision {
     (message) => message.role === 'helper' && /缺少|请补充|不能判断/.test(message.body),
   );
   const textForSignals = isUnknownAnswer ? contextText : `${contextText}\n${input.userMessage}`;
+  if (requiresPermissionEscalation(textForSignals)) {
+    return {
+      action: 'ask_user',
+      missingInfo: ['只读权限边界'],
+      question: '当前只允许只读诊断，不能直接执行写入、删除、部署或生产变更。请改为让我先只读分析影响和操作方案，或转交有权限的人工处理。',
+    };
+  }
   const missingInfo = REQUIRED_SIGNALS
     .filter((signal) => !signal.test(textForSignals, input))
     .map((signal) => signal.label);
@@ -80,17 +88,11 @@ export function preflight(input: PreflightInput): PreflightDecision {
   }
 
   const latestRunNumber = input.caseSession.runs.length + 1;
-  const knownFacts = Array.from(
-    new Set(
-      input.caseSession.messages
-        .filter((message) => message.role === 'user')
-        .map((message) => message.body.trim())
-        .filter(Boolean),
-    ),
-  );
-  const userGoal = isUnknownAnswer
-    ? knownFacts.find((fact) => !/^(不清楚|不知道|没有|暂时不清楚|unknown|not sure)$/i.test(fact)) ?? input.userMessage
-    : input.userMessage;
+  const resolvedTurn = buildResolvedTurnContext({
+    caseSession: input.caseSession,
+    latestUserMessage: input.userMessage,
+  });
+  const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
 
   return {
     action: 'dispatch',
@@ -99,9 +101,12 @@ export function preflight(input: PreflightInput): PreflightDecision {
       runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
       workspaceId: input.caseSession.workspaceId,
       claudeSessionId: input.caseSession.claudeSessionId,
-      userGoal,
+      userGoal: resolvedTurn.resolvedQuery,
       knownFacts,
-      unknowns: shouldContinueWithUnknown ? missingInfo : [],
+      unknowns: Array.from(new Set([
+        ...(shouldContinueWithUnknown ? missingInfo : []),
+        ...resolvedTurn.unknowns.map((unknown) => unknown.text),
+      ])),
       constraints: [
         'Claude Code is an inspection tool and must not respond directly to the user.',
         'Handle both troubleshooting requests and general project questions.',
@@ -109,6 +114,29 @@ export function preflight(input: PreflightInput): PreflightDecision {
         'Do not make final claims without evidence.',
       ],
       allowedMcpToolIds: input.allowedMcpToolIds ?? [],
+      context: {
+        isFollowUp: resolvedTurn.isFollowUp,
+        currentUserMessage: resolvedTurn.latestUserMessage,
+        recentMessages: input.caseSession.messages.slice(-8).map((message) => ({
+          id: message.id,
+          role: message.role,
+          body: message.body,
+          createdAt: message.createdAt,
+        })),
+        previousRuns: [],
+        resolvedTurn,
+      },
     },
   };
+}
+
+export function isSafetyPermissionDecision(decision: PreflightDecision): boolean {
+  return decision.action === 'ask_user' && decision.missingInfo.includes('只读权限边界');
+}
+
+function requiresPermissionEscalation(text: string): boolean {
+  if (/如何|怎么|怎样|分析|排查|解释|说明|查找|定位|方案|步骤/.test(text)) return false;
+  const writeAction = /删除|清空|修改|写入|执行|运行脚本|发布|部署|回滚|重启|停机|退款|修复数据|更新数据库|改配置|重置|封禁|禁用|启用/;
+  return new RegExp(`(?:请|帮我|直接|立即|马上|替我|给我).{0,16}(?:${writeAction.source})`).test(text)
+    || new RegExp(`^(?:${writeAction.source})`).test(text.trim());
 }

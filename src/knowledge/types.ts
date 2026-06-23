@@ -464,6 +464,18 @@ export interface KnowledgeChunk {
   headings: string[];
   keywords: string[];
   text: string;
+  child_order?: number;
+  source_block_ids?: string[];
+  section_path?: string[];
+  text_hash?: string;
+  parent_title?: string;
+  parent_terms?: string[];
+  quality_status?: 'unchecked' | 'ok' | 'warn' | 'error';
+  chunking_strategy?: string;
+  artifact_version?: 2;
+  legacy?: boolean;
+  manual_split_required?: boolean;
+  overlap_chars?: number;
 }
 
 export interface KnowledgeVectorRecord {
@@ -519,6 +531,8 @@ export interface KnowledgeEvidenceResult {
   source_document?: string;
   source_document_id?: string;
   source_pages?: number[];
+  source_block_ids?: string[];
+  section_path?: string[];
   title: string;
   type: KnowledgeDocumentType;
   module: string;
@@ -527,16 +541,20 @@ export interface KnowledgeEvidenceResult {
   confidence: KnowledgeConfidence;
   status: KnowledgeStatus;
   visibility: KnowledgeVisibility;
-  last_verified_at: string;
+  last_verified_at?: string;
   matched_terms: string[];
   summary: string;
   excerpt: string;
+  answer_span?: string;
+  grounding_issues?: string[];
+  taxonomy_known?: boolean;
   score: number;
   retrieval?: {
     source: 'keyword' | 'vector' | 'hybrid' | 'rerank';
     keywordScore?: number;
     vectorScore?: number;
     rerankScore?: number;
+    fieldContributions?: Record<string, number>;
   };
   quality?: { severity: 'ok' | 'info' | 'warn' | 'error'; issues: string[] };
 }
@@ -593,6 +611,7 @@ export interface KnowledgeIndexManifest {
     status: KnowledgeStatus;
     confidence: KnowledgeConfidence;
   }>;
+  taxonomy?: { known_modules: string[]; unknown_modules: string[] };
 }
 
 export interface KnowledgeInitResult {
@@ -653,4 +672,5 @@ export interface KnowledgeUpdateResult {
   };
   qualitySeverityCounts?: Record<KnowledgeQualitySeverity, number>;
   qualityIssueCounts?: Record<string, number>;
+  taxonomyWarnings?: string[];
 }

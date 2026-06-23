@@ -8,6 +8,7 @@ import { createRerankProvider } from '../providers/rerank/factory.js';
 import { createDefaultRetrievalStrategies } from './registry.js';
 import { createProviderReranker } from './rerank/service.js';
 import { createRetrievalService, type RetrievalService } from './service.js';
+import type { RetrievalTrace } from './types.js';
 
 interface ProviderResolution<T> {
   provider?: T;
@@ -31,6 +32,8 @@ export function createConfiguredRetrievalService(config: SuperHelperConfig): Ret
       topN: rerankConfig.topN,
     }),
     rerankerUnavailableReason: rerank.reason,
+    recallLimit: 40,
+    fusionLimit: 20,
   });
 }
 
@@ -38,8 +41,20 @@ export async function searchKnowledgeWithConfiguredRetrieval(input: {
   config: SuperHelperConfig;
   query: KnowledgeSearchQuery;
 }): Promise<KnowledgeEvidencePack> {
-  const finalLimit = input.query.limit ?? 8;
-  const retrievalLimit = Math.max(finalLimit * 4, 20);
+  const result = await retrieveKnowledgeWithConfiguredRetrieval(input);
+  return result.evidencePack;
+}
+
+export interface ConfiguredKnowledgeRetrievalResult {
+  evidencePack: KnowledgeEvidencePack;
+  trace: RetrievalTrace;
+}
+
+export async function retrieveKnowledgeWithConfiguredRetrieval(input: {
+  config: SuperHelperConfig;
+  query: KnowledgeSearchQuery;
+}): Promise<ConfiguredKnowledgeRetrievalResult> {
+  const finalLimit = Math.min(input.query.limit ?? 8, 8);
   const result = await createConfiguredRetrievalService(input.config).retrieve({
     workspaceRoot: input.query.workspaceRoot,
     query: input.query.query,
@@ -47,15 +62,24 @@ export async function searchKnowledgeWithConfiguredRetrieval(input: {
     intentCandidates: input.query.intentCandidates,
     sourceTypes: input.query.sourceTypes,
     visibility: input.query.visibility,
-    limit: retrievalLimit,
+    limit: finalLimit,
   });
   const results = result.evidence.results.slice(0, finalLimit);
   return {
-    ...result.evidence,
-    results,
-    coverage: {
-      ...result.evidence.coverage,
-      matched_files: new Set(results.map((item) => item.source)).size,
+    evidencePack: {
+      ...result.evidence,
+      results,
+      coverage: {
+        ...result.evidence.coverage,
+        matched_files: new Set(results.map((item) => item.source)).size,
+      },
+    },
+    trace: {
+      ...result.trace,
+      fusion: { ...result.trace.fusion, finalCandidateCount: results.length },
+      rerank: { ...result.trace.rerank },
+      strategies: result.trace.strategies.map((strategy) => ({ ...strategy })),
+      filters: result.trace.filters.map((filter) => ({ ...filter })),
     },
   };
 }

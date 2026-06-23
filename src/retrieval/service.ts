@@ -5,6 +5,7 @@ import { normalizeStrategyCandidates } from './fusion/normalize.js';
 import type { RecallStrategy } from './recall/contract.js';
 import type { RetrievalReranker } from './rerank/service.js';
 import { createEmptyRetrievalTrace } from './trace.js';
+import { dedupeRetrievalCandidatesByParent } from './parent-dedupe.js';
 import type {
   RetrievalCandidate,
   RetrievalInput,
@@ -19,10 +20,14 @@ export function createRetrievalService(input: {
   strategies: RecallStrategy[];
   reranker?: RetrievalReranker;
   rerankerUnavailableReason?: string;
+  recallLimit?: number;
+  fusionLimit?: number;
 }): RetrievalService {
   return {
     async retrieve(request) {
       const limit = request.limit ?? 8;
+      const recallLimit = input.recallLimit ?? limit;
+      const fusionLimit = input.fusionLimit ?? recallLimit;
       const trace = createEmptyRetrievalTrace();
       const recalled: RetrievalCandidate[] = [];
       const filteredOut: Array<{ reason: string; count: number }> = [];
@@ -40,12 +45,13 @@ export function createRetrievalService(input: {
           continue;
         }
         try {
-          const result = await strategy.recall({ ...request, limit });
+          const result = await strategy.recall({ ...request, limit: recallLimit });
           const normalized = normalizeStrategyCandidates({
             strategyId: strategy.id,
             candidates: result.candidates,
           });
           recalled.push(...normalized);
+          mergeFilteredOut(filteredOut, result.filteredOut ?? []);
           trace.strategies.push({
             id: strategy.id,
             kind: strategy.kind,
@@ -73,7 +79,7 @@ export function createRetrievalService(input: {
         finalCandidateCount: fused.candidates.length,
       };
 
-      let candidates = fused.candidates;
+      let candidates = fused.candidates.slice(0, fusionLimit);
       if (input.reranker && candidates.length > 0) {
         try {
           trace.rerank = {
@@ -104,8 +110,9 @@ export function createRetrievalService(input: {
         };
       }
 
-      const finalCandidates = candidates.slice(0, limit);
+      const finalCandidates = dedupeRetrievalCandidatesByParent(candidates).slice(0, limit);
       trace.fusion.finalCandidateCount = finalCandidates.length;
+      trace.filters = filteredOut;
       return {
         query: request.query,
         candidates: finalCandidates,
@@ -118,6 +125,20 @@ export function createRetrievalService(input: {
       };
     },
   };
+}
+
+function mergeFilteredOut(
+  target: Array<{ reason: string; count: number }>,
+  additions: Array<{ reason: string; count: number }>,
+): void {
+  for (const addition of additions) {
+    const existing = target.find((item) => item.reason === addition.reason);
+    if (existing) {
+      existing.count += addition.count;
+    } else {
+      target.push({ ...addition });
+    }
+  }
 }
 
 function normalizeEnabledResult(value: boolean | { enabled: boolean; reason?: string }): { enabled: boolean; reason?: string } {

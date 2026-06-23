@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { FileMemoryStore } from '../../storage.js';
 import { buildLogBlocks, formatLogSection } from '../../observability/log-blocks.js';
+import { sanitizeWorkerTrace } from '../../observability/worker-trace.js';
 import { sendJson } from '../http-utils.js';
 
 export async function handleLogRoutes(
@@ -36,7 +37,7 @@ export async function handleLogRoutes(
     `诊断运行\n${caseSession.runs
       .map(
         (run) =>
-          `${run.id} status=${run.status}\nDiagnosticRequest:\n${JSON.stringify(run.request ?? {}, null, 2)}\nDiagnosticResult:\n${JSON.stringify(run.result ?? {}, null, 2)}\nWorkerTrace:\n${JSON.stringify(run.workerTrace ?? {}, null, 2)}`,
+          `${run.id} status=${run.status}\nDiagnosticRequest:\n${JSON.stringify(run.request ?? {}, null, 2)}\nDiagnosticResult:\n${JSON.stringify(run.result ?? {}, null, 2)}\nWorkerTrace:\n${JSON.stringify(run.workerTrace ? sanitizeWorkerTrace(run.workerTrace) : {}, null, 2)}`,
       )
       .join('\n\n')}`,
   ].filter(Boolean);

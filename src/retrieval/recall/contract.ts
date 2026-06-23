@@ -14,6 +14,7 @@ export interface RecallInput extends RetrievalInput {
 
 export interface RecallResult {
   candidates: RetrievalCandidate[];
+  filteredOut?: Array<{ reason: string; count: number }>;
 }
 
 export interface RecallEnabledResult {

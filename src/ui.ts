@@ -2024,7 +2024,7 @@ export function renderApp(): string {
       const json = await res.json();
       const agents = json.agents || [];
       target.innerHTML = agents.length
-        ? agents.map((agent) => '<div class="agent-card"><strong>' + escapeHtml(agent.title || agent.id) + '</strong><div>' + escapeHtml(agent.stage) + ' · ' + escapeHtml(agent.role) + '</div><div>' + escapeHtml(agent.summary || agent.responsibility || '') + '</div><div class="muted">' + escapeHtml(agent.configPath) + ' · 用户可见文本：' + (agent.mayProduceUserFacingText ? '允许' : '不允许') + '</div></div>').join('')
+        ? agents.map((agent) => '<div class="agent-card"><strong>' + escapeHtml(agent.title || agent.id) + '</strong><div>' + escapeHtml(agent.stage) + ' · ' + escapeHtml(agent.role) + '</div><div>' + escapeHtml(agent.summary || agent.responsibility || '') + '</div><div class="muted">' + escapeHtml(agent.configPath) + ' · 执行模式：' + escapeHtml(agent.executionMode || '未声明') + ' · 用户可见文本：' + (agent.mayProduceUserFacingText ? '允许' : '不允许') + '</div></div>').join('')
         : '<div class="muted">没有配置 Agent。</div>';
     }
 

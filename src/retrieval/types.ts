@@ -2,6 +2,7 @@ import type {
   KnowledgeConfidence,
   KnowledgeDocumentType,
   KnowledgeEvidencePack,
+  KnowledgeQualitySeverity,
   KnowledgeSourceType,
   KnowledgeStatus,
   KnowledgeVisibility,
@@ -25,6 +26,11 @@ export interface RetrievalCandidate {
   documentId: string;
   parentId?: string;
   source: string;
+  sourceDocument?: string;
+  sourceDocumentId?: string;
+  sourcePages?: number[];
+  sourceBlockIds?: string[];
+  sectionPath?: string[];
   title?: string;
   type?: KnowledgeDocumentType;
   module?: string;
@@ -37,6 +43,10 @@ export interface RetrievalCandidate {
   matchedTerms?: string[];
   summary?: string;
   excerpt?: string;
+  answerSpan?: string;
+  quality?: { severity: 'ok' | KnowledgeQualitySeverity; issues: string[] };
+  groundingIssues?: string[];
+  taxonomyKnown?: boolean;
   text: string;
   score: number;
   finalScore?: number;
@@ -72,6 +82,7 @@ export interface RetrievalTrace {
     inputCount?: number;
     outputCount?: number;
   };
+  filters: Array<{ reason: string; count: number }>;
 }
 
 export interface RetrievalStrategyTrace {

@@ -107,11 +107,6 @@ export class DiagnosticRuntime {
       return curationResponse;
     }
 
-    const experienceResponse = await this.experienceTurn.answer(caseSession, userMessage, replyToMessageId);
-    if (experienceResponse) {
-      return experienceResponse;
-    }
-
     const decision = await this.preflight.decide(caseSession, userMessage);
     if (decision.action === 'ask_user') {
       this.events.preflightAskUser(caseSession, decision);
@@ -124,9 +119,14 @@ export class DiagnosticRuntime {
       return { caseSession, assistantMessage: reply, decision: 'ask_user' };
     }
 
+    const experienceResponse = await this.experienceTurn.answer(caseSession, decision.request, replyToMessageId);
+    if (experienceResponse) {
+      return experienceResponse;
+    }
+
     const knowledgeResponse = await this.knowledgeTurn.answer(
       caseSession,
-      userMessage,
+      decision.request.userGoal,
       replyToMessageId,
       decision.request,
     );
