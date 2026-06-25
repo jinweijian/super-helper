@@ -3,14 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { defaultConfig } from '../dist/config.js';
 import {
   initKnowledgeWorkspace,
-  searchKnowledge,
   updateKnowledgeIndex,
   writeKnowledgeQualityReport,
   auditKnowledgeQuality,
   routeKnowledgeQuestion,
 } from '../dist/knowledge/index.js';
+import { retrieveKnowledgeWithConfiguredRetrieval } from '../dist/retrieval/configured-search.js';
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 
 function tempWorkspace() {
@@ -19,6 +20,14 @@ function tempWorkspace() {
 
 function cleanup(workspace) {
   rmSync(workspace, { recursive: true, force: true });
+}
+
+async function retrieveEvidence(query) {
+  const config = defaultConfig();
+  config.embedding.enabled = false;
+  config.rerank.enabled = false;
+  const result = await retrieveKnowledgeWithConfiguredRetrieval({ config, query });
+  return result.evidencePack;
 }
 
 function writeFaqFixture(workspace, fileName, body) {
@@ -213,13 +222,13 @@ quality_status: ok
 学员需要通过新版登录入口访问系统。
 `;
 
-test('11.1 direct FAQ success yields high score and no blockers', () => {
+test('11.1 direct FAQ success yields high score and no blockers', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-faq.md', DIRECT_FAQ_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
     const route = { normalizedQuestion: 'AI伴学助手怎么制定学习计划', moduleCandidates: ['general'], intentCandidates: ['how_to'], keywords: ['AI伴学助手', '制定学习计划'], sourceTypes: ['faq'], codeEscalationSignals: [], risks: [] };
     const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: 'AI伴学助手怎么制定学习计划' });
     assert.equal(judge.answerable, true, `expected answerable, blockers=${judge.blockers.join(',')}`);
@@ -230,13 +239,13 @@ test('11.1 direct FAQ success yields high score and no blockers', () => {
   }
 });
 
-test('11.2 direct runbook success yields high score and no blockers', () => {
+test('11.2 direct runbook success yields high score and no blockers', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-runbook.md', DIRECT_RUNBOOK_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: '课程搜索失败排查' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: '课程搜索失败排查' });
     const route = { normalizedQuestion: '课程搜索失败排查', moduleCandidates: ['general'], intentCandidates: ['troubleshooting'], keywords: ['课程搜索'], sourceTypes: ['runbook'], codeEscalationSignals: [], risks: [] };
     const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '课程搜索失败排查' });
     assert.equal(judge.answerable, true, `expected answerable, blockers=${judge.blockers.join(',')}`);
@@ -245,13 +254,13 @@ test('11.2 direct runbook success yields high score and no blockers', () => {
   }
 });
 
-test('11.3 direct whitepaper success yields high score and no blockers', () => {
+test('11.3 direct whitepaper success yields high score and no blockers', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-whitepaper.md', DIRECT_WHITEPAPER_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: '8点提醒规则：学习日未完成任务会怎么提醒' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: '8点提醒规则：学习日未完成任务会怎么提醒' });
     const route = { normalizedQuestion: '学习日晚上8点未完成任务会怎么提醒', moduleCandidates: ['general'], intentCandidates: ['product_rule'], keywords: ['学习日', '晚上8点', '提醒'], sourceTypes: ['whitepaper'], codeEscalationSignals: [], risks: [] };
     const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '8点提醒规则：学习日未完成任务会怎么提醒' });
     assert.equal(judge.answerable, true, `expected answerable, blockers=${judge.blockers.join(',')}`);
@@ -260,7 +269,7 @@ test('11.3 direct whitepaper success yields high score and no blockers', () => {
   }
 });
 
-test('11.3a reminder how-to routing keeps whitepaper candidates available', () => {
+test('11.3a reminder how-to routing keeps whitepaper candidates available', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -274,7 +283,7 @@ test('11.3a reminder how-to routing keeps whitepaper candidates available', () =
   }
 });
 
-test('11.3b warning-quality whitepaper cannot cross the direct-answer gate', () => {
+test('11.3b warning-quality whitepaper cannot cross the direct-answer gate', async () => {
   const evidence = {
     evidence_id: 'ev_kb_warn_whitepaper',
     document_id: 'doc_warn_whitepaper',
@@ -330,14 +339,14 @@ test('11.3b warning-quality whitepaper cannot cross the direct-answer gate', () 
   assert.equal(judge.blockers.includes('low_quality_evidence'), true);
 });
 
-test('11.4 generic keyword false positive is blocked', () => {
+test('11.4 generic keyword false positive is blocked', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-faq.md', DIRECT_FAQ_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
     // Use a query with mostly generic terms and weak match to the actual content
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: '课程' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: '课程' });
     const route = { normalizedQuestion: '课程', moduleCandidates: [], intentCandidates: [], keywords: ['课程'], sourceTypes: [], codeEscalationSignals: [], risks: [] };
     const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '课程' });
     // When matched terms are weak, the judge should add a generic_keyword_only or ambiguity blocker
@@ -351,13 +360,13 @@ test('11.4 generic keyword false positive is blocked', () => {
   }
 });
 
-test('11.5 module mismatch is detected', () => {
+test('11.5 module mismatch is detected', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-faq.md', DIRECT_FAQ_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
     // Route says module should be 'edusoho-training' but the top hit is from 'general'
     const route = {
       normalizedQuestion: 'AI伴学助手怎么制定学习计划',
@@ -375,7 +384,7 @@ test('11.5 module mismatch is detected', () => {
   }
 });
 
-test('11.6 low quality evidence is rejected', () => {
+test('11.6 low quality evidence is rejected', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -404,7 +413,7 @@ test('11.6 low quality evidence is rejected', () => {
       }
     }
     writeKnowledgeQualityReport({ workspaceRoot: workspace, report });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
     const route = { normalizedQuestion: 'AI伴学助手怎么制定学习计划', moduleCandidates: ['general'], intentCandidates: ['how_to'], keywords: ['AI伴学助手', '制定学习计划'], sourceTypes: ['faq'], codeEscalationSignals: [], risks: [] };
     const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: 'AI伴学助手怎么制定学习计划' });
     const hasLowQualityBlocker = judge.blockers.includes('low_quality_evidence');
@@ -416,13 +425,13 @@ test('11.6 low quality evidence is rejected', () => {
   }
 });
 
-test('11.7 stale evidence is flagged', () => {
+test('11.7 stale evidence is flagged', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'stale.md', STALE_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: '登录' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: '登录' });
     const route = { normalizedQuestion: '登录', moduleCandidates: ['general'], intentCandidates: ['how_to'], keywords: ['登录'], sourceTypes: ['faq'], codeEscalationSignals: [], risks: [] };
     const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '登录' });
     const hasStaleBlocker = judge.blockers.includes('stale_knowledge');
@@ -434,16 +443,38 @@ test('11.7 stale evidence is flagged', () => {
   }
 });
 
-test('11.8 conflict between active and deprecated evidence is flagged', () => {
+test('11.8 conflict between active and review-required evidence is flagged', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeFaqFixture(workspace, 'stale.md', STALE_BODY);
-    writeFaqFixture(workspace, 'conflict.md', CONFLICT_BODY);
+    writeFaqFixture(
+      workspace,
+      'old-login.md',
+      STALE_BODY
+        .replace('confidence: low', 'confidence: high')
+        .replace('last_verified_at: 2020-01-01', 'last_verified_at: 2026-06-13'),
+    );
+    writeFaqFixture(
+      workspace,
+      'new-login.md',
+      CONFLICT_BODY,
+    );
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: '登录' });
-    const route = { normalizedQuestion: '登录', moduleCandidates: ['general'], intentCandidates: ['how_to'], keywords: ['登录'], sourceTypes: ['faq'], codeEscalationSignals: [], risks: [] };
-    const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question: '登录' });
+    const question = '旧版登录方式';
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: question, limit: 5 });
+    assert.ok(pack.results[0], 'expected active retrieval evidence before constructing conflict input');
+    pack.results.push({
+      ...pack.results[0],
+      evidence_id: 'kb_faq_general_conflict#conflict',
+      document_id: 'kb_faq_general_conflict',
+      parent_id: 'kb_faq_general_conflict',
+      title: '新版登录方式',
+      status: 'review_required',
+      answer_span: '学员需要通过新版登录入口访问系统。',
+      excerpt: '学员需要通过新版登录入口访问系统。',
+    });
+    const route = { normalizedQuestion: question, moduleCandidates: ['general'], intentCandidates: ['how_to'], keywords: ['旧版登录', '登录方式'], sourceTypes: ['faq'], codeEscalationSignals: [], risks: [] };
+    const judge = judgeKnowledgeEvidence({ route, evidencePack: pack, question });
     const hasConflictBlocker = judge.blockers.includes('conflicting_knowledge');
     const hasConflicts = judge.conflicts.length > 0;
     assert.equal(hasConflictBlocker || hasConflicts, true,
@@ -453,13 +484,13 @@ test('11.8 conflict between active and deprecated evidence is flagged', () => {
   }
 });
 
-test('11.9 high-risk uncertainty blocks direct answer', () => {
+test('11.9 high-risk uncertainty blocks direct answer', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-faq.md', DIRECT_FAQ_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
     const route = {
       normalizedQuestion: 'AI伴学助手怎么制定学习计划',
       moduleCandidates: ['general'],
@@ -477,13 +508,13 @@ test('11.9 high-risk uncertainty blocks direct answer', () => {
   }
 });
 
-test('11.10 implementation-detail escalation requires code', () => {
+test('11.10 implementation-detail escalation requires code', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
     writeFaqFixture(workspace, 'direct-faq.md', DIRECT_FAQ_BODY);
     updateKnowledgeIndex({ workspaceRoot: workspace });
-    const pack = searchKnowledge({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
+    const pack = await retrieveEvidence({ workspaceRoot: workspace, query: 'AI伴学助手怎么制定学习计划' });
     const route = {
       normalizedQuestion: 'AI伴学助手怎么制定学习计划',
       moduleCandidates: ['general'],
@@ -502,7 +533,7 @@ test('11.10 implementation-detail escalation requires code', () => {
   }
 });
 
-test('11.11 focused test runner executes both knowledge and judge tests', () => {
+test('11.11 focused test runner executes both knowledge and judge tests', async () => {
   // This test acts as the runner assertion: it just needs to be part of a test file that
   // is run via the focused command in 11.11. The CI runner is `pnpm build && node --test
   // test/knowledge.test.mjs test/supper-helper.test.mjs`; this file is run by the global

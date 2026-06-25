@@ -1,6 +1,6 @@
-import type { ClaudeWorker } from '../claude-worker.js';
 import type { DiagnosticRequest } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { ReviewPresentationResult } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { buildFollowUpDiagnosticRequest } from './request-builder.js';
@@ -15,7 +15,7 @@ import {
 export class WorkerDiagnosisService {
   constructor(
     private readonly store: FileMemoryStore,
-    private readonly worker: ClaudeWorker,
+    private readonly worker: DiagnosticWorker,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
   ) {}

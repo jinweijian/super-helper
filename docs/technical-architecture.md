@@ -21,18 +21,14 @@ The current MVP keeps the public import surface stable while separating product 
 - `src/runtime/knowledge-diagnosis.ts`, `worker-turn.ts`, `agent-model-review.ts`, `preflight-gate.ts`, `request-builder.ts`, `review-gate.ts`, and `presenter.ts` own focused runtime decisions and formatting helpers.
 - `src/runtime/event-recorder.ts` owns lifecycle log event creation for Agent, Claude, and system phases.
 - `src/knowledge/` owns the enterprise knowledge workspace skeleton, Markdown/frontmatter parsing, source metadata, local indexes/artifacts, and local knowledge evidence helpers.
-- `src/retrieval/` owns BM25/embedding/keyword recall strategies, multi-route recall orchestration, candidate fusion, optional rerank, retrieval trace, and evidence-pack conversion.
-- `src/providers/embedding/` and `src/providers/rerank/` own sibling provider contracts, factories, fake providers, SiliconFlow adapters, smoke tests, and provider error normalization. `src/embedding/` is a compatibility re-export surface during migration.
+- `src/retrieval/` owns BM25/embedding recall strategies, multi-route recall orchestration, candidate fusion, optional rerank, retrieval trace, and evidence-pack conversion.
+- `src/providers/embedding/` and `src/providers/rerank/` own sibling provider contracts, factories, fake providers, SiliconFlow adapters, smoke tests, and provider error normalization.
 - `src/sessions/` owns case repository ports and request context construction.
 - `src/workers/diagnostic-worker.ts` defines the stable worker port.
 - `src/workers/claude/` owns the Claude Code adapter implementation, prompts, policy, CLI execution, and output parsing.
 - `src/observability/log-blocks.ts` owns diagnostic log drawer block rendering; `src/observability/worker-trace.ts` owns bounded redaction for persisted and public worker traces.
 
-Compatibility entry points remain thin:
-
-- `src/agent.ts` exports `SuperHelperAgent` as a compatibility facade over `DiagnosticRuntime`.
-- `src/server.ts` re-exports `startServer` from the gateway.
-- `src/claude-worker.ts` re-exports the Claude worker adapter and worker port type.
+Private compatibility entry points are intentionally removed. Internal consumers import owner modules directly, such as `src/runtime/diagnostic-runtime.ts`, `src/gateway/http-server.ts`, and `src/workers/claude/claude-code-worker.ts`.
 
 Future development must follow `docs/development-standards.md`. That document is the mandatory module-boundary contract for AI coding and human coding.
 
@@ -121,7 +117,6 @@ The runtime pipeline is:
 
 ```text
 Gateway chat route
-  -> SuperHelperAgent facade
   -> DiagnosticRuntime.startUserTurn
   -> ResolvedTurnContext builder
   -> Preflight Gate
@@ -279,7 +274,6 @@ query
   -> recall registry
        -> 中文业务词/bigram 字段加权 BM25（Top 40）
        -> embedding semantic recall
-       -> keyword compatibility recall
        -> future business recall strategies
   -> strategy-neutral fusion and dedupe
   -> optional rerank after fusion
@@ -295,7 +289,7 @@ Configured Hybrid 固定预算为 BM25 Top 40 + Embedding Top 40，经 RRF `k=60
 
 BM25 and embedding recall are sibling strategies under `src/retrieval/recall/`. Adding or removing a recall route should require a new `retrieval/recall/<strategy>/` implementation and registry change, not runtime or gateway edits. Rerank runs only after fused candidates exist and is optional: missing credentials, disabled config, or safe provider failure returns the fused ordering and records trace status.
 
-BM25/Embedding 命中必须在 retrieval adapter 边界回填 canonical parent 的 freshness、quality、source document、source block、section path 和 answer span。缺失字段保持未知，不允许使用 1970 时间、伪 `active` 或伪质量状态补洞。运行时通过内部 `{ evidencePack, trace }` 信封消费检索结果；旧 Evidence-Pack-only 调用保持兼容，公共 HTTP response 不增加 trace。
+BM25/Embedding 命中必须在 retrieval adapter 边界回填 canonical parent 的 freshness、quality、source document、source block、section path 和 answer span。缺失字段保持未知，不允许使用 1970 时间、伪 `active` 或伪质量状态补洞。运行时通过内部 `{ evidencePack, trace }` 信封消费检索结果；公共 HTTP response 不增加 trace。
 
 Evidence Judge 采用 fail-closed 直答门禁：证据必须为 active、fresh、质量 `ok|info`、来源与区块/章节溯源完整、存在答案片段、模块匹配且无风险/冲突。Rerank 运行时要求 top score 至少 `0.70`；Rerank 不可用时，只允许“问题包含完整标题 + 至少两个非泛化多字符词”的词法回退。BM25、向量相似度和 RRF 分数本身不能授权直答。
 
@@ -389,13 +383,12 @@ super-helper knowledge init --workspace /path/to/workspace
 super-helper knowledge init --workspace /path/to/workspace --knowledge-root /path/to/knowledge-base
 super-helper knowledge update --workspace /path/to/workspace
 super-helper knowledge vector build --workspace /path/to/workspace --knowledge-root /path/to/knowledge-base --enable --provider siliconflow --model Qwen/Qwen3-Embedding-0.6B --base-url https://api.siliconflow.cn/v1 --api-key-env SILICONFLOW_API_KEY --dimensions 1024
-super-helper knowledge search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 super-helper retrieval search --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 super-helper retrieval debug --workspace /path/to/workspace --query "课程发布后为什么学员端看不到"
 super-helper retrieval eval --workspace /path/to/workspace --questions /path/to/runtime-eval.json --report /path/to/retrieval-eval-report.json
 ```
 
-`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. `knowledge search` remains a compatibility local search command; `retrieval search/debug` exercises the retrieval service boundary and can show retrieval trace details. `retrieval eval` 复用生产 Router、configured retrieval 与 Evidence Judge，并以 Recall@5、MRR、直答精度、拒答准确率和必须升级准确率作为门禁；默认 provider 关闭，因此不会发起付费网络请求。Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime asks `src/retrieval/` for evidence from the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
+`--workspace` identifies the project/service workspace. `--knowledge-root` optionally overrides the configured base directory for the isolated knowledge repository. `retrieval search/debug` is the canonical query/debug surface and can show retrieval trace details. `retrieval eval` 复用生产 Router、configured retrieval 与 Evidence Judge，并以 Recall@5、MRR、直答精度、拒答准确率和必须升级准确率作为门禁；默认 provider 关闭，因此不会发起付费网络请求。Runtime integration happens through `src/runtime/`: after an Experience miss, the runtime asks `src/retrieval/` for evidence from the resolved knowledge workspace, passes answerable evidence through Evidence Judge, Output Review, and Presentation, and escalates to the existing worker flow when knowledge is absent, insufficient, risky, or conflicting.
 
 The browser health panel can operate the same service-scoped knowledge workspace through gateway endpoints:
 

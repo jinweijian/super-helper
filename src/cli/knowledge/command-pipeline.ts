@@ -12,7 +12,6 @@ import {
   readKnowledgeRepairPlan,
   readSourceBlocks,
   reviewDraftSlices,
-  runKnowledgeEval,
   writeKnowledgeQualityReport,
   writeKnowledgeRepairPlan,
   writeSourceQualityReport,
@@ -160,21 +159,6 @@ export async function runKnowledgePipelineCommand(
     const report = publishApprovedDraftSlices({ workspaceRoot, sourceDocumentId: sourceId, qualityGate: gate });
     console.log(`publish: ${report.publishedIds.length} published, ${report.rejectedIds.length} rejected, dirty=${report.indexDirty}`);
     if (report.qualityReportPath) console.log(`quality report used: ${report.qualityReportPath}`);
-    return true;
-  }
-
-  if (subcommand === 'eval') {
-    const questionsPath = readOption(argv, '--questions');
-    if (!questionsPath) {
-      console.error('Usage: super-helper knowledge eval --questions <file> [--workspace <path>]');
-      process.exit(1);
-    }
-    const report = runKnowledgeEval({ workspaceRoot, questionsPath });
-    console.log(`eval: ${report.questionCount} questions, hit@1=${report.hitAt1}, hit@3=${report.hitAt3}, hit@5=${report.hitAt5}, answerBearingRate=${report.answerBearingRate.toFixed(2)}, falsePositives=${report.falsePositiveCount}`);
-    if (report.failures.length > 0) {
-      console.log(`failures: ${report.failures.length}`);
-      process.exit(2);
-    }
     return true;
   }
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ingestSourceDocuments } from './ingest.js';
-import { updateKnowledgeIndex } from './indexer.js';
+import { updateKnowledgeIndex } from './indexes/build.js';
 import { chunksPath, dirtyFlagPath, ingestReportPath, keywordIndexPath, knowledgeRoot, manifestPath } from './paths.js';
 import {
   auditKnowledgeQuality,

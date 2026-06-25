@@ -37,17 +37,18 @@ export function createConfiguredRetrievalService(config: SuperHelperConfig): Ret
   });
 }
 
-export async function searchKnowledgeWithConfiguredRetrieval(input: {
-  config: SuperHelperConfig;
-  query: KnowledgeSearchQuery;
-}): Promise<KnowledgeEvidencePack> {
-  const result = await retrieveKnowledgeWithConfiguredRetrieval(input);
-  return result.evidencePack;
-}
-
 export interface ConfiguredKnowledgeRetrievalResult {
   evidencePack: KnowledgeEvidencePack;
   trace: RetrievalTrace;
+}
+
+export type ConfiguredKnowledgeRetriever = (query: KnowledgeSearchQuery) => Promise<KnowledgeEvidencePack>;
+
+export function createConfiguredKnowledgeRetriever(config: SuperHelperConfig): ConfiguredKnowledgeRetriever {
+  return async (query) => {
+    const result = await retrieveKnowledgeWithConfiguredRetrieval({ config, query });
+    return result.evidencePack;
+  };
 }
 
 export async function retrieveKnowledgeWithConfiguredRetrieval(input: {

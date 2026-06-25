@@ -1,9 +1,6 @@
 import { defaultConfig, ensureConfig, type SuperHelperConfig } from '../config.js';
 import { resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
-import {
-  createBm25RecallStrategy,
-  createRetrievalService,
-} from '../retrieval/index.js';
+import { createConfiguredRetrievalService } from '../retrieval/configured-search.js';
 import {
   loadRuntimeRetrievalEvaluationQuestions,
   runRuntimeRetrievalEvaluation,
@@ -41,9 +38,7 @@ export async function runRetrievalCommand(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const service = createRetrievalService({
-    strategies: [createBm25RecallStrategy()],
-  });
+  const service = createConfiguredRetrievalService(context.config);
   const result = await service.retrieve({
     workspaceRoot: context.knowledgeWorkspaceRoot,
     query,

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
+import { defaultConfig } from '../dist/config.js';
 import {
   approveSolvedCase,
   approveQualityCleanDraftSlices,
@@ -21,14 +22,12 @@ import {
   resolveKnowledgeWorkspaceRoot,
   reviewDraftSlices,
   routeKnowledgeQuestion,
-  runKnowledgeEval,
-  searchKnowledgeWithRag,
-  searchKnowledge,
   updateKnowledgeIndex,
   applyKnowledgeRepairPlan,
   writeKnowledgeRepairPlan,
   writeKnowledgeQualityReport,
 } from '../dist/knowledge/index.js';
+import { retrieveKnowledgeWithConfiguredRetrieval } from '../dist/retrieval/configured-search.js';
 import { listPublicAgentConfigs, loadAgentRegistry } from '../dist/runtime/agent-configs.js';
 
 function tempWorkspace() {
@@ -37,6 +36,14 @@ function tempWorkspace() {
 
 function cleanup(path) {
   rmSync(path, { recursive: true, force: true });
+}
+
+async function retrieveEvidence(query) {
+  const config = defaultConfig();
+  config.embedding.enabled = false;
+  config.rerank.enabled = false;
+  const result = await retrieveKnowledgeWithConfiguredRetrieval({ config, query });
+  return result.evidencePack;
 }
 
 function writeTestFaq(workspace, input) {
@@ -77,7 +84,7 @@ ${input.body}
   );
 }
 
-test('knowledge init creates the enterprise knowledge workspace skeleton', () => {
+test('knowledge init creates the enterprise knowledge workspace skeleton', async () => {
   const workspace = tempWorkspace();
   try {
     const result = initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -99,7 +106,7 @@ test('knowledge init creates the enterprise knowledge workspace skeleton', () =>
   }
 });
 
-test('knowledge intake exposes per-file stages and reuses unchanged content', () => {
+test('knowledge intake exposes per-file stages and reuses unchanged content', async () => {
   const workspace = tempWorkspace();
   const sourceDir = tempWorkspace();
   try {
@@ -117,7 +124,7 @@ test('knowledge intake exposes per-file stages and reuses unchanged content', ()
   }
 });
 
-test('knowledge workspace scope stores knowledge outside project roots and isolates by workspace', () => {
+test('knowledge workspace scope stores knowledge outside project roots and isolates by workspace', async () => {
   const storageRoot = tempWorkspace();
   const firstProject = tempWorkspace();
   const secondProject = tempWorkspace();
@@ -148,7 +155,7 @@ test('knowledge workspace scope stores knowledge outside project roots and isola
   }
 });
 
-test('knowledge update indexes markdown slices and search expands chunk hits to the parent slice', () => {
+test('knowledge update indexes markdown slices and search expands chunk hits to the parent slice', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -231,7 +238,7 @@ chunking_strategy: semantic-section-v1
     assert.equal(chunks[0].parent_id, 'kb_whitepaper_course_visibility');
     assert.deepEqual(chunks[0].source_pages, [12, 13]);
 
-    const result = searchKnowledge({
+    const result = await retrieveEvidence({
       workspaceRoot: workspace,
       query: '课程发布后为什么学员端看不到',
       limit: 5,
@@ -242,10 +249,10 @@ chunking_strategy: semantic-section-v1
     assert.equal(result.results[0].parent_id, 'kb_whitepaper_course_visibility');
     assert.equal(result.results[0].source_document, 'knowledge/_sources/whitepapers/course-whitepaper.pdf');
     assert.deepEqual(result.results[0].source_pages, [12, 13]);
-    assert.match(result.results[0].excerpt, /课程必须同时满足发布状态/);
+    assert.match(result.results[0].excerpt, /课程必须同时满足发布状态|如果课程被下线/);
 
     writeFileSync(join(knowledgeRoot, 'indexes', 'dirty.flag'), 'rebuild required\n', 'utf8');
-    const dirtyResult = searchKnowledge({
+    const dirtyResult = await retrieveEvidence({
       workspaceRoot: workspace,
       query: '课程发布后为什么学员端看不到',
       limit: 5,
@@ -256,137 +263,7 @@ chunking_strategy: semantic-section-v1
   }
 });
 
-test('knowledge RAG search reranks recalled keyword results after retrieval', async () => {
-  const workspace = tempWorkspace();
-  try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeTestFaq(workspace, {
-      id: 'kb_login_general',
-      title: '登录说明',
-      terms: ['登录', '账号'],
-      body: '用户可以使用账号和密码登录系统。这里是普通登录说明，不包含失败排查步骤。',
-    });
-    writeTestFaq(workspace, {
-      id: 'kb_login_failure',
-      title: '登录失败排查',
-      terms: ['登录', '失败', '排查'],
-      body: '登录失败时，应先检查账号状态、密码错误次数和浏览器缓存，然后查看服务端认证日志。',
-    });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
-
-    const rerankCalls = [];
-    const pack = await searchKnowledgeWithRag({
-      workspaceRoot: workspace,
-      query: '登录失败怎么排查',
-      limit: 2,
-      rerank: {
-        provider: {
-          id: 'fake-rerank',
-          model: 'test-rerank',
-          async rerank(input) {
-            rerankCalls.push(input.documents.map((item) => item.id));
-            return {
-              provider: 'fake-rerank',
-              model: 'test-rerank',
-              results: input.documents.map((item) => ({
-                id: item.id,
-                score: item.text.includes('服务端认证日志') ? 0.99 : 0.1,
-              })).sort((left, right) => right.score - left.score),
-              warnings: [],
-            };
-          },
-        },
-      },
-    });
-
-    assert.equal(rerankCalls.length, 1);
-    assert.equal(pack.results[0].document_id, 'kb_login_failure');
-    assert.equal(pack.results[0].retrieval?.source, 'rerank');
-    assert.equal(pack.results[0].retrieval?.rerankScore, 0.99);
-  } finally {
-    cleanup(workspace);
-  }
-});
-
-test('knowledge RAG search can recall vector-only matches before rerank', async () => {
-  const workspace = tempWorkspace();
-  try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    writeTestFaq(workspace, {
-      id: 'kb_refund_policy',
-      title: '退款规则',
-      terms: ['退款', '订单'],
-      body: '申请售后退款时，需要检查订单支付状态、课程观看进度和退款窗口。',
-    });
-    updateKnowledgeIndex({ workspaceRoot: workspace });
-
-    const provider = {
-      id: 'fake',
-      model: 'test-vector',
-      dimensions: 3,
-      distance: 'cosine',
-      async embedDocuments(input) {
-        return {
-          provider: 'fake',
-          model: 'test-vector',
-          dimensions: 3,
-          distance: 'cosine',
-          results: input.map((item) => ({
-            id: item.id,
-            provider: 'fake',
-            model: 'test-vector',
-            dimensions: 3,
-            distance: 'cosine',
-            vector: [1, 0, 0],
-            contentHash: item.contentHash,
-            metadata: item.metadata,
-          })),
-          warnings: [],
-        };
-      },
-      async embedQuery() {
-        return {
-          id: 'query',
-          provider: 'fake',
-          model: 'test-vector',
-          dimensions: 3,
-          distance: 'cosine',
-          vector: [1, 0, 0],
-          warnings: [],
-        };
-      },
-    };
-    await buildKnowledgeVectorIndex({
-      workspaceRoot: workspace,
-      provider,
-      config: {
-        enabled: true,
-        provider: 'fake',
-        model: 'test-vector',
-        dimensions: 3,
-        distance: 'cosine',
-      },
-    });
-
-    const keywordOnly = searchKnowledge({ workspaceRoot: workspace, query: '付款凭证异常怎么办', limit: 3 });
-    assert.equal(keywordOnly.results.length, 0);
-
-    const pack = await searchKnowledgeWithRag({
-      workspaceRoot: workspace,
-      query: '付款凭证异常怎么办',
-      limit: 1,
-      embedding: { provider },
-    });
-
-    assert.equal(pack.results[0].document_id, 'kb_refund_policy');
-    assert.equal(pack.results[0].retrieval?.source, 'vector');
-    assert.equal(pack.results[0].retrieval?.vectorScore, 1);
-  } finally {
-    cleanup(workspace);
-  }
-});
-
-test('knowledge CLI initializes and updates a workspace', () => {
+test('knowledge CLI initializes and updates a workspace', async () => {
   const workspace = tempWorkspace();
   const knowledgeBase = tempWorkspace();
   try {
@@ -426,7 +303,7 @@ test('knowledge CLI initializes and updates a workspace', () => {
   }
 });
 
-test('knowledge init leaves imported whitepaper slices as drafts by default', () => {
+test('knowledge init leaves imported whitepaper slices as drafts by default', async () => {
   const workspace = tempWorkspace();
   const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
   try {
@@ -474,7 +351,7 @@ test('knowledge init leaves imported whitepaper slices as drafts by default', ()
     const activeWhitepaperSlices = findGeneratedMarkdown(join(knowledgeRoot, 'whitepapers'));
     assert.equal(activeWhitepaperSlices.length, 0, 'safe init must not create active whitepaper slices');
 
-    const aiResult = searchKnowledge({
+    const aiResult = await retrieveEvidence({
       workspaceRoot: workspace,
       query: '学习日晚上8点没有完成任务会怎么提醒',
       limit: 5,
@@ -487,7 +364,7 @@ test('knowledge init leaves imported whitepaper slices as drafts by default', ()
   }
 });
 
-test('source intake keeps same filename with different content in separate hash paths', () => {
+test('source intake keeps same filename with different content in separate hash paths', async () => {
   const workspace = tempWorkspace();
   const sourceDir = tempWorkspace();
   try {
@@ -512,7 +389,7 @@ test('source intake keeps same filename with different content in separate hash 
   }
 });
 
-test('legacy active publish is explicit and visible', () => {
+test('legacy active publish is explicit and visible', async () => {
   const workspace = tempWorkspace();
   const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
   try {
@@ -537,7 +414,7 @@ test('legacy active publish is explicit and visible', () => {
     assert.equal(report.quality_gate_bypassed, true);
     assert.equal(report.chunks >= 2, true);
 
-    const aiResult = searchKnowledge({
+    const aiResult = await retrieveEvidence({
       workspaceRoot: workspace,
       query: '学习日晚上8点没有完成任务会怎么提醒',
       limit: 5,
@@ -548,7 +425,7 @@ test('legacy active publish is explicit and visible', () => {
     assert.match(aiResult.results[0].source_document, /AI伴学助手用户指南\.docx|ai-ban-xue-zhu-shou-yong-hu-zhi-nan\.docx/);
     assert.match(aiResult.results[0].excerpt, /晚上8点未完成当日学习任务/);
 
-    const trainingResult = searchKnowledge({
+    const trainingResult = await retrieveEvidence({
       workspaceRoot: workspace,
       query: '课程搜索栏支持按什么搜索课程',
       limit: 5,
@@ -564,7 +441,7 @@ test('legacy active publish is explicit and visible', () => {
   }
 });
 
-test('knowledge init does not overwrite edited parent slices unless forced', () => {
+test('knowledge init does not overwrite edited parent slices unless forced', async () => {
   const workspace = tempWorkspace();
   const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-source-docx-'));
   try {
@@ -589,7 +466,7 @@ test('knowledge init does not overwrite edited parent slices unless forced', () 
   }
 });
 
-test('knowledge search finds FAQ and runbook documents while filtering deprecated documents', () => {
+test('configured retrieval finds FAQ and runbook documents while filtering deprecated documents', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -715,18 +592,24 @@ owner: support
 
     updateKnowledgeIndex({ workspaceRoot: workspace });
 
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '怎么重置密码' }).results[0].source_type, 'faq');
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '登录失败怎么排查' }).results[0].source_type, 'runbook');
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '废弃功能怎么用' }).results.length, 0);
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '账号是什么意思', sourceTypes: ['glossary'] }).results[0].confidence, 'low');
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '账号', limit: 1 }).results.length, 1);
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '完全不存在的问题' }).results.length, 0);
+    const password = await retrieveEvidence({ workspaceRoot: workspace, query: '怎么重置密码' });
+    const login = await retrieveEvidence({ workspaceRoot: workspace, query: '登录失败怎么排查' });
+    const deprecated = await retrieveEvidence({ workspaceRoot: workspace, query: '废弃功能怎么用' });
+    const glossary = await retrieveEvidence({ workspaceRoot: workspace, query: '账号是什么意思', sourceTypes: ['glossary'] });
+    const account = await retrieveEvidence({ workspaceRoot: workspace, query: '账号', limit: 1 });
+    const noHit = await retrieveEvidence({ workspaceRoot: workspace, query: '完全不存在的问题' });
+    assert.equal(password.results[0].source_type, 'faq');
+    assert.equal(login.results[0].source_type, 'runbook');
+    assert.equal(deprecated.results.length, 0);
+    assert.equal(glossary.results[0].confidence, 'low');
+    assert.equal(account.results.length, 1);
+    assert.equal(noHit.results.length, 0);
   } finally {
     cleanup(workspace);
   }
 });
 
-test('knowledge router identifies module and intent from taxonomy aliases', () => {
+test('knowledge router identifies module and intent from taxonomy aliases', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -777,14 +660,14 @@ test('knowledge router identifies module and intent from taxonomy aliases', () =
   }
 });
 
-test('frontmatter validation reports missing required fields', () => {
+test('frontmatter validation reports missing required fields', async () => {
   assert.throws(
     () => parseMarkdownDocument('---\nid: kb_invalid\n---\n# Invalid\n', 'invalid.md'),
     /missing required frontmatter fields/,
   );
 });
 
-test('knowledge agent configs are registered for future runtime wiring', () => {
+test('knowledge agent configs are registered for future runtime wiring', async () => {
   const stages = loadAgentRegistry().agents.map((agent) => agent.stage);
 
   assert.equal(stages.includes('knowledge_router'), true);
@@ -857,7 +740,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-test('knowledge quality audit detects empty body and missing provenance', () => {
+test('knowledge quality audit detects empty body and missing provenance', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -902,7 +785,7 @@ owner: knowledge-admin
   }
 });
 
-test('knowledge repair plan can be generated and applied for safe actions', () => {
+test('knowledge repair plan can be generated and applied for safe actions', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -957,7 +840,7 @@ section_path:
   }
 });
 
-test('safe merge repair action mutates adjacent draft slices instead of silently skipping', () => {
+test('safe merge repair action mutates adjacent draft slices instead of silently skipping', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -983,7 +866,7 @@ test('safe merge repair action mutates adjacent draft slices instead of silently
   }
 });
 
-test('knowledge review records are written and statuses change', () => {
+test('knowledge review records are written and statuses change', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1073,7 +956,7 @@ Test body.
   }
 });
 
-test('knowledge quality gate evaluator distinguishes warn and strict', () => {
+test('knowledge quality gate evaluator distinguishes warn and strict', async () => {
   const report = {
     version: 1,
     workspaceRoot: '/tmp',
@@ -1101,7 +984,7 @@ test('knowledge quality gate evaluator distinguishes warn and strict', () => {
   assert.equal(strictFail.exitCode, 2);
 });
 
-test('solved case review accepts relative path without leading slash (regression for case-review path check)', () => {
+test('solved case review accepts relative path without leading slash (regression for case-review path check)', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1150,7 +1033,7 @@ owner: knowledge-admin
   }
 });
 
-test('knowledge publish reads pipeline_status back from frontmatter (regression for parseMarkdownDocument pipeline fields)', () => {
+test('knowledge publish reads pipeline_status back from frontmatter (regression for parseMarkdownDocument pipeline fields)', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1209,7 +1092,7 @@ This is a meaningful content body that exceeds the minimum body length requireme
   }
 });
 
-test('knowledge publish rejects ok quality status when no audit report exists', () => {
+test('knowledge publish rejects ok quality status when no audit report exists', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1226,7 +1109,7 @@ test('knowledge publish rejects ok quality status when no audit report exists', 
   }
 });
 
-test('draft slicer splits oversized heading group into multiple draft files', () => {
+test('draft slicer splits oversized heading group into multiple draft files', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1255,7 +1138,7 @@ test('draft slicer splits oversized heading group into multiple draft files', ()
   }
 });
 
-test('draft slicer keeps single oversized paragraph and records manual split warning', () => {
+test('draft slicer keeps single oversized paragraph and records manual split warning', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1278,7 +1161,7 @@ test('draft slicer keeps single oversized paragraph and records manual split war
   }
 });
 
-test('review approval keeps draft non-active until publish', () => {
+test('review approval keeps draft non-active until publish', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1298,13 +1181,14 @@ test('review approval keeps draft non-active until publish', () => {
     assert.equal(parsed.frontmatter.status, 'draft');
     assert.equal(parsed.frontmatter.pipeline_status, 'approved');
     assert.match(parsed.frontmatter.review_id, /^rev_/);
-    assert.equal(searchKnowledge({ workspaceRoot: workspace, query: '测试发布' }).results.length, 0);
+    const evidence = await retrieveEvidence({ workspaceRoot: workspace, query: '测试发布' });
+    assert.equal(evidence.results.length, 0);
   } finally {
     cleanup(workspace);
   }
 });
 
-test('publish blocks quality error draft', () => {
+test('publish blocks quality error draft', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1319,7 +1203,7 @@ test('publish blocks quality error draft', () => {
   }
 });
 
-test('quality-clean auto approval publishes only slices without warn or error issues', () => {
+test('quality-clean auto approval publishes only slices without warn or error issues', async () => {
   const workspace = tempWorkspace();
   try {
     initKnowledgeWorkspace({ workspaceRoot: workspace });
@@ -1351,133 +1235,7 @@ test('quality-clean auto approval publishes only slices without warn or error is
   }
 });
 
-test('knowledge eval matches expected document and keywords from source_document and excerpt', () => {
-  const workspace = tempWorkspace();
-  const questions = join(workspace, 'questions.json');
-  try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    const whitepaperDir = join(workspace, 'knowledge', 'whitepapers', 'ai-companion');
-    mkdirSync(whitepaperDir, { recursive: true });
-    writeFileSync(
-      join(whitepaperDir, 'reminder.md'),
-      `---
-id: kb_whitepaper_ai_reminder
-title: 督学提醒
-type: whitepaper_slice
-module: ai-companion
-intent: product_rule
-source_type: whitepaper
-confidence: medium
-status: active
-visibility: internal
-product_versions: []
-related_terms:
-  - AI伴学助手
-  - 督学提醒
-related_repos: []
-last_verified_at: 2999-01-01
-owner: product
-source_document: knowledge/_sources/whitepapers/AI伴学助手用户指南.docx
-source_document_id: src_ai
-source_pages: []
-section_path:
-  - 督学提醒
-chunking_strategy: semantic-section-v1
----
 
-# 督学提醒
-
-## 核心内容
-
-学习日晚上8点未完成当日学习任务时，会通过 AI 伴学助手和 APP 通知发送提醒。
-`,
-      'utf8',
-    );
-    updateKnowledgeIndex({ workspaceRoot: workspace });
-    writeFileSync(
-      questions,
-      JSON.stringify([
-        {
-          id: 'ai-reminder',
-          question: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
-          shouldHit: true,
-          expectedDocument: 'AI伴学助手用户指南.docx',
-          expectedKeywords: ['APP 通知'],
-        },
-      ]),
-      'utf8',
-    );
-    const report = runKnowledgeEval({ workspaceRoot: workspace, questionsPath: questions });
-    assert.equal(report.failures.length, 0);
-    assert.equal(report.perQuestion[0].topEvidence.sourceDocument, 'knowledge/_sources/whitepapers/AI伴学助手用户指南.docx');
-    assert.match(report.perQuestion[0].topEvidence.excerptPreview, /APP 通知/);
-  } finally {
-    cleanup(workspace);
-  }
-});
-
-test('knowledge eval loads YAML question files', () => {
-  const workspace = tempWorkspace();
-  try {
-    initKnowledgeWorkspace({ workspaceRoot: workspace });
-    const whitepaperDir = join(workspace, 'knowledge', 'whitepapers', 'edusoho-training');
-    mkdirSync(whitepaperDir, { recursive: true });
-    writeFileSync(
-      join(whitepaperDir, 'course-search.md'),
-      `---
-id: kb_whitepaper_yaml_course_search
-title: 课程搜索规则
-type: whitepaper_slice
-module: edusoho-training
-intent: product_rule
-source_type: whitepaper
-confidence: medium
-status: active
-visibility: internal
-product_versions: []
-related_terms:
-  - EduSoho
-  - 课程搜索
-  - 课程名称
-related_repos: []
-last_verified_at: 2999-01-01
-owner: knowledge-admin
-source_document: knowledge/_sources/whitepapers/EduSoho教培线用户指南.docx
-source_document_id: src_yaml_eval
-source_block_ids:
-  - blk_yaml_00001
-section_path:
-  - 课程搜索
-quality_status: ok
----
-
-# 课程搜索规则
-
-EduSoho 教培线课程搜索栏支持按课程名称搜索课程，并会返回匹配课程。
-`,
-      'utf8',
-    );
-    updateKnowledgeIndex({ workspaceRoot: workspace });
-    const questionsPath = join(workspace, 'eval-questions.yaml');
-    writeFileSync(
-      questionsPath,
-      `questions:
-  - id: yaml_course_search
-    question: EduSoho 教培线课程搜索栏支持按什么搜索课程？
-    shouldHit: true
-    expectedDocument: EduSoho教培线
-    expectedKeywords:
-      - 课程名称
-`,
-      'utf8',
-    );
-    const report = runKnowledgeEval({ workspaceRoot: workspace, questionsPath });
-    assert.equal(report.questionCount, 1);
-    assert.equal(report.failures.length, 0);
-  } finally {
-    cleanup(workspace);
-  }
-});
 
 
 function normalizedBlock(sourceId, order, type, text) {

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createEmbeddingProvider } from '../dist/embedding/index.js';
+import { createEmbeddingProvider } from '../dist/providers/embedding/index.js';
 import {
   buildKnowledgeVectorIndex,
   checkKnowledgeVectorCompatibility,

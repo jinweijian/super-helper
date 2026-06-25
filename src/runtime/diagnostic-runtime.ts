@@ -1,9 +1,9 @@
-import type { ClaudeWorker } from '../claude-worker.js';
 import type { SuperHelperConfig } from '../config.js';
 import { getModelProvider } from '../config.js';
 import type { UserPersona } from '../domain.js';
 import { createModelClient } from '../model.js';
 import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import { resolveAgentConfig } from './agent-configs.js';
 import { CaseCurationService } from './case-curation-service.js';
 import type { RuntimeTurnResponse } from './contracts.js';
@@ -33,7 +33,7 @@ export class DiagnosticRuntime {
   constructor(
     config: SuperHelperConfig,
     private readonly store: FileMemoryStore,
-    worker: ClaudeWorker,
+    worker: DiagnosticWorker,
   ) {
     const model = createModelClient(getModelProvider(config));
     const mainAgentSpec = resolveAgentConfig('main').content;

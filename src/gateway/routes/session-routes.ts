@@ -33,7 +33,7 @@ export async function handleSessionRoutes(
     });
     caseSession.userPersona = body.persona ?? config.agent.defaultUserPersona;
     store.saveCase(caseSession);
-    sendJson(res, 200, { session: serializeSession(caseSession, config) });
+    sendJson(res, 200, { session: await serializeSession(caseSession, config) });
     return true;
   }
 
@@ -51,7 +51,7 @@ export async function handleSessionRoutes(
     }
 
     recoverStaleActiveTurn(caseSession, store, config);
-    sendJson(res, 200, { session: serializeSession(caseSession, config) });
+    sendJson(res, 200, { session: await serializeSession(caseSession, config) });
     return true;
   }
 
@@ -78,7 +78,7 @@ export async function handleSessionRoutes(
       sendJson(res, 400, { error: 'unsupported session action' });
       return true;
     }
-    sendJson(res, 200, { session: serializeSession(caseSession, config) });
+    sendJson(res, 200, { session: await serializeSession(caseSession, config) });
     return true;
   }
 

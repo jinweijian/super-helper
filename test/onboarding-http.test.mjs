@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { defaultConfig } from '../dist/config.js';
-import { startServer } from '../dist/server.js';
+import { startServer } from '../dist/gateway/http-server.js';
 import { renderSetupApp } from '../dist/setup-ui.js';
 import { draftInputFixture } from './helpers/onboarding-fixtures.mjs';
 

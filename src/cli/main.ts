@@ -1,9 +1,9 @@
 import {
   runDevServerCommand,
-  runDoctorCommand,
   runServerCommand,
-  runStatusCommand,
-} from './index.js';
+} from './command-server.js';
+import { runDoctorCommand } from './command-doctor.js';
+import { runStatusCommand } from './command-status.js';
 import { runAcceptCommand } from './command-accept.js';
 import { runConfigCommand, runInitCommand } from './command-config.js';
 import { runKnowledgeCommand } from './command-knowledge.js';
@@ -77,7 +77,7 @@ export async function main(): Promise<void> {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|search|extract|normalize|slice|audit|repair|review|publish|eval|migration-report|vector build>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|extract|normalize|slice|audit|repair|review|publish|migration-report|vector build>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 
 export function runCli(): void {

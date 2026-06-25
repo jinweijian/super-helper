@@ -69,13 +69,13 @@ test('CLI routes dashboard dry-run server command with binding flags', () => {
   }
 });
 
-test('CLI routes knowledge search with workspace and knowledge-root flags', () => {
+test('CLI routes retrieval debug through configured retrieval with workspace and knowledge-root flags', () => {
   const workspace = tempRoot('super-helper-cli-workspace-');
   const knowledgeRoot = join(workspace, 'knowledge-root');
   try {
     const result = runCli([
-      'knowledge',
-      'search',
+      'retrieval',
+      'debug',
       '--workspace',
       workspace,
       '--knowledge-root',
@@ -88,9 +88,47 @@ test('CLI routes knowledge search with workspace and knowledge-root flags', () =
 
     assert.equal(result.status, 0, result.stderr);
     const parsed = JSON.parse(result.stdout);
-    assert.equal(parsed.query.normalized_question, 'missinganswer');
-    assert.deepEqual(parsed.query.keywords, ['missinganswer']);
-    assert.deepEqual(parsed.results, []);
+    assert.equal(parsed.query, 'missing answer');
+    assert.equal(parsed.trace.strategies.find((item) => item.id === 'bm25')?.status, 'ran');
+    assert.equal(parsed.trace.strategies.find((item) => item.id === 'embedding')?.status, 'skipped');
+    assert.equal(parsed.trace.rerank.status, 'skipped');
+    assert.deepEqual(parsed.candidates, []);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('CLI does not register removed knowledge query and eval commands', () => {
+  const workspace = tempRoot('super-helper-cli-removed-knowledge-');
+  const knowledgeRoot = join(workspace, 'knowledge-root');
+  try {
+    const search = runCli([
+      'knowledge',
+      'search',
+      '--workspace',
+      workspace,
+      '--knowledge-root',
+      knowledgeRoot,
+      '--query',
+      'missing answer',
+    ]);
+    assert.equal(search.status, 1);
+    assert.match(search.stderr, /Usage: super-helper knowledge/);
+    assert.doesNotMatch(search.stderr, /knowledge search/);
+
+    const evaluation = runCli([
+      'knowledge',
+      'eval',
+      '--workspace',
+      workspace,
+      '--knowledge-root',
+      knowledgeRoot,
+      '--questions',
+      'missing.json',
+    ]);
+    assert.equal(evaluation.status, 1);
+    assert.match(evaluation.stderr, /Usage: super-helper knowledge/);
+    assert.doesNotMatch(evaluation.stderr, /knowledge eval/);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
   }

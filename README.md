@@ -109,7 +109,7 @@ Onboarding 草稿、运行记录和可恢复进度位于：
   -> 不足时升级到 Claude Code 只读诊断
 ```
 
-召回编排位于 `src/retrieval/`。Embedding 和 Rerank 是同级 provider 能力，分别位于 `src/providers/embedding/` 和 `src/providers/rerank/`；旧 `src/embedding/` 仅保留兼容导出。当前真实 provider 是 SiliconFlow，同时保留 fake provider 便于测试。
+召回编排位于 `src/retrieval/`。Embedding 和 Rerank 是同级 provider 能力，分别位于 `src/providers/embedding/` 和 `src/providers/rerank/`；当前真实 provider 是 SiliconFlow，同时保留 fake provider 便于测试。
 
 中文 BM25 使用业务词、中文 bigram 和 Latin token，不再用普通单字制造假命中，并按标题、章节、related terms、module/intent、正文进行 4/3/3/2/1 字段加权。知识索引使用 `parent-child-v2`：300–800 字 child 负责召回，Markdown parent 继续作为最终证据；旧 chunk 可读但不能伪装成直答合格证据。
 
@@ -143,11 +143,6 @@ npm run knowledge:init -- --workspace /path/to/project --knowledge-root /path/to
 
 ```bash
 pnpm build
-node dist/cli.js knowledge search \
-  --workspace /path/to/project \
-  --knowledge-root /path/to/knowledge \
-  --query "这里写你的问题"
-
 node dist/cli.js retrieval search \
   --workspace /path/to/project \
   --knowledge-root /path/to/knowledge \
@@ -208,14 +203,14 @@ pnpm test
 主要实现入口：
 
 - Setup Dashboard、草稿、运行记录、进度和配置提交在 `src/onboarding/`。
-- HTTP 启动和路由组合在 `src/gateway/http-server.ts`，`src/server.ts` 只是兼容导出。
+- HTTP 启动和路由组合在 `src/gateway/http-server.ts`。
 - 设置保存、SecretRef 应用、public settings 映射和 provider/model smoke test 编排在 `src/settings/`。
 - CLI 主分发在 `src/cli/main.ts`，复杂命令适配器使用 `src/cli/command-*` 命名。
 - 产品 Agent 配置在 `src/agents/`，阶段配对在 `src/agents/registry.json`。
-- 运行时编排在 `src/runtime/diagnostic-runtime.ts`，`src/agent.ts` 只是兼容门面。
+- 运行时编排在 `src/runtime/diagnostic-runtime.ts`。
 - 多策略召回、候选融合、可选 rerank 和 retrieval trace 在 `src/retrieval/`。
 - Embedding/Rerank provider 适配在 `src/providers/embedding/` 和 `src/providers/rerank/`。
 - 企业知识库资产、pipeline 和可重建索引 artifact 在 `src/knowledge/`。
-- Claude Code 诊断工作器内部实现位于 `src/workers/claude/`，`src/claude-worker.ts` 只是兼容导出。
+- Claude Code 诊断工作器内部实现位于 `src/workers/claude/`。
 - 诊断案例仓库和诊断上下文工具在 `src/sessions/`。
 - 诊断日志抽屉的展示转换在 `src/observability/log-blocks.ts`。

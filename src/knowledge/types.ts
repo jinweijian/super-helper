@@ -342,53 +342,6 @@ export interface KnowledgePublishReport {
   qualityReportGeneratedAt?: string;
 }
 
-// Eval types
-export interface KnowledgeEvalQuestion {
-  id: string;
-  question: string;
-  shouldHit: boolean;
-  expectedDocument?: string;
-  expectedSection?: string;
-  expectedKeywords?: string[];
-  expectedSourceType?: KnowledgeSourceType;
-  expectedEscalation?: 'code' | 'human' | 'none';
-}
-
-export interface KnowledgeEvalQuestionResult {
-  questionId: string;
-  passed: boolean;
-  hitAt1: boolean;
-  hitAt3: boolean;
-  hitAt5: boolean;
-  answerBearing: boolean;
-  falsePositive: boolean;
-  failureReason?: string;
-  failureAttribution?: 'source_extraction' | 'normalization' | 'slicing' | 'retrieval' | 'evidence_judge' | 'missing_source_knowledge' | 'escalation';
-  evidenceIds: string[];
-  topEvidence?: {
-    source: string;
-    sourceDocument?: string;
-    title: string;
-    excerptPreview: string;
-    matchedTerms: string[];
-    qualityStatus?: 'ok' | 'info' | 'warn' | 'error';
-  };
-}
-
-export interface KnowledgeEvalReport {
-  version: 1;
-  generatedAt: string;
-  questionCount: number;
-  hitAt1: number;
-  hitAt3: number;
-  hitAt5: number;
-  answerBearingRate: number;
-  falsePositiveCount: number;
-  escalationResults: Array<{ questionId: string; escalated: boolean; reason: string }>;
-  failures: Array<{ questionId: string; reason: string; attribution?: string }>;
-  perQuestion: KnowledgeEvalQuestionResult[];
-}
-
 // Acceptance report types
 export type KnowledgeAcceptanceSeverity = 'ok' | 'info' | 'warn' | 'error';
 

@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import test from 'node:test';
 import { defaultConfig } from '../dist/config.js';
-import { startServer } from '../dist/server.js';
+import { startServer } from '../dist/gateway/http-server.js';
 
 class NoopOnboardingService {
   getState() {

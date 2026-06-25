@@ -78,11 +78,10 @@ Implemented local commands:
 
 - `super-helper knowledge init --workspace <project-path> [--knowledge-root <path>]` creates the isolated knowledge workspace structure and runs intake, extract, normalize, draft slice, audit, and index for already-published formal documents. It does not publish unchecked drafts unless `--legacy-active-publish` is explicitly passed.
 - `super-helper knowledge update --workspace <project-path> [--knowledge-root <path>]` rebuilds `knowledge/indexes/manifest.json`, `keyword-index.json`, and `chunks.jsonl` from formal published Markdown parent slices.
-- `super-helper knowledge search --workspace <project-path> --query <question> [--knowledge-root <path>]` remains a compatibility local search command that attaches optional quality metadata and expands chunk hits back to parent slice evidence.
-- `super-helper retrieval search|debug --workspace <project-path> --query <question> [--knowledge-root <path>]` exercises the retrieval service boundary for BM25/embedding/keyword recall, fusion, optional rerank, and trace inspection.
+- `super-helper retrieval search|debug --workspace <project-path> --query <question> [--knowledge-root <path>]` is the canonical query/debug surface for BM25/embedding recall, fusion, optional rerank, and trace inspection.
 - `super-helper retrieval eval --workspace <project-path> --questions <json> [--knowledge-root <path>] [--report <json>]` 复用生产 Router、configured retrieval 和 Evidence Judge，验证 Recall@5、MRR、直答精度、拒答与必须升级行为。
 - `super-helper knowledge migration-report` 只读盘点 legacy parent/chunk、生成 `ai-companion -> edusoho-training` 分批状态和人工 review queue；它不会自动迁移或批准语料。
-- `super-helper knowledge extract` / `normalize` / `slice` / `audit` / `repair` / `review` / `publish` / `eval` run individual pipeline stages and write their own artifacts under `knowledge/_pipeline/` and `knowledge/reports/`.
+- `super-helper knowledge extract` / `normalize` / `slice` / `audit` / `repair` / `review` / `publish` run individual pipeline stages and write their own artifacts under `knowledge/_pipeline/` and `knowledge/reports/`.
 - `super-helper accept knowledge` (alias `pnpm accept:knowledge`) runs a repeatable local acceptance check and writes a redacted acceptance report.
 
 Runtime behavior:
@@ -203,7 +202,7 @@ Concrete implementation:
 - `src/runtime/presenter.ts` formats preflight questions and persona-aware final replies without inventing unsupported facts.
 - `src/agents/presentation.md` defines presentation constraints; the presentation step must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
-- `src/agent.ts` remains a thin compatibility facade; new orchestration lives in `src/runtime/diagnostic-runtime.ts`.
+- `src/runtime/diagnostic-runtime.ts` is the runtime orchestration entry; private root facades are intentionally not used.
 
 Worker command, cwd, stdout, stderr, stack, raw provider payload, and internal prompt data are diagnostic-log-only. Logs remain bounded and redacted. If a worker fails before usable evidence exists, the main reply contains only a safe failure category, current diagnosis state, next action, and case/run identity.
 

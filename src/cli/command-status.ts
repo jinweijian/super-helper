@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { configPath, loadConfig } from '../config.js';
 import { buildKnowledgeHealthSummary } from '../knowledge/index.js';
 import { FileOnboardingRunRepository } from '../onboarding/index.js';
+import { createConfiguredKnowledgeRetriever } from '../retrieval/configured-search.js';
 import { readOption } from './args.js';
 import { resolveServerBinding } from './bindings.js';
 
@@ -34,9 +35,10 @@ export async function runStatusCommand(input: RunStatusCommandInput = {}): Promi
   const serviceOk = await (input.probeHealth ?? probeHealth)(`${binding.localUrl}/api/health`);
   const runs = new FileOnboardingRunRepository(config.storage.rootDir);
   const latestRun = runs.latest();
-  const knowledge = buildKnowledgeHealthSummary({
+  const knowledge = await buildKnowledgeHealthSummary({
     config,
     workspaceId: config.workspaces[0]?.id ?? 'current',
+    retrieveEvidence: createConfiguredKnowledgeRetriever(config),
   });
 
   write(`config: ${path}`);

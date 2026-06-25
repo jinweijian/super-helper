@@ -33,13 +33,17 @@ export type { KnowledgeBm25Index, KnowledgeBm25IndexEntry } from './indexes/bm25
 export { resolveKnowledgeWorkspaceRoot, workspaceKnowledgeKey } from './storage-scope.js';
 export {
   discoverKnowledgeDocuments,
-  keywordsFromQuery,
   loadSourceDocuments,
-  searchKnowledge,
-  searchKnowledgeWithRag,
+} from './documents/discovery.js';
+export {
+  keywordsFromQuery,
+  extractKnowledgeTerms,
+  normalizeKnowledgeText,
+} from './documents/terms.js';
+export {
   updateKnowledgeIndex,
   updateKnowledgeIndexWithQuality,
-} from './indexer.js';
+} from './indexes/build.js';
 export { loadKnowledgeTaxonomy, routeKnowledgeQuestion, validateKnowledgeTaxonomyCoverage } from './taxonomy.js';
 export { buildKnowledgeHealthSummary } from './health.js';
 export type { KnowledgeHealthStatus, KnowledgeHealthSummary, KnowledgeSimilarWorkspace } from './health.js';
@@ -72,8 +76,6 @@ export {
   rejectSolvedCase,
   requestSolvedCaseEdits,
 } from './case-review.js';
-export { runKnowledgeEval, loadQuestions } from './eval.js';
-export type { RunKnowledgeEvalInput } from './eval.js';
 export { generateKnowledgeMigrationReport } from './migration.js';
 export type { KnowledgeMigrationReport } from './migration.js';
 export {
@@ -138,10 +140,6 @@ export type {
   KnowledgeCaseReviewRecord,
   KnowledgeCaseReviewAction,
   KnowledgePublishReport,
-  // Eval types
-  KnowledgeEvalQuestion,
-  KnowledgeEvalQuestionResult,
-  KnowledgeEvalReport,
   // Acceptance types
   KnowledgeAcceptanceCheck,
   KnowledgeAcceptanceScenario,

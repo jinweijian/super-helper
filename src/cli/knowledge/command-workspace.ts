@@ -1,7 +1,6 @@
 import {
   defaultSourceDirectory,
   initKnowledgeWorkspace,
-  searchKnowledge,
   updateKnowledgeIndexWithQuality,
 } from '../../knowledge/index.js';
 import { hasFlag, readOption } from '../args.js';
@@ -64,18 +63,6 @@ export async function runKnowledgeWorkspaceCommand(
       console.error(`gate failed: ${result.qualityGateResult.reason}`);
       process.exit(result.qualityGateResult.exitCode);
     }
-    return true;
-  }
-
-  if (subcommand === 'search') {
-    const query = readOption(argv, '--query') ?? argv[1];
-    if (!query) {
-      console.error('Usage: super-helper knowledge search --query <question> [--workspace <path>] [--limit <n>]');
-      process.exit(1);
-    }
-    const limit = Number(readOption(argv, '--limit') ?? '5');
-    const result = searchKnowledge({ workspaceRoot, query, limit: Number.isFinite(limit) ? limit : 5 });
-    console.log(JSON.stringify(result, null, 2));
     return true;
   }
 

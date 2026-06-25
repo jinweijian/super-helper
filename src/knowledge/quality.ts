@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { discoverKnowledgeDocuments, loadSourceDocuments } from './indexer.js';
+import { discoverKnowledgeDocuments, loadSourceDocuments } from './documents/discovery.js';
 import {
   indexesDir,
   knowledgeReportsRoot,

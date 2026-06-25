@@ -28,6 +28,26 @@ function relativeSource(path) {
   return relative(repoRoot, path).split(sep).join('/');
 }
 
+function allTextFilesUnder(dir) {
+  const files = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === 'node_modules' || entry === '.git' || entry === 'dist' || entry === '.pnpm-store') continue;
+    const path = join(dir, entry);
+    let stat;
+    try {
+      stat = statSync(path);
+    } catch {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      files.push(...allTextFilesUnder(path));
+    } else if (/\.(?:ts|js|mjs|json|md|yaml|yml)$/.test(entry)) {
+      files.push(path);
+    }
+  }
+  return files;
+}
+
 function assertNoImportPattern(files, patterns, message) {
   const offenders = [];
   for (const file of files) {
@@ -39,6 +59,11 @@ function assertNoImportPattern(files, patterns, message) {
     }
   }
   assert.deepEqual(offenders, [], message);
+}
+
+function assertAbsent(paths, message) {
+  const existing = paths.filter((path) => existsSync(join(repoRoot, path)));
+  assert.deepEqual(existing, [], message);
 }
 
 test('knowledge module does not import provider modules', () => {
@@ -54,27 +79,78 @@ test('knowledge module does not import provider modules', () => {
   );
 });
 
-test('embedding provider implementations do not reverse-import the legacy embedding facade', () => {
+test('deleted private compatibility source surfaces stay absent', () => {
+  assertAbsent([
+    'src/embedding',
+    'src/retrieval/compatibility-search.ts',
+    'src/retrieval/legacy-rag.ts',
+    'src/retrieval/recall/keyword',
+    'src/knowledge/indexer.ts',
+    'src/knowledge/eval.ts',
+    'src/agent.ts',
+    'src/server.ts',
+    'src/claude-worker.ts',
+    'src/index.ts',
+    'src/cli/doctor-command.ts',
+    'src/cli/server-commands.ts',
+    'src/cli/status-command.ts',
+    'src/cli/index.ts',
+  ], 'private compatibility directories, root aliases, and legacy retrieval files must be physically removed');
+});
+
+test('deleted compatibility symbols are not re-exported or routed under new names', () => {
+  const scanRoots = [
+    'src',
+    'dist',
+    'docs',
+    'AGENTS.md',
+    'README.md',
+    'package.json',
+  ];
+  const files = scanRoots.flatMap((scanRoot) => {
+    const absolute = join(repoRoot, scanRoot);
+    if (!existsSync(absolute)) return [];
+    return statSync(absolute).isDirectory() ? allTextFilesUnder(absolute) : [absolute];
+  }).filter((path) => !relativeSource(path).startsWith('docs/superpowers/'));
+  assertNoImportPattern(
+    files,
+    [
+      /\bsearchKnowledge[A-Za-z_$\w]*/,
+      /\bsearchKnowledgeWithRag\b/,
+      /\bKnowledgeRagSearchQuery\b/,
+      /\bsearchKnowledgeCompatibility\b/,
+      /\bcompatibilityKeywordsFromQuery\b/,
+      /\bcreateKeywordRecallStrategy\b/,
+      /\bincludeKeywordCompatibility\b/,
+      /\bKnowledgeEval(?:Question|QuestionResult|Report)\b/,
+      /knowledge:eval/,
+      /knowledge\s+<[^>]*search/,
+      /knowledge\s+<[^>]*eval/,
+    ],
+    'deleted legacy symbols, package aliases, and knowledge query/eval usage must not survive in source, declarations, or current docs',
+  );
+});
+
+test('retrieval CLI uses configured retrieval instead of manual BM25-only wiring', () => {
+  assertNoImportPattern(
+    [join(srcRoot, 'cli', 'command-retrieval.ts')],
+    [
+      /\bcreateRetrievalService\b/,
+      /\bcreateBm25RecallStrategy\b/,
+      /from\s+['"]\.\.\/retrieval\/index(?:\.js)?['"]/,
+    ],
+    'retrieval search/debug must use configured retrieval composition, not manual BM25-only service construction',
+  );
+});
+
+test('embedding provider implementations do not reverse-import a deleted embedding facade', () => {
   assertNoImportPattern(
     tsFilesUnder(join(srcRoot, 'providers', 'embedding')),
     [
       /from\s+['"](?:\.\.\/)+embedding(?:\/|['"])/,
       /import\s*\(\s*['"](?:\.\.\/)+embedding(?:\/|['"])/,
     ],
-    'provider implementations must live under src/providers and never load implementation from src/embedding',
-  );
-});
-
-test('legacy embedding files contain compatibility exports only', () => {
-  assertNoImportPattern(
-    tsFilesUnder(join(srcRoot, 'embedding')),
-    [
-      /\bclass\s+[A-Za-z_$]/,
-      /\bfunction\s+[A-Za-z_$]/,
-      /\binterface\s+[A-Za-z_$]/,
-      /\bconst\s+[A-Za-z_$][\w$]*\s*=/,
-    ],
-    'src/embedding is a compatibility facade and must not contain provider or metadata implementations',
+    'provider implementations must live under src/providers and never load implementation from deleted src/embedding',
   );
 });
 
@@ -82,28 +158,10 @@ test('configured retrieval composes the registry service without keyword or lega
   assertNoImportPattern(
     [join(srcRoot, 'retrieval', 'configured-search.ts')],
     [
-      /\bsearchKnowledge\b/,
+      /\bsearchKnowledge[A-Za-z_$\w]*/,
       /from\s+['"]\.\/legacy-rag(?:\.js)?['"]/,
     ],
     'configured retrieval must always use the registry/service production path',
-  );
-});
-
-test('knowledge indexer is a thin compatibility facade without retrieval implementation', () => {
-  const path = join(srcRoot, 'knowledge', 'indexer.ts');
-  const source = read(path);
-  assert.ok(source.split(/\r?\n/).length <= 120, 'knowledge/indexer.ts must stay at or below 120 lines');
-  assertNoImportPattern(
-    [path],
-    [
-      /\bKnowledgeEmbeddingQueryProvider\b/,
-      /\bKnowledgeRerankProvider\b/,
-      /\bsourceTypeWeight\b/,
-      /\bconfidenceWeight\b/,
-      /\bscoreChunk\b/,
-      /\bpassesFilters\b/,
-    ],
-    'knowledge indexer must not own provider-shaped ports or retrieval ranking',
   );
 });
 
@@ -114,14 +172,6 @@ test('knowledge consumes stable embedding contracts instead of declaring provide
       /\binterface\s+KnowledgeEmbedding(?:Provider|Config|Document)[A-Za-z_$\w]*/,
     ],
     'knowledge must consume stable contracts and must not declare embedding/rerank provider-shaped interfaces',
-  );
-});
-
-test('keyword recall imports retrieval compatibility search instead of knowledge indexer', () => {
-  assertNoImportPattern(
-    [join(srcRoot, 'retrieval', 'recall', 'keyword', 'strategy.ts')],
-    [/from\s+['"]\.\.\/\.\.\/\.\.\/knowledge\/indexer(?:\.js)?['"]/],
-    'keyword recall must not route through the knowledge compatibility facade',
   );
 });
 
@@ -273,16 +323,14 @@ test('primary CLI command adapters use command prefix', () => {
     assert.equal(cliFiles.has(file), true, `${file} must exist`);
   }
 
-  for (const file of ['server-commands.ts', 'status-command.ts', 'doctor-command.ts']) {
-    const source = read(join(srcRoot, 'cli', file)).trim();
-    assert.match(source, /^export /, `${file} must only re-export command-* compatibility symbols`);
-    assert.doesNotMatch(source, /^import /m, `${file} must not own command implementation`);
-  }
+  assertAbsent(
+    ['src/cli/server-commands.ts', 'src/cli/status-command.ts', 'src/cli/doctor-command.ts'],
+    'legacy CLI alias files must not exist',
+  );
 });
 
 test('rerank provider implementation does not live under embedding directories', () => {
   const embeddingFiles = [
-    ...tsFilesUnder(join(srcRoot, 'embedding')),
     ...safeTsFilesUnder(join(srcRoot, 'providers', 'embedding')),
   ];
   const offenders = embeddingFiles

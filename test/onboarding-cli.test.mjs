@@ -5,11 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
-import {
-  resolveServerBinding,
-  runDoctorCommand,
-  runStatusCommand,
-} from '../dist/cli/index.js';
+import { resolveServerBinding } from '../dist/cli/bindings.js';
+import { runDoctorCommand } from '../dist/cli/command-doctor.js';
+import { runStatusCommand } from '../dist/cli/command-status.js';
 import { defaultConfig, saveConfig } from '../dist/config.js';
 import { FileOnboardingRunRepository } from '../dist/onboarding/index.js';
 

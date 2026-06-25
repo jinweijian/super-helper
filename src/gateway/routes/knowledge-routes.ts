@@ -6,6 +6,7 @@ import {
   resolveKnowledgeWorkspaceRoot,
   updateKnowledgeIndexWithQuality,
 } from '../../knowledge/index.js';
+import { createConfiguredKnowledgeRetriever } from '../../retrieval/configured-search.js';
 import { readJson, sendJson } from '../http-utils.js';
 
 type KnowledgeActionBody = {
@@ -29,10 +30,11 @@ export async function handleKnowledgeRoutes(
     sendJson(res, 200, {
       ok: true,
       workspaceId,
-      knowledgeHealth: buildKnowledgeHealthSummary({
+      knowledgeHealth: await buildKnowledgeHealthSummary({
         config,
         workspaceId,
         query: url.searchParams.get('query') ?? undefined,
+        retrieveEvidence: createConfiguredKnowledgeRetriever(config),
       }),
     });
     return true;
@@ -52,10 +54,11 @@ export async function handleKnowledgeRoutes(
       ok: true,
       workspaceId,
       init,
-      knowledgeHealth: buildKnowledgeHealthSummary({
+      knowledgeHealth: await buildKnowledgeHealthSummary({
         config,
         workspaceId,
         query: body.query,
+        retrieveEvidence: createConfiguredKnowledgeRetriever(config),
       }),
     });
     return true;
@@ -76,10 +79,11 @@ export async function handleKnowledgeRoutes(
       ok: true,
       workspaceId,
       update,
-      knowledgeHealth: buildKnowledgeHealthSummary({
+      knowledgeHealth: await buildKnowledgeHealthSummary({
         config,
         workspaceId,
         query: body.query,
+        retrieveEvidence: createConfiguredKnowledgeRetriever(config),
       }),
     });
     return true;

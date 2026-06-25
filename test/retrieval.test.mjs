@@ -11,7 +11,6 @@ import {
 } from '../dist/retrieval/index.js';
 import { defaultConfig } from '../dist/config.js';
 import { createEmbeddingProvider } from '../dist/providers/embedding/index.js';
-import { searchKnowledge } from '../dist/knowledge/index.js';
 
 function tempWorkspace() {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-retrieval-'));
@@ -374,38 +373,6 @@ test('retrieval keeps fused candidates and redacts rerank failure trace', async 
   assert.deepEqual(result.candidates.map((item) => item.chunkId), ['chk_safe_fallback']);
   assert.equal(result.trace.rerank.status, 'failed');
   assert.doesNotMatch(result.trace.rerank.reason ?? '', /sk-rerank-secret/);
-});
-
-test('legacy knowledge search delegates to retrieval compatibility search without behavior drift', async () => {
-  const { workspaceRoot } = tempWorkspace();
-  const documentRoot = join(workspaceRoot, 'knowledge', 'faq');
-  mkdirSync(documentRoot, { recursive: true });
-  writeFileSync(join(documentRoot, 'password-reset.md'), `---
-id: faq_password_reset
-title: Password reset guide
-type: faq
-module: account
-intent: how_to
-source_type: faq
-status: active
-confidence: high
-visibility: internal
-last_verified_at: 2026-06-01
-related_terms:
-  - reset password
-product_versions: []
----
-
-Use the account settings page to reset a forgotten password.
-`, 'utf8');
-  try {
-    const compatibility = await import('../dist/retrieval/compatibility-search.js');
-    assert.equal(typeof compatibility.searchKnowledgeCompatibility, 'function');
-    const input = { workspaceRoot, query: 'reset password', limit: 3 };
-    assert.deepEqual(compatibility.searchKnowledgeCompatibility(input), searchKnowledge(input));
-  } finally {
-    rmSync(workspaceRoot, { recursive: true, force: true });
-  }
 });
 
 function directionalEmbeddingProvider(targetChunkId) {

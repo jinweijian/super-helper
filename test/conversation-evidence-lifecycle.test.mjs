@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { SuperHelperAgent } from '../dist/agent.js';
+import { DiagnosticRuntime } from '../dist/runtime/diagnostic-runtime.js';
 import { defaultConfig } from '../dist/config.js';
 import { preflight } from '../dist/preflight.js';
 import { findExperienceMatch, findRejectedExperienceCandidates } from '../dist/runtime/experience-agent.js';
@@ -248,7 +248,7 @@ test('runtime ignores a model attempt to promote a frozen partial result', async
         };
       },
     };
-    const agent = new SuperHelperAgent(config, new FileMemoryStore(root), worker);
+    const agent = new DiagnosticRuntime(config, new FileMemoryStore(root), worker);
     const response = await agent.handleUserMessage({ message: '课程保存接口返回 500，请定位原因。' });
     assert.equal(response.decision, 'ask_user');
     assert.match(response.assistantMessage, /目前只能确认请求经过该入口/);
@@ -339,7 +339,7 @@ test('safety preflight blocks a matching historical write request before Experie
     source.status = 'concluded';
     store.saveCase(source);
     const worker = { async diagnose() { throw new Error('safety preflight must stop before worker'); } };
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({ message: user.body });
 
     assert.equal(response.decision, 'ask_user');
@@ -376,7 +376,7 @@ test('sync first turn and async unknown follow-up share one resolved query acros
         };
       },
     };
-    const agent = new SuperHelperAgent(config, new FileMemoryStore(root), worker);
+    const agent = new DiagnosticRuntime(config, new FileMemoryStore(root), worker);
     const originalQuestion = '课程发布后学员为什么看不到入口？';
     const first = await agent.handleUserMessage({ message: originalQuestion });
     const accepted = agent.startUserTurn({ caseId: first.caseSession.id, message: '不清楚' });

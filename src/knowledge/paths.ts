@@ -115,10 +115,6 @@ export function publishReportPath(workspaceRoot: string): string {
   return join(pipelinePublishRoot(workspaceRoot), 'publish-report.json');
 }
 
-export function knowledgeEvalReportPath(workspaceRoot: string): string {
-  return join(knowledgeReportsRoot(workspaceRoot), 'eval-report.json');
-}
-
 export function repairPlanPath(workspaceRoot: string, timestamp: string): string {
   return join(pipelineRepairPlansRoot(workspaceRoot), `repair-plan-${timestamp}.json`);
 }

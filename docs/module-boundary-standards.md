@@ -39,14 +39,13 @@
 | `runtime` | 用户回合编排、Agent 决策、Preflight、Evidence Review、降级/升级路径、生命周期事件 | HTTP DTO、厂商协议、原始文件持久化细节、knowledge 索引实现、CLI 输出 |
 | `knowledge` | 本地知识文件、schema、Markdown/frontmatter、source metadata、本地 keyword index、本地 vector artifact build/read/compatibility、本地 evidence pack | 远程 provider API 调用、runtime 编排、最终回答、Claude Code 执行、HTTP route 决策、retrieval ranking/rerank 策略 |
 | `providers` | embedding/rerank provider contracts、factory、远程 provider adapters、smoke tests、安全错误归一化 | knowledge 目录结构、检索策略、runtime 决策、HTTP DTO、CLI 输出、最终回复 |
-| `embedding` | 旧 import path 的兼容 re-export | 新 provider 实现、rerank 实现、厂商协议、业务流程 |
 | `retrieval` | 跨 `knowledge` + `providers` 的多策略召回、query embedding、候选融合、rerank、fallback、retrieval trace | 用户最终回复、Evidence Review、HTTP DTO、provider 厂商协议实现、knowledge artifact 写入 |
 | `sessions` | case repository port、case context、会话上下文构建、session storage scope | worker/model 调用、最终回复、HTTP DTO、provider 调用 |
 | `workers` | worker port、具体 worker adapter、CLI/tool 执行、worker 输出解析 | case 编排、用户回复、HTTP route、Evidence Review |
 | `observability` | 日志展示结构、log block 转换、UI 可观测性数据 | 诊断流程决策、worker 执行、provider 调用 |
 | `ui` | 浏览器 UI 渲染、客户端交互、展示状态 | server route、runtime 决策、worker 行为、provider 协议 |
 
-新增 BM25、embedding、业务规则召回、hybrid recall、candidate fusion、query embedding 编排、rerank 编排时，必须放在 `src/retrieval/` 对应层级，不能继续塞进 `knowledge`、`providers` 或旧 `embedding` 兼容门面。
+新增 BM25、embedding、业务规则召回、hybrid recall、candidate fusion、query embedding 编排、rerank 编排时，必须放在 `src/retrieval/` 对应层级，不能继续塞进 `knowledge` 或 `providers`。
 
 ## 适配器模式硬规则
 
@@ -112,7 +111,7 @@ src/providers/
 1. 先提 contract / port，稳定调用方和被调用方的边界。
 2. 再提纯函数或本地领域逻辑，让无副作用规则可单测。
 3. 再提 adapter，把外部协议和副作用隔离。
-4. 最后保留入口 facade，只做 re-export、兼容导出或窄组合调用。
+4. 最后保留入口 facade，只做 re-export 或窄组合调用；不得新增私有兼容 facade。
 
 拆分时不得顺手改变 public API、config shape、case JSON shape、knowledge artifact shape。确需改变时，必须有 OpenSpec、迁移策略和兼容测试。
 
@@ -195,7 +194,7 @@ src/cli/
   command-accept.ts
 ```
 
-新增复杂子命令时，必须放到 `src/cli/command-<name>.ts` 或所属业务模块的 service 中，入口文件只保留分发。根入口 `src/cli.ts` 只能是 shebang 兼容包装。
+新增复杂子命令时，必须放到 `src/cli/command-<name>.ts` 或所属业务模块的 service 中，入口文件只保留分发。根入口 `src/cli.ts` 只能是 shebang 执行包装。
 
 ## Knowledge / Retrieval / Providers 边界
 
@@ -203,7 +202,7 @@ src/cli/
 
 - `knowledge` 只管本地知识资产和本地 evidence pack。
 - `providers` 只管 embedding/rerank provider 端口和厂商调用。
-- `retrieval` 负责编排 BM25、embedding、keyword compatibility、未来业务策略等 recall，candidate merge、rerank 和 fallback。
+- `retrieval` 负责编排 BM25、embedding、未来业务策略等 recall，candidate merge、rerank 和 fallback。
 - `runtime` 负责决定 retrieval 结果是否进入 Evidence Judge、是否直接回答、是否升级到 Claude Code。
 
 具体要求：
@@ -278,7 +277,6 @@ src/retrieval/
 
 当前已知需要后续单独创建 OpenSpec 的方向：
 
-- 将旧 `src/embedding/` 兼容 re-export 的使用方逐步迁移到 `src/providers/`。
 - 为新增召回策略补充 registry 级别的 enable/disable 配置和观测字段。
 - 为 provider / retrieval / knowledge / settings / CLI 边界持续增加 contract tests，防止回退。
 

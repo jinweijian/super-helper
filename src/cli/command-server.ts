@@ -13,7 +13,7 @@ import {
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
 } from '../onboarding/index.js';
-import { startServer } from '../server.js';
+import { startServer } from '../gateway/http-server.js';
 import { hasFlag, readNumberOption, readOption } from './args.js';
 import { resolveServerBinding, type ServerBindMode } from './bindings.js';
 import { openBrowser as defaultOpenBrowser } from './open-browser.js';

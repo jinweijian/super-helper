@@ -3,6 +3,7 @@ import { resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
 import { buildKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/index.js';
+import { createConfiguredKnowledgeRetriever } from '../retrieval/configured-search.js';
 import type { StoredCase } from '../storage.js';
 import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 
@@ -72,10 +73,10 @@ export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConf
   };
 }
 
-export function serializeSession(
+export async function serializeSession(
   caseSession: StoredCase,
   config: SuperHelperConfig,
-): SessionSummary & Pick<StoredCase, 'messages' | 'runs'> & { knowledgeHealth: KnowledgeHealthSummary } {
+): Promise<SessionSummary & Pick<StoredCase, 'messages' | 'runs'> & { knowledgeHealth: KnowledgeHealthSummary }> {
   return {
     ...sessionSummary(caseSession, config),
     messages: caseSession.messages,
@@ -83,10 +84,11 @@ export function serializeSession(
       ...run,
       workerTrace: run.workerTrace ? sanitizeWorkerTrace(run.workerTrace) : undefined,
     })),
-    knowledgeHealth: buildKnowledgeHealthSummary({
+    knowledgeHealth: await buildKnowledgeHealthSummary({
       config,
       workspaceId: caseSession.workspaceId,
       query: knowledgeHealthQuery(caseSession),
+      retrieveEvidence: createConfiguredKnowledgeRetriever(config),
     }),
   };
 }

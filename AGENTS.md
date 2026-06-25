@@ -36,7 +36,7 @@
 - `src/sessions/` 只负责 case repository port、case context、会话上下文构建。不得调用 Claude Code 或模型。
 - `src/workers/` 只负责 worker port 和具体 worker adapter。不得直接回复用户，不得改写 case 会话主状态。
 - `src/observability/` 只负责日志展示结构和可观测性转换。不得决定诊断流程。
-- `src/agent.ts`、`src/server.ts`、`src/claude-worker.ts` 必须保持薄兼容入口，不得重新堆业务逻辑。
+- `src/cli.ts` 必须保持薄可执行入口；runtime、gateway、worker 的内部消费者必须直接导入所属模块，禁止重新创建根级或命令级私有兼容入口。
 
 ## 开发硬规则
 

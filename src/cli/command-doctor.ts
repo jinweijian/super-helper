@@ -7,6 +7,7 @@ import { buildKnowledgeHealthSummary } from '../knowledge/index.js';
 import { FileOnboardingRunRepository, FileSecretsRepository } from '../onboarding/index.js';
 import type { EmbeddingProviderConfig } from '../providers/embedding/index.js';
 import type { RerankProviderConfig } from '../providers/rerank/index.js';
+import { createConfiguredKnowledgeRetriever } from '../retrieval/configured-search.js';
 import { readOption } from './args.js';
 import { resolveServerBinding } from './bindings.js';
 
@@ -83,7 +84,11 @@ export async function runDoctorCommand(input: RunDoctorCommandInput = {}): Promi
     });
   }
 
-  const knowledge = buildKnowledgeHealthSummary({ config, workspaceId: config.workspaces[0]?.id ?? 'current' });
+  const knowledge = await buildKnowledgeHealthSummary({
+    config,
+    workspaceId: config.workspaces[0]?.id ?? 'current',
+    retrieveEvidence: createConfiguredKnowledgeRetriever(config),
+  });
   checks.push({
     id: 'knowledge_index',
     label: 'knowledge index',

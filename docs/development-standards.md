@@ -43,9 +43,8 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 | `src/agents/` | Product Agent configuration documents and `registry.json` stage pairings | Runtime orchestration, HTTP routing, worker execution, persistence |
 | `src/runtime/` | Agent turn orchestration, Preflight Gate, request building, review decisions, presentation, lifecycle event recording | HTTP APIs, route DTOs, raw file persistence details, Claude CLI implementation |
 | `src/providers/` | Embedding/rerank provider contracts, provider factories, remote provider adapters, provider smoke tests, safe provider error normalization | Knowledge workspace indexing decisions, retrieval strategy, runtime orchestration, HTTP DTO parsing, final replies |
-| `src/embedding/` | Compatibility re-exports for old embedding/rerank import paths during migration | New provider implementations, rerank implementation, business orchestration |
-| `src/knowledge/` | Enterprise knowledge workspace schema, templates, Markdown/frontmatter parsing, source metadata, local indexes/artifacts, local knowledge search, local vector artifact build/read/compatibility checks | Runtime orchestration, user-facing final replies, Claude Code execution, HTTP route decisions, remote provider API calls, retrieval ranking/rerank decisions |
-| `src/retrieval/` | Multi-strategy recall, BM25/embedding/keyword recall strategies, candidate fusion, optional rerank, retrieval trace, evidence-pack conversion | User-facing final replies, Evidence Review decisions, HTTP DTO parsing, provider vendor protocol implementation, knowledge artifact writes |
+| `src/knowledge/` | Enterprise knowledge workspace schema, templates, Markdown/frontmatter parsing, source metadata, local indexes/artifacts, local vector artifact build/read/compatibility checks | Runtime orchestration, user-facing final replies, Claude Code execution, HTTP route decisions, remote provider API calls, retrieval ranking/rerank decisions |
+| `src/retrieval/` | Multi-strategy recall, BM25/embedding recall strategies, candidate fusion, optional rerank, retrieval trace, evidence-pack conversion | User-facing final replies, Evidence Review decisions, HTTP DTO parsing, provider vendor protocol implementation, knowledge artifact writes |
 | `src/sessions/` | Case repository ports, file-backed repository export, diagnostic context building | Worker execution, model calls, user-facing final replies |
 | `src/workers/` | Diagnostic worker port and worker adapters | Case orchestration, user chat responses, route handling |
 | `src/workers/claude/` | Claude prompts, CLI policy, CLI execution, output parsing, Claude adapter | Runtime decisions, user-facing review, HTTP behavior |
@@ -58,28 +57,16 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 
 未来 RAG、hybrid retrieval、candidate fusion、query embedding orchestration、rerank orchestration 都属于 `src/retrieval/` 边界。新增 provider 能力必须进入 `src/providers/<capability>/`，不得继续加深 `src/knowledge/` 与远程 provider adapter 的耦合。
 
-## Compatibility Entry Points
+## Canonical Entry Points
 
-These files are compatibility facades and must stay thin:
+The project avoids private compatibility facades. Internal consumers must import owner modules directly:
 
-- `src/agent.ts`
-- `src/server.ts`
-- `src/claude-worker.ts`
+- Runtime orchestration from `src/runtime/diagnostic-runtime.ts`
+- HTTP server startup from `src/gateway/http-server.ts`
+- Claude worker adapter from `src/workers/claude/claude-code-worker.ts`
+- Provider capabilities from `src/providers/embedding/` and `src/providers/rerank/`
 
-Allowed changes:
-
-- re-exporting renamed implementations
-- preserving old public names
-- adding narrow type exports for compatibility
-
-Forbidden changes:
-
-- adding orchestration logic
-- adding route handlers
-- adding Claude prompt or CLI logic
-- adding persistence or DTO transformation logic
-
-If a compatibility file grows beyond a small facade, move the behavior to the owning module first.
+Do not recreate root aliases or command aliases to preserve old private paths. If a public API needs compatibility, document it in OpenSpec with explicit consumers and tests.
 
 ## Runtime Contract
 
@@ -89,7 +76,6 @@ The runtime pipeline is:
 
 ```text
 Gateway chat route
-  -> SuperHelperAgent facade
   -> DiagnosticRuntime.startUserTurn
   -> Experience Agent
   -> Preflight Gate
@@ -201,7 +187,7 @@ Rules:
 - `knowledge/indexes/chunks.jsonl`, `keyword-index.json`, and `manifest.json` are derived artifacts and must be rebuildable from parent slices.
 - Optional vector artifacts live under `knowledge/indexes/vectors.jsonl`, `vector-manifest.json`, and `vector-build-report.json`. They are derived and must be rebuildable from `chunks.jsonl` plus embedding configuration.
 - `src/knowledge/` may build/read vector artifacts and report compatibility, but remote embedding/rerank calls must go through `src/providers/`.
-- Runtime knowledge search must call `src/retrieval/` for BM25, embedding recall, fusion, and optional rerank. Do not add vector databases, GraphRAG, Obsidian runtime dependency, runtime vector retrieval, runtime rerank sorting, or model-based final-answer generation inside `src/knowledge/`.
+- Runtime knowledge retrieval must call `src/retrieval/` for BM25, embedding recall, fusion, and optional rerank. Do not add vector databases, GraphRAG, Obsidian runtime dependency, runtime vector retrieval, runtime rerank sorting, or model-based final-answer generation inside `src/knowledge/`.
 - The knowledge module returns structured evidence packs. It must not produce user-facing final replies.
 - Runtime integration must preserve the existing Evidence Review contract before any knowledge evidence reaches the user.
 

@@ -33,7 +33,7 @@ export async function runAcceptCommand(argv: string[]): Promise<void> {
   const redact = !hasFlag(argv, '--no-redact');
 
   const { runKnowledgeAcceptance } = await import('../runtime/knowledge-acceptance.js');
-  const result = runKnowledgeAcceptance({
+  const result = await runKnowledgeAcceptance({
     config,
     projectWorkspaceRoot,
     knowledgeWorkspaceRoot,

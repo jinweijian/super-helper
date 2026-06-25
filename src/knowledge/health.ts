@@ -3,9 +3,9 @@ import { basename, join, resolve } from 'node:path';
 import type { SuperHelperConfig } from '../config.js';
 import { chunksPath, dirtyFlagPath, knowledgeRoot, manifestPath } from './paths.js';
 import { resolveKnowledgeWorkspaceRoot, workspaceKnowledgeKey } from './storage-scope.js';
-import { discoverKnowledgeDocuments, searchKnowledge } from './indexer.js';
+import { discoverKnowledgeDocuments } from './documents/discovery.js';
 import { checkKnowledgeVectorCompatibility } from './vector-index.js';
-import type { KnowledgeIndexManifest } from './types.js';
+import type { KnowledgeEvidencePack, KnowledgeIndexManifest, KnowledgeSearchQuery } from './types.js';
 
 export type KnowledgeHealthStatus = 'ok' | 'warn' | 'error' | 'off';
 
@@ -55,11 +55,14 @@ export interface KnowledgeSimilarWorkspace {
   updatedAt?: string;
 }
 
-export function buildKnowledgeHealthSummary(input: {
+export type KnowledgeHealthRetriever = (query: KnowledgeSearchQuery) => Promise<KnowledgeEvidencePack>;
+
+export async function buildKnowledgeHealthSummary(input: {
   config: SuperHelperConfig;
   workspaceId: string;
   query?: string;
-}): KnowledgeHealthSummary {
+  retrieveEvidence?: KnowledgeHealthRetriever;
+}): Promise<KnowledgeHealthSummary> {
   const workspace = input.config.workspaces.find((item) => item.id === input.workspaceId) ?? input.config.workspaces[0];
   const workspaceRoot = workspace?.rootPath ? resolve(workspace.rootPath) : '';
   const workspaceKey = workspace ? workspaceKnowledgeKey(workspace) : 'unknown-workspace';
@@ -72,11 +75,12 @@ export function buildKnowledgeHealthSummary(input: {
   const docs = knowledgeRootExists ? discoverKnowledgeDocuments(knowledgeWorkspaceRoot) : [];
   const embedding = embeddingHealth(input.config, knowledgeWorkspaceRoot);
   const query = input.query?.trim() || '';
-  const search = searchHealth({
+  const search = await searchHealth({
     workspaceRoot: knowledgeWorkspaceRoot,
     query,
     rootExists: knowledgeRootExists,
     docsCount: docs.length,
+    retrieveEvidence: input.retrieveEvidence,
   });
 
   return {
@@ -133,12 +137,13 @@ function embeddingHealth(config: SuperHelperConfig, workspaceRoot: string): Know
   };
 }
 
-function searchHealth(input: {
+async function searchHealth(input: {
   workspaceRoot: string;
   query: string;
   rootExists: boolean;
   docsCount: number;
-}): KnowledgeHealthSummary['search'] {
+  retrieveEvidence?: KnowledgeHealthRetriever;
+}): Promise<KnowledgeHealthSummary['search']> {
   if (!input.rootExists) {
     return {
       status: 'error',
@@ -169,8 +174,18 @@ function searchHealth(input: {
       reason: 'waiting for a case query',
     };
   }
+  if (!input.retrieveEvidence) {
+    return {
+      status: 'warn',
+      query: input.query,
+      searchedFiles: input.docsCount,
+      matchedFiles: 0,
+      filteredOut: [],
+      reason: 'configured retrieval health check is not available at this boundary',
+    };
+  }
 
-  const evidencePack = searchKnowledge({
+  const evidencePack = await input.retrieveEvidence({
     workspaceRoot: input.workspaceRoot,
     query: input.query,
     limit: 5,
@@ -182,8 +197,8 @@ function searchHealth(input: {
     matchedFiles: evidencePack.coverage.matched_files,
     filteredOut: evidencePack.coverage.filtered_out,
     reason: evidencePack.results.length
-      ? 'knowledge search returned evidence for the current query'
-      : 'knowledge search returned no evidence for the current query',
+      ? 'configured retrieval returned evidence for the current query'
+      : 'configured retrieval returned no evidence for the current query',
   };
 }
 

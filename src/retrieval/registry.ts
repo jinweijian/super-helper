@@ -1,7 +1,6 @@
 import type { EmbeddingProviderConfig } from '../providers/embedding/contract.js';
 import { createBm25RecallStrategy } from './recall/bm25/strategy.js';
 import { createEmbeddingRecallStrategy } from './recall/embedding/strategy.js';
-import { createKeywordRecallStrategy } from './recall/keyword/strategy.js';
 import type { RecallStrategy } from './recall/contract.js';
 
 export interface RetrievalRegistryOptions {
@@ -14,7 +13,6 @@ export interface RetrievalRegistryOptions {
   >>;
   embeddingUnavailableReason?: string;
   includeBm25?: boolean;
-  includeKeywordCompatibility?: boolean;
 }
 
 export function createDefaultRetrievalStrategies(options: RetrievalRegistryOptions = {}): RecallStrategy[] {
@@ -25,6 +23,5 @@ export function createDefaultRetrievalStrategies(options: RetrievalRegistryOptio
       embeddingConfig: options.embeddingConfig,
       unavailableReason: options.embeddingUnavailableReason,
     }),
-    ...(options.includeKeywordCompatibility ? [createKeywordRecallStrategy()] : []),
   ];
 }

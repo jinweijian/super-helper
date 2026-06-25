@@ -5,13 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import test from 'node:test';
-import { SuperHelperAgent } from '../dist/agent.js';
-import { ClaudeCodeWorker } from '../dist/claude-worker.js';
+import { DiagnosticRuntime } from '../dist/runtime/diagnostic-runtime.js';
+import { ClaudeCodeWorker } from '../dist/workers/claude/claude-code-worker.js';
 import { loadConfig, saveConfig } from '../dist/config.js';
 import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
-import { startServer } from '../dist/server.js';
+import { startServer } from '../dist/gateway/http-server.js';
 import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
@@ -1158,7 +1158,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
     updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
     const store = new FileMemoryStore(dir);
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
 
     const response = await agent.handleUserMessage({
       message: 'AI伴学助手如何制定学习计划？',
@@ -1213,7 +1213,7 @@ test('runtime broadens source type filters so whitepaper evidence can answer nat
     updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
     const store = new FileMemoryStore(dir);
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
 
     const response = await agent.handleUserMessage({
       message: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
@@ -1275,7 +1275,7 @@ test('runtime escalates no-hit or implementation-detail knowledge questions with
     updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
     const store = new FileMemoryStore(dir);
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
 
     await agent.handleUserMessage({
       message: '接口 /api/orders 返回 500，帮我看当前实现为什么失败',
@@ -1360,7 +1360,7 @@ test('runtime applies deep query pivot on one retry after insufficient code evid
     updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
     const store = new FileMemoryStore(dir);
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '接口 /api/orders 返回 500，帮我看当前 route 和 controller 实现',
       workspaceId: 'current',
@@ -1426,7 +1426,7 @@ test('runtime does not expose restricted knowledge directly to customer persona'
     updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
     const store = new FileMemoryStore(dir);
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
 
     const response = await agent.handleUserMessage({
       message: '课程隐藏规则怎么处理？',
@@ -1607,7 +1607,7 @@ test('runtime curates a review-required solved case after user confirms resoluti
     updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
 
     const store = new FileMemoryStore(dir);
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const first = await agent.handleUserMessage({
       message: 'AI伴学助手如何制定学习计划？',
       workspaceId: 'current',
@@ -1862,7 +1862,7 @@ test('sync and async chat flows use the same runtime pipeline', async () => {
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const syncResponse = await agent.handleUserMessage({
       message: '请检查项目的运行时拆分是否可诊断。',
     });
@@ -2249,7 +2249,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
       },
     };
 
-    const agent = new SuperHelperAgent(baseConfig(dir), store, worker);
+    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
     const response = await agent.handleUserMessage({
       message: '课程任务保存失败，接口 /course/1/task/2/update 返回 500，账号是管理员。',
     });
@@ -2329,7 +2329,7 @@ test('agent falls back to local reviewed formatting when presentation model retu
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '请在当前项目里查找部门创建支持多少级，需要引用文件证据。',
     });
@@ -2381,7 +2381,7 @@ test('agent safely summarizes worker errors when presentation model fails before
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '请在当前项目里查找部门创建支持多少级，需要引用文件证据。',
     });
@@ -2411,7 +2411,7 @@ test('agent asks for required information without dispatching worker when prefli
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '你好',
     });
@@ -2474,7 +2474,7 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       persona: 'support',
       message: '请查找视频倍速播放设置在哪个页面路由，需要引用代码文件证据。',
@@ -2532,7 +2532,7 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '接口 /course/task/save 返回 500，请定位原因。',
     });
@@ -2716,7 +2716,7 @@ test('model preflight cannot block an inspectable workspace question with generi
       },
     };
 
-    const agent = new SuperHelperAgent(baseConfig(dir), store, worker);
+    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
     const response = await agent.handleUserMessage({
       persona: 'operations',
       message: '客户反馈找不到 倍速播放的页面路由，请问这个在哪？\n\n开启了倍数播放会影响微网校的视频播放吗',
@@ -2847,7 +2847,7 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
       },
     };
 
-    const agent = new SuperHelperAgent(baseConfig(dir), store, worker);
+    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
     const response = await agent.handleUserMessage({
       message: '视频倍速开关在哪里开启？需要页面路由和证据。',
     });
@@ -2948,7 +2948,7 @@ test('follow-up diagnostic requests carry prior assistant replies and evidence c
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const first = await agent.handleUserMessage({
       message: '客户反馈找不到倍速播放的页面路由，请问这个在哪？',
     });
@@ -3024,7 +3024,7 @@ test('local preflight can dispatch general project questions, not only diagnosti
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '请解释这个项目的 package.json 主要做什么，需要引用文件证据。',
     });
@@ -3121,7 +3121,7 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
       },
     };
 
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const response = await agent.handleUserMessage({
       message: '课程任务保存失败是什么原因？',
     });
@@ -3283,7 +3283,7 @@ test('async same-case turns receive ordered reply-to helper messages', async () 
         };
       },
     };
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const caseSession = agent.startUserTurn({ message: '第二个问题：解释 scripts' });
     const secondId = caseSession.messages.at(-1).id;
     agent.startUserTurn({ caseId: caseSession.id, message: '第三个问题：解释 dependencies' });
@@ -3313,7 +3313,7 @@ test('async turn failures can reply to the accepted user message', () => {
         throw new Error('not used');
       },
     };
-    const agent = new SuperHelperAgent(config, store, worker);
+    const agent = new DiagnosticRuntime(config, store, worker);
     const caseSession = agent.startUserTurn({ message: '失败路径也要绑定这一条消息' });
     const userMessageId = caseSession.messages.at(-1).id;
 

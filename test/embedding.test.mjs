@@ -6,17 +6,21 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { defaultConfig, getEmbeddingConfig, isEmbeddingEnabled } from '../dist/config.js';
 import {
-  EmbeddingProviderError,
   FakeEmbeddingProvider,
   createEmbeddingProvider,
-  createRerankProvider,
   embeddingConfigFingerprint,
   isEmbeddingManifestCompatible,
-  isEmbeddingProviderError,
   runEmbeddingSmokeTest,
+} from '../dist/providers/embedding/index.js';
+import {
+  createRerankProvider,
   runRerankSmokeTest,
+} from '../dist/providers/rerank/index.js';
+import {
+  EmbeddingProviderError,
+  isEmbeddingProviderError,
   redactEmbeddingErrorMessage,
-} from '../dist/embedding/index.js';
+} from '../dist/providers/errors.js';
 
 test('default config keeps embedding disabled and independent from agent model providers', () => {
   const config = defaultConfig();

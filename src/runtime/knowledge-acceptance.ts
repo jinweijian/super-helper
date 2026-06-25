@@ -11,7 +11,8 @@ import {
 import {
   knowledgeRoot,
   routeKnowledgeQuestion,
-  searchKnowledge,
+  type KnowledgeEvidencePack,
+  type KnowledgeRoute,
 } from '../knowledge/index.js';
 import type {
   KnowledgeAcceptanceReport,
@@ -20,7 +21,8 @@ import type {
 import type { StoredCase } from '../storage.js';
 import { curateSolvedCase } from './case-curator.js';
 import { planDeepQuery } from './deep-query-planner.js';
-import { judgeKnowledgeEvidence } from './evidence-judge.js';
+import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
+import { prepareKnowledgeDiagnosis } from './knowledge-diagnosis.js';
 
 export interface RunKnowledgeAcceptanceInput {
   config: SuperHelperConfig;
@@ -39,23 +41,23 @@ export interface RunKnowledgeAcceptanceResult {
   reportPath: string;
 }
 
-export function runKnowledgeAcceptance(input: RunKnowledgeAcceptanceInput): RunKnowledgeAcceptanceResult {
+export async function runKnowledgeAcceptance(input: RunKnowledgeAcceptanceInput): Promise<RunKnowledgeAcceptanceResult> {
   const scenarios: KnowledgeAcceptanceScenario[] = [];
   scenarios.push(runConfigChecks(input));
-  scenarios.push(runDirectKnowledgeScenario(input, {
+  scenarios.push(await runDirectKnowledgeScenario(input, {
     id: 'whitepaper_ai_companion_direct',
     name: 'AI companion whitepaper direct answer',
     question: 'AI伴学助手学习日晚上8点未完成任务会怎么提醒？',
     expectedSource: /AI伴学|伴学助手|ai/i,
   }));
-  scenarios.push(runDirectKnowledgeScenario(input, {
+  scenarios.push(await runDirectKnowledgeScenario(input, {
     id: 'whitepaper_edusoho_direct',
     name: 'EduSoho training whitepaper direct answer',
     question: 'EduSoho 教培线课程搜索栏支持按什么搜索课程？',
     expectedSource: /EduSoho|教培|edusoho/i,
   }));
-  scenarios.push(runNoHitEscalationScenario(input));
-  scenarios.push(runImplementationEscalationScenario(input));
+  scenarios.push(await runNoHitEscalationScenario(input));
+  scenarios.push(await runImplementationEscalationScenario(input));
   scenarios.push(runSolvedCaseCurationScenario(input));
 
   const failures = scenarios
@@ -126,29 +128,11 @@ function runConfigChecks(input: RunKnowledgeAcceptanceInput): KnowledgeAcceptanc
   };
 }
 
-function runDirectKnowledgeScenario(
+async function runDirectKnowledgeScenario(
   input: RunKnowledgeAcceptanceInput,
   scenario: { id: string; name: string; question: string; expectedSource: RegExp },
-): KnowledgeAcceptanceScenario {
-  const route = routeKnowledgeQuestion({ workspaceRoot: input.knowledgeWorkspaceRoot, question: scenario.question });
-  let evidencePack = searchKnowledge({
-    workspaceRoot: input.knowledgeWorkspaceRoot,
-    query: scenario.question,
-    moduleCandidates: route.moduleCandidates,
-    intentCandidates: route.intentCandidates,
-    sourceTypes: route.sourceTypes,
-    limit: 8,
-  });
-  if (evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
-    evidencePack = searchKnowledge({
-      workspaceRoot: input.knowledgeWorkspaceRoot,
-      query: scenario.question,
-      moduleCandidates: route.moduleCandidates,
-      intentCandidates: route.intentCandidates,
-      limit: 8,
-    });
-  }
-  const judge = judgeKnowledgeEvidence({ route, evidencePack, question: scenario.question });
+): Promise<KnowledgeAcceptanceScenario> {
+  const { evidencePack, judge } = await diagnoseKnowledge(input, scenario.question);
   const top = evidencePack.results[0];
   const sourceText = `${top?.source ?? ''} ${top?.source_document ?? ''} ${top?.title ?? ''}`;
   const passed = judge.answerable && Boolean(top) && scenario.expectedSource.test(sourceText);
@@ -170,11 +154,9 @@ function runDirectKnowledgeScenario(
   };
 }
 
-function runNoHitEscalationScenario(input: RunKnowledgeAcceptanceInput): KnowledgeAcceptanceScenario {
+async function runNoHitEscalationScenario(input: RunKnowledgeAcceptanceInput): Promise<KnowledgeAcceptanceScenario> {
   const question = 'no-hit-acceptance-token-zxqv-20260614-zkpqwlm';
-  const route = routeKnowledgeQuestion({ workspaceRoot: input.knowledgeWorkspaceRoot, question });
-  const evidencePack = searchKnowledge({ workspaceRoot: input.knowledgeWorkspaceRoot, query: question, limit: 5 });
-  const judge = judgeKnowledgeEvidence({ route, evidencePack, question });
+  const { route, evidencePack, judge } = await diagnoseKnowledge(input, question);
   const deepQuery = planDeepQuery({ question, route, evidencePack, judge });
   const hasBroadening = deepQuery.correctionActions.some((action) => action === 'expand_aliases' || action === 'broaden_source_types');
   const passed = evidencePack.results.length === 0 && judge.need_code_escalation && deepQuery.permission === 'read_only' && hasBroadening;
@@ -197,11 +179,9 @@ function runNoHitEscalationScenario(input: RunKnowledgeAcceptanceInput): Knowled
   };
 }
 
-function runImplementationEscalationScenario(input: RunKnowledgeAcceptanceInput): KnowledgeAcceptanceScenario {
+async function runImplementationEscalationScenario(input: RunKnowledgeAcceptanceInput): Promise<KnowledgeAcceptanceScenario> {
   const question = '接口 /api/acceptance/config 返回 500，帮我看当前实现和配置读取路径';
-  const route = routeKnowledgeQuestion({ workspaceRoot: input.knowledgeWorkspaceRoot, question });
-  const evidencePack = searchKnowledge({ workspaceRoot: input.knowledgeWorkspaceRoot, query: question, limit: 5 });
-  const judge = judgeKnowledgeEvidence({ route, evidencePack, question });
+  const { route, evidencePack, judge } = await diagnoseKnowledge(input, question);
   const deepQuery = planDeepQuery({ question, route, evidencePack, judge });
   const passed = judge.blockers.includes('implementation_detail') && judge.need_code_escalation && deepQuery.permission === 'read_only';
   return {
@@ -219,6 +199,41 @@ function runImplementationEscalationScenario(input: RunKnowledgeAcceptanceInput)
       summarizeCheck('implementation_blocker', 'ok', judge.blockers.includes('implementation_detail'), judge.blockers.join(',')),
       summarizeCheck('read_only_deep_query', 'ok', deepQuery.permission === 'read_only', deepQuery.permission),
     ],
+  };
+}
+
+async function diagnoseKnowledge(
+  input: RunKnowledgeAcceptanceInput,
+  question: string,
+): Promise<{
+  route: KnowledgeRoute;
+  evidencePack: KnowledgeEvidencePack;
+  judge: EvidenceJudgeResult;
+}> {
+  const diagnosis = await prepareKnowledgeDiagnosis({
+    config: input.config,
+    workspaceRoot: input.knowledgeWorkspaceRoot,
+    question,
+    persona: 'operations',
+  });
+  if (diagnosis) {
+    return diagnosis;
+  }
+  const route = routeKnowledgeQuestion({ workspaceRoot: input.knowledgeWorkspaceRoot, question });
+  const evidencePack: KnowledgeEvidencePack = {
+    query: {
+      normalized_question: route.normalizedQuestion,
+      module_candidates: route.moduleCandidates,
+      intent_candidates: route.intentCandidates,
+      keywords: route.keywords,
+    },
+    results: [],
+    coverage: { searched_files: 0, matched_files: 0, filtered_out: [] },
+  };
+  return {
+    route,
+    evidencePack,
+    judge: judgeKnowledgeEvidence({ route, evidencePack, question }),
   };
 }
 

@@ -18,7 +18,7 @@ import type { RetrievalTrace } from '../retrieval/types.js';
 import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
 import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
 
-export async function searchKnowledgeForRuntime(input: {
+export async function retrieveKnowledgeForRuntime(input: {
   config: SuperHelperConfig;
   query: KnowledgeSearchQuery;
 }): Promise<ConfiguredKnowledgeRetrievalResult> {
@@ -51,7 +51,7 @@ export async function prepareKnowledgeDiagnosis(input: {
     workspaceRoot: input.workspaceRoot,
     question: input.question,
   });
-  let retrieval = await searchKnowledgeForRuntime({
+  let retrieval = await retrieveKnowledgeForRuntime({
     config: input.config,
     query: {
       workspaceRoot: input.workspaceRoot,
@@ -64,7 +64,7 @@ export async function prepareKnowledgeDiagnosis(input: {
     },
   });
   if (retrieval.evidencePack.results.length === 0 && route.sourceTypes.length > 0) {
-    retrieval = await searchKnowledgeForRuntime({
+    retrieval = await retrieveKnowledgeForRuntime({
       config: input.config,
       query: {
         workspaceRoot: input.workspaceRoot,

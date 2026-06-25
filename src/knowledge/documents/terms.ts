@@ -12,6 +12,10 @@ export function extractKnowledgeTerms(value: string): string[] {
   return Array.from(new Set([...latin, ...hanTerms])).filter((item) => item.length >= 2);
 }
 
+export function keywordsFromQuery(value: string): string[] {
+  return extractKnowledgeTerms(value);
+}
+
 export function normalizeKnowledgeText(value: string): string {
   return value.toLowerCase().replace(/[，。！？、,.!?;:：；"'`~\s]/g, '').trim();
 }
