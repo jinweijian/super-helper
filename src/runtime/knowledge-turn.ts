@@ -4,6 +4,7 @@ import { resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
 import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
+import { EvidenceCoverageService } from './evidence-coverage-service.js';
 import {
   attachKnowledgeCodeEscalationContext,
   diagnosticResultFromKnowledge,
@@ -18,6 +19,7 @@ export class KnowledgeTurnService {
     private readonly store: FileMemoryStore,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
+    private readonly coverageService?: EvidenceCoverageService,
   ) {}
 
   async answer(
@@ -51,6 +53,30 @@ export class KnowledgeTurnService {
     this.events.knowledgeRetrievalTrace(caseSession, retrievalTrace);
     this.events.evidenceJudgeStarted(caseSession, evidencePack);
     this.events.evidenceJudgeResult(caseSession, judge);
+
+    if (this.coverageService && this.config.agent.useModelForEvidenceCoverage !== false && judge.answerable && evidencePack.results[0]) {
+      const topScore = evidencePack.results[0].retrieval?.rerankScore ?? 0;
+      if (topScore >= 0.7) {
+        this.events.evidenceCoverageStarted(caseSession, {
+          question: userMessage,
+          evidenceIds: evidencePack.results.slice(0, 3).map((item) => item.evidence_id),
+        });
+        const coverage = await this.coverageService.evaluate({
+          question: userMessage,
+          evidence: evidencePack.results,
+        });
+        if (coverage.coverage === 'not_covered' || coverage.coverage === 'partial') {
+          judge.answerable = false;
+          judge.need_code_escalation = true;
+          judge.blockers.push('question_not_answered');
+          judge.ambiguity.push(`证据未覆盖原问题答案要素：${coverage.missingElements.join('、') || '关键要素缺失'}`);
+          judge.recommended_next_action = 'dispatch_code_diagnosis';
+          judge.confidence = 'low';
+          judge.reason = coverage.reason || '知识证据未覆盖原问题答案要素，拒绝直答。';
+        }
+        this.events.evidenceCoverageResult(caseSession, coverage);
+      }
+    }
 
     if (!judge.answerable || judge.need_code_escalation) {
       attachKnowledgeCodeEscalationContext({
