@@ -96,6 +96,7 @@ Runtime behavior:
 - Knowledge Router, Retrieval Service handoff, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are wired into the current knowledge-first runtime path.
 - Solved case drafts are written with `status: review_required` and require explicit approval before becoming `active` knowledge.
 - 功能概览类问题（例如“某功能有哪些能力”“支持哪些功能”）由 Knowledge Router 标记为 `feature_overview`。当知识证据满足直答资格时，runtime 应聚合多条功能 evidence/claim 直接回答；这类问题不应因为运营 persona 被强制定性为 bug、配置问题或设计使然。
+- Evidence Judge 之后叠加 Evidence Coverage Agent（model_assisted）：当 Judge 判定可直答且 top evidence 的 rerankScore>=0.7 时，调用模型判断证据是否真正覆盖原问题需要的答案要素。模型判 not_covered/partial 时覆盖结论为拒绝直答并升级到代码诊断；模型失败降级回 Judge 原结论。该机制防止"相关但不回答"的高分证据误导直答（如 case_4e905fbc）。
 
 ## Non-Guessing Contract
 
