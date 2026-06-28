@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { defaultConfig } from '../dist/config.js';
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
+import { diagnosticResultFromKnowledge } from '../dist/runtime/knowledge-diagnosis.js';
 import { retrieveKnowledgeWithConfiguredRetrieval } from '../dist/retrieval/configured-search.js';
 
 function tempWorkspace() {
@@ -255,4 +256,101 @@ test('exact-title lexical fallback stays bounded by complete grounding', () => {
   });
   assert.equal(weak.answerable, false);
   assert.equal(weak.blockers.includes('low_signal_terms'), true);
+});
+
+test('knowledge feature overview aggregates multiple feature facts', () => {
+  const overview = evidence({
+    evidence_id: 'ev_ai_feature_overview',
+    document_id: 'kb_ai_feature_overview',
+    parent_id: 'kb_ai_feature_overview',
+    title: 'AI伴学助手功能清单',
+    module: 'ai-companion',
+    intent: 'feature_overview',
+    source_type: 'faq',
+    matched_terms: ['AI伴学助手', '功能清单'],
+    summary: 'AI伴学助手功能清单',
+    answer_span: 'AI伴学助手支持学习计划制定、督学提醒、学习问答、题目答疑和知识点诊断。',
+    source: 'knowledge/faq/ai-companion/feature-overview.md',
+  });
+  const learningPlan = evidence({
+    evidence_id: 'ev_ai_learning_plan',
+    document_id: 'kb_ai_learning_plan',
+    parent_id: 'kb_ai_learning_plan',
+    title: '学习计划制定',
+    module: 'ai-companion',
+    intent: 'feature_overview',
+    source_type: 'faq',
+    matched_terms: ['学习计划制定', 'AI伴学助手'],
+    summary: '学习计划制定',
+    answer_span: '学员加入课程后，可选择学习时间段、每周学习日来制定学习计划。',
+    source: 'knowledge/faq/ai-companion/learning-plan.md',
+  });
+  const questionAnswer = evidence({
+    evidence_id: 'ev_ai_question_answer',
+    document_id: 'kb_ai_question_answer',
+    parent_id: 'kb_ai_question_answer',
+    title: '学习问答',
+    module: 'ai-companion',
+    intent: 'feature_overview',
+    source_type: 'faq',
+    matched_terms: ['学习问答', 'AI伴学助手'],
+    summary: '学习问答',
+    answer_span: '学员学习时有不理解的知识，可向AI伴学助手提问获取解答回复。',
+    source: 'knowledge/faq/ai-companion/question-answer.md',
+  });
+
+  const result = diagnosticResultFromKnowledge({
+    evidencePack: {
+      query: {
+        normalized_question: 'ai伴学助手有哪些功能',
+        module_candidates: ['ai-companion'],
+        intent_candidates: ['feature_overview'],
+        keywords: ['AI伴学助手', '功能清单'],
+      },
+      results: [overview, learningPlan, questionAnswer],
+      coverage: { searched_files: 3, matched_files: 3, filtered_out: [] },
+    },
+    route: route({
+      normalizedQuestion: 'ai伴学助手有哪些功能',
+      moduleCandidates: ['ai-companion'],
+      intentCandidates: ['feature_overview'],
+      keywords: ['AI伴学助手', '功能清单'],
+      sourceTypes: ['faq', 'whitepaper', 'module_doc'],
+    }),
+    judge: {
+      answerable: true,
+      confidence: 'high',
+      need_code_escalation: false,
+      reason: '知识库可回答功能清单。',
+      rationale: '知识库可回答功能清单。',
+      evidence: ['ev_ai_feature_overview', 'ev_ai_learning_plan', 'ev_ai_question_answer'],
+      risks: [],
+      missing_info: [],
+      conflicts: [],
+      blockers: [],
+      ambiguity: [],
+      quality_issues: [],
+      recommended_next_action: 'final_answer',
+      answer_score: 0.92,
+      score_breakdown: {
+        relevance: 1,
+        coverage: 1,
+        source_authority: 1,
+        freshness: 1,
+        version_match: 1,
+        agreement: 1,
+        actionability: 1,
+        conflict_penalty: 0,
+        ambiguity_penalty: 0,
+        risk_penalty: 0,
+        quality_penalty: 0,
+      },
+    },
+  });
+
+  const facts = result.claims.filter((claim) => claim.type === 'fact');
+  assert.equal(facts.length >= 3, true, JSON.stringify(result.claims));
+  assert.match(facts.map((claim) => claim.text).join('\n'), /学习计划制定/);
+  assert.match(facts.map((claim) => claim.text).join('\n'), /学习问答/);
+  assert.equal(result.evidence.length >= 3, true);
 });

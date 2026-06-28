@@ -38,6 +38,14 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
     return formatQ2Result(result, unsupportedFacts);
   }
 
+  if (
+    persona === 'operations' &&
+    isFeatureOverviewQuestion(userGoal ?? result.summary) &&
+    supportedClaims.length > 0
+  ) {
+    return operationsFeatureOverviewReply(supportedClaims, result, unsupportedFacts);
+  }
+
   const groundedConclusion = primaryClaim ?? '当前没有通过审核的事实结论';
   return formatPersonaReply({
     persona,
@@ -150,6 +158,31 @@ function operationsReply(
   return lines.join('\n');
 }
 
+function operationsFeatureOverviewReply(
+  supportedClaims: DiagnosticClaim[],
+  result: DiagnosticResult,
+  unsupportedFacts: DiagnosticClaim[],
+): string {
+  const facts = supportedClaims
+    .filter((claim) => claim.type === 'fact' || claim.type === 'inference')
+    .map((claim) => redactInternalKnowledgePath(claim.text))
+    .filter(Boolean);
+  const lines = [
+    '**答案：这个功能包括以下能力：**',
+    '',
+    ...(facts.length
+      ? facts.map((fact, index) => `${index + 1}. ${fact}`)
+      : [`1. ${redactInternalKnowledgePath(result.summary)}`]),
+    '',
+    '**运营可这样回复：** 可以按上面的功能点向用户说明；如果用户问的是某个功能是否可用，再结合页面入口、角色权限或配置状态继续确认。',
+  ];
+  if (result.missingInfo.length > 0) {
+    lines.push('', `**仍需确认：** ${result.missingInfo.join('、')}`);
+  }
+  appendUnsupported(lines, unsupportedFacts, redactInternalKnowledgePath);
+  return lines.join('\n');
+}
+
 function developerReply(
   conclusion: string,
   result: DiagnosticResult,
@@ -248,6 +281,10 @@ function operationsImpact(category: string, mode: ReplyMode): string {
     return '优先检查后台配置、角色权限或使用路径，通常不需要直接定性为缺陷。';
   }
   return '当前只能作为低置信度判断，不建议直接对外定责。';
+}
+
+function isFeatureOverviewQuestion(text: string): boolean {
+  return /有哪些功能|功能有哪些|功能清单|功能列表|支持哪些|能做什么|主要功能/.test(text);
 }
 
 function appendMissing(lines: string[], missing: string, mode: ReplyMode, label = '**仍需确认：**'): void {

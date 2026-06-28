@@ -95,6 +95,7 @@ Runtime behavior:
 - Taxonomy 必须登记已发布 module。默认模板包含 `ai-companion`、`edusoho-training` 及常用别名；未知 module 会进入 index warning，依赖该 module 的直答必须阻断。
 - Knowledge Router, Retrieval Service handoff, Evidence Judge, Deep Query Planner, Query Correction, and Case Curator are wired into the current knowledge-first runtime path.
 - Solved case drafts are written with `status: review_required` and require explicit approval before becoming `active` knowledge.
+- 功能概览类问题（例如“某功能有哪些能力”“支持哪些功能”）由 Knowledge Router 标记为 `feature_overview`。当知识证据满足直答资格时，runtime 应聚合多条功能 evidence/claim 直接回答；这类问题不应因为运营 persona 被强制定性为 bug、配置问题或设计使然。
 
 ## Non-Guessing Contract
 
@@ -203,6 +204,7 @@ Concrete implementation:
 - `src/agents/presentation.md` defines presentation constraints; the presentation step must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
 - `src/runtime/diagnostic-runtime.ts` is the runtime orchestration entry; private root facades are intentionally not used.
+- Presentation 的运营模板按问题类型分流：排障/异常类问题保留“系统 bug / 设计使然 / 配置或使用问题 / 目前不能确认”的分类；功能、规则、入口、操作说明类问题先回答用户问题，再给运营可转述动作。
 
 Worker command, cwd, stdout, stderr, stack, raw provider payload, and internal prompt data are diagnostic-log-only. Logs remain bounded and redacted. If a worker fails before usable evidence exists, the main reply contains only a safe failure category, current diagnosis state, next action, and case/run identity.
 

@@ -64,3 +64,24 @@
 - 5.2 需要明确凭证 opt-in 才能运行 SiliconFlow smoke/vector/rerank/holdout。当前配置禁用且无凭证，因此保持未完成。
 - 6.2 需要 reviewed corpus 的 holdout 指标证明；当前 offline 报告 Recall@5/MRR 为 0，不能冒充通过。
 - 本次 `optimize-local-rag-pipeline` 已把 current chunk artifact 推进到 `parent-child-v3`。该 change 的历史任务名仍写 v2，是该 change 创建时的版本语义；真实 completion gate 仍取决于人工 review/provider/holdout，而不是任务文字里的 v2/v3 名称差异。
+
+## 2026-06-28 Feature Overview Regression
+
+触发 case：`case_d4623950`，用户问“AI伴学助手有哪些功能”。检索命中了 `drf_src_1c0bc3610f76_003`，rerank score 0.998，但因为 published/draft 镜像重复与 `warn` 质量状态进入 `low_quality_evidence`，最终升级到代码排查；Presentation 又只渲染第一条 claim 并按运营模板定性为“设计使然/配置或使用问题”。
+
+本次补强：
+
+- `quality.ts` 重复检测忽略相同 `documentId` 的 draft/published 镜像，仍保留不同 document ID 之间的真实重复 warning。
+- `taxonomy.ts` 与 taxonomy template 新增 `feature_overview` 识别，用于“有哪些功能/支持哪些/功能清单”等具体模块问题。
+- `diagnosticResultFromKnowledge` 对 `feature_overview` 聚合多条 active evidence 为多个 fact claim，避免只输出 Top answer span。
+- `presenter.ts` 对运营 persona 增加功能概览模板，功能咨询不再强制归类为 bug、设计使然或配置问题。
+- `production-eval-50.json` 将 `exact-04` 替换为“AI伴学助手有哪些功能？”并指向实际 AI Companion 功能概览父切片。
+
+验证：
+
+- RED：`node --test test/quality-fixtures.test.mjs test/retrieval-grounding.test.mjs test/conversation-evidence-lifecycle.test.mjs` 新增 3 个测试按预期失败。
+- GREEN：`pnpm build && node --test test/quality-fixtures.test.mjs test/retrieval-grounding.test.mjs test/conversation-evidence-lifecycle.test.mjs` 通过，39/39 pass。
+
+仍未完成：
+
+- 未直接修改用户外部知识库、未运行真实向量重建或真实 SiliconFlow eval；这些仍受 4.3–4.5、5.2、6.2 的人工 review/provider opt-in gate 约束。

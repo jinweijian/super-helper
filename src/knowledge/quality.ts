@@ -395,12 +395,14 @@ function auditSliceDocument(
   if (hash) {
     const group = duplicateHashes.get(hash);
     if (group && group.length > 1) {
-      const isFirst = group[0] === doc;
-      if (!isFirst) {
+      const duplicateOf = group.find((candidate) => (
+        candidate !== doc && candidate.frontmatter.id !== fm.id
+      ));
+      if (duplicateOf) {
         issues.push({
           code: 'duplicate_content',
           severity: 'warn',
-          message: `Slice ${fm.id} duplicates content from ${group[0]?.frontmatter.id ?? 'unknown'}.`,
+          message: `Slice ${fm.id} duplicates content from ${duplicateOf.frontmatter.id ?? 'unknown'}.`,
           documentId: fm.id,
           source: doc.relativePath,
           contentHash: hash,

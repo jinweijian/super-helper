@@ -660,6 +660,25 @@ test('knowledge router identifies module and intent from taxonomy aliases', asyn
   }
 });
 
+test('knowledge router classifies concrete feature overview questions', async () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const route = routeKnowledgeQuestion({
+      workspaceRoot: workspace,
+      question: 'AI伴学助手有哪些功能？',
+    });
+
+    assert.deepEqual(route.moduleCandidates, ['ai-companion']);
+    assert.equal(route.intentCandidates.includes('feature_overview'), true);
+    assert.equal(route.sourceTypes.includes('faq'), true);
+    assert.equal(route.sourceTypes.includes('whitepaper'), true);
+    assert.equal(route.sourceTypes.includes('module_doc'), true);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
 test('frontmatter validation reports missing required fields', async () => {
   assert.throws(
     () => parseMarkdownDocument('---\nid: kb_invalid\n---\n# Invalid\n', 'invalid.md'),

@@ -3,7 +3,7 @@
     { "id": "exact-01", "question": "课程发布可见性规则是什么？", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
     { "id": "exact-02", "question": "课程发布可见性规则怎么执行？", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
     { "id": "exact-03", "question": "请说明课程发布可见性规则", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
-    { "id": "exact-04", "question": "课程发布可见性规则有哪些条件？", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
+    { "id": "exact-04", "question": "AI伴学助手有哪些功能？", "expected_parent_id": "drf_src_1c0bc3610f76_003", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
     { "id": "exact-05", "question": "课程发布可见性规则对学员有什么影响？", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
     { "id": "exact-06", "question": "课程发布可见性规则中的有效期是什么？", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },
     { "id": "exact-07", "question": "课程发布可见性规则要求哪些权限？", "expected_parent_id": "kb_eval_course_visibility", "expected_behavior": "direct", "category": "exact", "split": "calibration" },

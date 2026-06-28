@@ -221,6 +221,36 @@ test('presentation cannot promote partial outcome or render nonexistent evidence
   assert.doesNotMatch(reply, /不存在证据的事实/);
 });
 
+test('operations presentation answers feature overview without forced bug classification', () => {
+  const result = {
+    status: 'concluded',
+    summary: 'AI伴学助手支持学习计划制定、督学提醒、学习问答、题目答疑和知识点诊断。',
+    missingInfo: [],
+    evidence: [
+      {
+        id: 'ev_feature_overview',
+        kind: 'knowledge',
+        source: 'knowledge/faq/ai-companion/feature-overview.md',
+        summary: 'AI伴学助手功能清单',
+        confidence: 'high',
+      },
+    ],
+    claims: [
+      { id: 'claim_plan', type: 'fact', text: '支持学习计划制定。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_reminder', type: 'fact', text: '支持督学提醒。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_qa', type: 'fact', text: '支持学习问答和题目答疑。', evidenceIds: ['ev_feature_overview'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const reply = ruleBasedReviewAndFormat(result, 'operations', 'AI伴学助手有哪些功能');
+
+  assert.match(reply, /功能包括|支持/);
+  assert.match(reply, /学习计划制定/);
+  assert.match(reply, /督学提醒/);
+  assert.doesNotMatch(reply, /系统 bug|配置或使用问题|目前不能确认归类/);
+});
+
 test('runtime ignores a model attempt to promote a frozen partial result', async () => {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-review-freeze-'));
   const originalFetch = globalThis.fetch;

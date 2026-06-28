@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticRequest, DiagnosticResult, Evidence, UserPersona } from '../domain.js';
+import type { DiagnosticClaim, DiagnosticRequest, DiagnosticResult, Evidence, UserPersona } from '../domain.js';
 import {
   discoverKnowledgeDocuments,
   knowledgeRoot,
@@ -153,6 +153,13 @@ export function diagnosticResultFromKnowledge(input: {
     ? `知识库命中「${top.title}」，可回答：${top.answer_span ?? top.excerpt ?? top.summary}`
     : '知识库证据足够回答当前问题。';
 
+  if (isFeatureOverviewRoute(input.route)) {
+    return diagnosticFeatureOverviewResult({
+      evidence,
+      answerEvidence,
+    });
+  }
+
   return {
     status: 'concluded',
     summary,
@@ -172,6 +179,60 @@ export function diagnosticResultFromKnowledge(input: {
     ],
     recommendedNextAction: 'final_answer',
   };
+}
+
+function diagnosticFeatureOverviewResult(input: {
+  evidence: Evidence[];
+  answerEvidence: KnowledgeEvidencePack['results'];
+}): DiagnosticResult {
+  const selected = input.answerEvidence.slice(0, 6);
+  const claims: DiagnosticClaim[] = selected
+    .map((result) => ({
+      type: 'fact' as const,
+      text: featureFactText(result),
+      evidenceIds: [result.evidence_id],
+    }))
+    .filter((claim, index, all) => (
+      claim.text &&
+      all.findIndex((item) => item.text === claim.text) === index
+    ));
+  const summary = claims.length > 0
+    ? `知识库可回答功能概览：${claims.map((claim) => featureNameFromClaim(claim.text)).join('、')}`
+    : '知识库证据足够回答当前功能概览问题。';
+
+  return {
+    status: 'concluded',
+    summary,
+    missingInfo: [],
+    evidence: input.evidence,
+    claims,
+    recommendedNextAction: 'final_answer',
+  };
+}
+
+function isFeatureOverviewRoute(route: KnowledgeRoute): boolean {
+  return route.intentCandidates.includes('feature_overview') ||
+    /有哪些功能|功能有哪些|功能清单|功能列表|支持哪些|能做什么|主要功能/.test(route.normalizedQuestion);
+}
+
+function featureFactText(result: KnowledgeEvidencePack['results'][number]): string {
+  const body = cleanKnowledgeText(result.answer_span ?? result.excerpt ?? result.summary);
+  const title = cleanKnowledgeText(result.title);
+  if (!body) {
+    return title;
+  }
+  if (!title || body.includes(title)) {
+    return body;
+  }
+  return `${title}：${body}`;
+}
+
+function featureNameFromClaim(text: string): string {
+  return text.split(/[：:]/)[0]?.trim() || text.slice(0, 24);
+}
+
+function cleanKnowledgeText(text: string | undefined): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim();
 }
 
 export function knowledgeVisibilityForPersona(persona: UserPersona): KnowledgeVisibility[] {
