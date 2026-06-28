@@ -50,6 +50,8 @@ export interface SuperHelperConfig {
     tone: 'calm_professional' | 'concise' | 'technical';
     modelProvider?: string;
     useModelForPreflight: boolean;
+    useModelForEvidenceCoverage?: boolean;
+    evidenceCoverageTopN?: number;
     defaultUserPersona: UserPersona;
     contextWindowTokens: number;
   };
@@ -127,6 +129,8 @@ export function defaultConfig(): SuperHelperConfig {
       language: 'zh-CN',
       tone: 'calm_professional',
       useModelForPreflight: false,
+      useModelForEvidenceCoverage: true,
+      evidenceCoverageTopN: 3,
       defaultUserPersona: 'operations',
       contextWindowTokens: 200_000,
     },

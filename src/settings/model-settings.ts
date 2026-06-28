@@ -17,6 +17,7 @@ export function updateModelSettings(input: {
   input.config.models.providers[providerId] = provider;
   input.config.agent.modelProvider = providerId;
   input.config.agent.useModelForPreflight = input.body.useModelForPreflight ?? true;
+  input.config.agent.useModelForEvidenceCoverage = input.body.useModelForEvidenceCoverage ?? true;
   saveConfig(input.config);
   return publicSettings(input.config, input.secrets);
 }

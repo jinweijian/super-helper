@@ -12,6 +12,7 @@ export interface ModelSettingsInput {
   maxTokens?: number;
   contextWindowTokens?: number;
   useModelForPreflight?: boolean;
+  useModelForEvidenceCoverage?: boolean;
 }
 
 export interface EmbeddingSettingsInput {
