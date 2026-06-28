@@ -14,6 +14,7 @@ export type EvidenceJudgeBlocker =
   | 'low_signal_terms'
   | 'missing_provenance'
   | 'low_retrieval_confidence'
+  | 'question_not_answered'
   | 'unknown_module';
 
 export interface EvidenceJudgeScoreBreakdown {
