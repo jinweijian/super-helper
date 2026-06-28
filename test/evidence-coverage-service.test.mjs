@@ -10,16 +10,6 @@ function fakeModel(response) {
   };
 }
 
-function fakeEvents() {
-  const events = [];
-  return {
-    record: (e) => events.push(e),
-    evidenceCoverageStarted: () => events.push({ phase: 'evidence_coverage_started' }),
-    evidenceCoverageResult: () => events.push({ phase: 'evidence_coverage_result' }),
-    evidenceCoverageFailed: () => events.push({ phase: 'evidence_coverage_failed' }),
-  };
-}
-
 const sampleEvidence = [{
   evidence_id: 'ev_001',
   title: '学员数据统计补跑命令',
@@ -31,7 +21,6 @@ const sampleEvidence = [{
 test('coverage service returns covered when model says covered', async () => {
   const service = new EvidenceCoverageService(
     fakeModel(JSON.stringify({ coverage: 'covered', missing_elements: [], reason: '证据包含补跑命令' })),
-    fakeEvents(),
     'spec',
   );
   const result = await service.evaluate({ question: '如何补跑学员数据统计', evidence: sampleEvidence });
@@ -42,7 +31,6 @@ test('coverage service returns covered when model says covered', async () => {
 test('coverage service returns not_covered when model says not_covered', async () => {
   const service = new EvidenceCoverageService(
     fakeModel(JSON.stringify({ coverage: 'not_covered', missing_elements: ['补跑步骤', '命令行名称'], reason: '只命中功能说明' })),
-    fakeEvents(),
     'spec',
   );
   const result = await service.evaluate({ question: '学员数据统计缺失如何补，有没有命令行', evidence: sampleEvidence });
@@ -53,7 +41,6 @@ test('coverage service returns not_covered when model says not_covered', async (
 test('coverage service returns partial when model says partial', async () => {
   const service = new EvidenceCoverageService(
     fakeModel(JSON.stringify({ coverage: 'partial', missing_elements: ['命令行参数'], reason: '有步骤但缺命令' })),
-    fakeEvents(),
     'spec',
   );
   const result = await service.evaluate({ question: '如何补跑数据', evidence: sampleEvidence });
@@ -64,7 +51,7 @@ test('coverage service degrades to unknown when model throws', async () => {
   const throwingModel = {
     async complete() { throw new Error('model unavailable'); },
   };
-  const service = new EvidenceCoverageService(throwingModel, fakeEvents(), 'spec');
+  const service = new EvidenceCoverageService(throwingModel, 'spec');
   const result = await service.evaluate({ question: '如何补跑', evidence: sampleEvidence });
   assert.equal(result.coverage, 'unknown');
   assert.match(result.reason, /coverage evaluation failed/);
@@ -73,7 +60,6 @@ test('coverage service degrades to unknown when model throws', async () => {
 test('coverage service degrades to unknown when model returns non-json', async () => {
   const service = new EvidenceCoverageService(
     fakeModel('not json at all'),
-    fakeEvents(),
     'spec',
   );
   const result = await service.evaluate({ question: '如何补跑', evidence: sampleEvidence });
@@ -83,7 +69,6 @@ test('coverage service degrades to unknown when model returns non-json', async (
 test('coverage service degrades to unknown when coverage field missing', async () => {
   const service = new EvidenceCoverageService(
     fakeModel(JSON.stringify({ missing_elements: [], reason: 'no coverage field' })),
-    fakeEvents(),
     'spec',
   );
   const result = await service.evaluate({ question: '如何补跑', evidence: sampleEvidence });

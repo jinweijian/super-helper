@@ -1,7 +1,6 @@
 import type { KnowledgeEvidenceResult } from '../knowledge/index.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { parseAgentModelJson } from './agent-model-review.js';
-import type { CaseRuntimeEventRecorder } from './event-recorder.js';
 
 export type EvidenceCoverage = 'covered' | 'partial' | 'not_covered' | 'unknown';
 
@@ -20,7 +19,6 @@ interface ParsedCoverageResponse {
 export class EvidenceCoverageService {
   constructor(
     private readonly model: AgentModelClient,
-    private readonly events: CaseRuntimeEventRecorder,
     private readonly agentSpec: string,
     private readonly topN: number = 3,
   ) {}

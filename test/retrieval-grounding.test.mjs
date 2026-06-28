@@ -365,14 +365,6 @@ function fakeCoverageModel(response) {
   };
 }
 
-function fakeCoverageEvents() {
-  return {
-    evidenceCoverageStarted: () => {},
-    evidenceCoverageResult: () => {},
-    evidenceCoverageFailed: () => {},
-  };
-}
-
 test('coverage agent rejects high-rerank evidence that does not answer operation-procedure question', async () => {
   const question = '学员管理的学员数据统计里面缺少6月份的数据，如何补上，有没有现成的命令行处理？';
   const featureEvidence = evidence({
@@ -409,7 +401,6 @@ test('coverage agent rejects high-rerank evidence that does not answer operation
       missing_elements: ['补跑/重跑数据的步骤', '命令行名称或参数'],
       reason: '证据只描述了用户数据统计的页面功能，未覆盖补数据步骤或命令行操作',
     }),
-    fakeCoverageEvents(),
     'spec',
   );
 
@@ -441,7 +432,6 @@ test('coverage agent preserves direct answer when evidence truly covers question
       missing_elements: [],
       reason: '证据包含具体补跑命令和参数',
     }),
-    fakeCoverageEvents(),
     'spec',
   );
 

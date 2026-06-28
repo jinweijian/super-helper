@@ -536,17 +536,6 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     });
   }
 
-  evidenceCoverageFailed(caseSession: StoredCase, message: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.evidenceCoverage, {
-      actor: 'agent',
-      phase: 'evidence_coverage_failed',
-      label: '证据覆盖',
-      severity: 'warn',
-      summary: '证据覆盖 Agent 调用失败，降级回 Evidence Judge 结论',
-      detail: { message },
-    });
-  }
-
   knowledgeAnswerSelected(caseSession: StoredCase, result: DiagnosticResult): DiagnosticLogEvent {
     return this.recordAgent(caseSession, agentIdentities.evidenceJudge, {
       actor: 'agent',

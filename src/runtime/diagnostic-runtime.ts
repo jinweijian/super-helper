@@ -66,7 +66,6 @@ export class DiagnosticRuntime {
     this.experienceTurn = new ExperienceTurnService(store, this.events, this.reviewer);
     const coverageService = new EvidenceCoverageService(
       model,
-      this.events,
       evidenceCoverageAgentSpec,
       config.agent.evidenceCoverageTopN ?? 3,
     );
