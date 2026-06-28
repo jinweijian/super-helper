@@ -67,6 +67,8 @@ test('doctor reports actionable local checks without exposing secrets', async ()
     config.storage.rootDir = root;
     config.knowledge.rootDir = join(root, 'knowledge');
     config.workspaces[0].rootPath = workspaceRoot;
+    config.embedding.enabled = false;
+    config.rerank.enabled = false;
     config.models.providers.default = {
       type: 'openai-compatible',
       baseUrl: 'https://api.example.test/v1',

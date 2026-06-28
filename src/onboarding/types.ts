@@ -1,5 +1,6 @@
 import type { SecretRef } from '../domain.js';
 import type { ModelProviderConfig } from '../config.js';
+import type { KnowledgeChunkingOptions } from '../knowledge/documents/chunks.js';
 import type { EmbeddingProviderConfig } from '../providers/embedding/contract.js';
 import type { RerankProviderConfig } from '../providers/rerank/contract.js';
 
@@ -50,6 +51,7 @@ export interface OnboardingDraft {
     rootDir: string;
     sourceDir?: string;
     buildVectorIndex: boolean;
+    chunking?: KnowledgeChunkingOptions;
   };
   server: {
     bindMode: 'loopback' | 'lan';
@@ -165,11 +167,39 @@ export interface OnboardingPlan {
 
 export type OnboardingReviewAction = 'approve' | 'reject' | 'request_edits' | 'accept_warnings';
 
+export type OnboardingReviewSeverityFilter = 'all' | 'warn' | 'error';
+
+export interface OnboardingReviewQuery {
+  offset?: number;
+  limit?: number;
+  severity?: OnboardingReviewSeverityFilter;
+  search?: string;
+}
+
+export interface OnboardingReviewPage {
+  offset: number;
+  limit: number;
+  total: number;
+  returned: number;
+  hasMore: boolean;
+  severity: OnboardingReviewSeverityFilter;
+  search: string;
+}
+
+export interface OnboardingReviewIssueExplanation {
+  reason: string;
+  impact: string;
+  suggestion: string;
+  missingInfo: string[];
+}
+
 export interface OnboardingReviewIssue {
   code: string;
   severity: 'info' | 'warn' | 'error';
   message: string;
   source?: string;
+  details?: Record<string, unknown>;
+  explanation: OnboardingReviewIssueExplanation;
 }
 
 export interface OnboardingReviewItem {
@@ -189,6 +219,8 @@ export interface OnboardingReviewState {
   required: boolean;
   pendingCount: number;
   blockedCount: number;
+  totalCount: number;
+  page: OnboardingReviewPage;
   items: OnboardingReviewItem[];
 }
 
@@ -198,6 +230,7 @@ export interface OnboardingReviewInput {
   notes?: string;
   sourceDocumentId?: string;
   ids?: string[];
+  query?: OnboardingReviewQuery;
 }
 
 export interface OnboardingReviewResult {

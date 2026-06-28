@@ -11,41 +11,42 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
   const supportedClaims = result.claims.filter((claim) => claim.type !== 'fact' || claim.evidenceIds.length > 0);
   const primaryClaim = supportedClaims.find((claim) => claim.type === 'fact' || claim.type === 'inference')?.text;
   if (unsupportedFacts.length > 0 && supportedClaims.length === 0) {
-    return 'Claude Code 返回了没有证据支撑的事实判断，我不会把它作为结论展示。\n\n请补充更多可验证信息，或查看诊断日志让技术支持复核。';
+    return '目前证据不足，暂不能形成结论。\n\n**仍需确认：** 缺少可验证的 medium/high confidence 证据。\n\n**下一步：** 请补充更多可验证信息，或查看诊断日志让技术支持复核。';
   }
-
-  const evidence = result.evidence.length
-    ? result.evidence.map((item, index) => `${index + 1}. ${item.summary}（来源：${item.source}，可信度：${item.confidence}）`).join('\n')
-    : '暂无可展示证据。';
-  const supported = supportedClaims.length
-    ? `\n\n已支持判断：\n${supportedClaims.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
-    : '';
 
   if (result.recommendedNextAction === 'ask_user' || result.status === 'need_input') {
     const missing = result.missingInfo.length > 0 ? result.missingInfo.join('、') : '可验证证据';
     if (result.status !== 'need_input' && (result.evidence.length > 0 || supportedClaims.length > 0)) {
-      return `目前只能给出初步判断：${primaryClaim ?? '现有证据仍不足以形成事实结论'}\n\n支撑证据：\n${evidence}${supported}\n\n还缺少：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
+      return formatPersonaReply({
+        persona,
+        conclusion: primaryClaim ?? '现有证据仍不足以形成事实结论',
+        result,
+        mode: 'partial',
+        missing,
+      });
     }
-    return `目前证据不足，还不能最终定位。\n\n请补充：${missing}。\n\n如果不清楚，可以直接回复“不清楚”，我会按现有信息继续低置信度排查。`;
+    return formatPersonaReply({
+      persona,
+      conclusion: '目前证据不足，还不能最终定位',
+      result,
+      mode: 'need_input',
+      missing,
+    });
   }
 
   if (/Q2|event_v2|finished_prompt|CourseTaskEventV2/i.test(userGoal ?? result.summary)) {
     return formatQ2Result(result, unsupportedFacts);
   }
 
-  const assumptions = result.claims.filter((claim) => claim.type === 'assumption' || claim.type === 'inference');
-  const caution = assumptions.length
-    ? `\n\n仍需注意：\n${assumptions.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
-    : '';
-
   const groundedConclusion = primaryClaim ?? '当前没有通过审核的事实结论';
-  const intro = persona === 'developer'
-    ? `目前判断：${groundedConclusion}`
-    : `目前判断：${groundedConclusion}\n\n我会先讲对业务操作有用的结论；代码路径只作为证据放在下面。`;
-  const omitted = unsupportedFacts.length
-    ? `\n\n未采纳的无证据说法：\n${unsupportedFacts.map((claim, index) => `${index + 1}. ${claim.text}`).join('\n')}`
-    : '';
-  return `${intro}\n\n支撑证据：\n${evidence}${supported}${caution}${omitted}`;
+  return formatPersonaReply({
+    persona,
+    conclusion: groundedConclusion,
+    result,
+    mode: result.status === 'concluded' || result.recommendedNextAction === 'final_answer' ? 'final' : 'partial',
+    missing: result.missingInfo.join('、'),
+    unsupportedFacts,
+  });
 }
 
 export function formatReviewFailureFallback(
@@ -97,6 +98,186 @@ export function personaGuide(persona: UserPersona): Record<string, string> {
     },
   };
   return guides[persona] ?? guides.operations;
+}
+
+type ReplyMode = 'final' | 'partial' | 'need_input';
+
+function formatPersonaReply(input: {
+  persona: UserPersona;
+  conclusion: string;
+  result: DiagnosticResult;
+  mode: ReplyMode;
+  missing?: string;
+  unsupportedFacts?: DiagnosticClaim[];
+}): string {
+  const missing = input.missing || input.result.missingInfo.join('、');
+  const conclusion = input.mode === 'partial'
+    ? `初步判断：${input.conclusion}`
+    : input.conclusion;
+  switch (input.persona) {
+    case 'developer':
+      return developerReply(conclusion, input.result, input.mode, missing, input.unsupportedFacts ?? []);
+    case 'support':
+      return supportReply(conclusion, input.result, input.mode, missing, input.unsupportedFacts ?? []);
+    case 'customer':
+      return customerReply(conclusion, input.result, input.mode, missing);
+    case 'operations':
+    default:
+      return operationsReply(conclusion, input.result, input.mode, missing, input.unsupportedFacts ?? []);
+  }
+}
+
+function operationsReply(
+  conclusion: string,
+  result: DiagnosticResult,
+  mode: ReplyMode,
+  missing: string,
+  unsupportedFacts: DiagnosticClaim[],
+): string {
+  const safeConclusion = redactInternalKnowledgePath(conclusion);
+  const category = mode === 'need_input' ? '目前不能确认' : operationsCategory(safeConclusion, result);
+  const lines = [
+    `**结论：${category}。${safeConclusion}**`,
+    '',
+    `**对业务的影响：** ${operationsImpact(category, mode)}`,
+    '',
+    '**你可以怎么处理：**',
+    '1. 先按上面的结论回复或处理当前业务问题。',
+    '2. 如果现场现象和这个判断不一致，带上页面、角色、时间范围和现象截图升级给技术支持。',
+  ];
+  appendMissing(lines, missing, mode);
+  appendUnsupported(lines, unsupportedFacts, redactInternalKnowledgePath);
+  return lines.join('\n');
+}
+
+function developerReply(
+  conclusion: string,
+  result: DiagnosticResult,
+  mode: ReplyMode,
+  missing: string,
+  unsupportedFacts: DiagnosticClaim[],
+): string {
+  const evidence = result.evidence[0];
+  const source = evidence?.source ? `先查 ${evidence.source}` : '先查与问题直接相关的入口、接口、日志或配置';
+  const basis = evidence?.summary ?? result.summary;
+  const lines = [
+    `**结论：${conclusion}**`,
+    '',
+    `**定位依据：** ${basis || '当前还没有足够证据形成定位依据。'}`,
+    '',
+    '**下一步排查：**',
+    `1. ${source}。`,
+    '2. 用同一复现条件确认代码路径、配置值或日志是否一致。',
+    `3. ${missing ? `补充 ${missing} 后再确认边界。` : '如果仍不一致，再补充 trace、请求参数、环境和版本信息。'}`,
+  ];
+  appendRisk(lines, missing, mode);
+  appendUnsupported(lines, unsupportedFacts);
+  return lines.join('\n');
+}
+
+function supportReply(
+  conclusion: string,
+  result: DiagnosticResult,
+  mode: ReplyMode,
+  missing: string,
+  unsupportedFacts: DiagnosticClaim[],
+): string {
+  const lines = [
+    `**结论：${conclusion}**`,
+    '',
+    '**建议处理：**',
+    '1. 先把结论转成客户能理解的话回复，避免直接贴代码路径。',
+    '2. 需要研发确认时，附上 caseId/runId、用户最后一句话和下方折叠证据。',
+    '3. 如果影响范围扩大或结论与现场不一致，按升级工单处理。',
+  ];
+  appendMissing(lines, missing, mode, '**需要补充：**');
+  appendUnsupported(lines, unsupportedFacts);
+  return lines.join('\n');
+}
+
+function customerReply(
+  conclusion: string,
+  result: DiagnosticResult,
+  mode: ReplyMode,
+  missing: string,
+): string {
+  const lines = [
+    `**结论：${customerSafeConclusion(conclusion)}**`,
+    '',
+    '**你现在可以这样做：**',
+    '1. 先按上面的说明检查当前页面或操作步骤。',
+    '2. 如果仍然无法完成，请把页面、操作步骤和看到的提示发给人工支持。',
+  ];
+  const note = mode === 'need_input'
+    ? `还需要确认：${missing || '具体页面和提示'}。`
+    : '证据细节已保留在诊断记录中，人工支持可以继续查看。';
+  lines.push('', `**说明：** ${note}`);
+  return lines.join('\n');
+}
+
+function operationsCategory(conclusion: string, result: DiagnosticResult): string {
+  const text = `${conclusion}\n${result.summary}`.toLowerCase();
+  if (/bug|缺陷|异常|报错|错误|失败|\b5\d\d\b|exception|error/.test(text)) {
+    return '系统 bug';
+  }
+  if (result.evidence.some((item) => item.kind === 'knowledge')) {
+    return '设计使然';
+  }
+  if (/设计|规则|预期|限制|不支持|使然|产品行为/.test(text)) {
+    return '设计使然';
+  }
+  if (/配置|设置|开关|开启|启用|参数|后台|入口|权限|角色|控制/.test(text)) {
+    return '配置或使用问题';
+  }
+  return result.status === 'concluded' || result.recommendedNextAction === 'final_answer'
+    ? '目前不能确认归类'
+    : '目前不能确认';
+}
+
+function operationsImpact(category: string, mode: ReplyMode): string {
+  if (mode === 'need_input') {
+    return '现在还不能判断影响范围，先补齐关键信息再对外给确定说法。';
+  }
+  if (category === '系统 bug') {
+    return '可能影响用户正常操作，建议先记录影响范围并升级确认。';
+  }
+  if (category === '设计使然') {
+    return '更适合按产品规则解释，除非现场表现和规则不一致。';
+  }
+  if (category === '配置或使用问题') {
+    return '优先检查后台配置、角色权限或使用路径，通常不需要直接定性为缺陷。';
+  }
+  return '当前只能作为低置信度判断，不建议直接对外定责。';
+}
+
+function appendMissing(lines: string[], missing: string, mode: ReplyMode, label = '**仍需确认：**'): void {
+  if (missing || mode !== 'final') {
+    lines.push('', `${label} ${missing || '暂无阻塞项；如现场不一致，再补充页面、账号角色和时间范围。'}`);
+  }
+}
+
+function appendRisk(lines: string[], missing: string, mode: ReplyMode): void {
+  if (missing || mode !== 'final') {
+    lines.push('', `**风险或未知：** ${missing || '暂无阻塞项；仍需用实际环境复现确认。'}`);
+  }
+}
+
+function appendUnsupported(
+  lines: string[],
+  unsupportedFacts: DiagnosticClaim[],
+  sanitize: (text: string) => string = (text) => text,
+): void {
+  if (unsupportedFacts.length > 0) {
+    lines.push('', `**未采纳：** ${unsupportedFacts.map((claim) => sanitize(claim.text)).join('；')}`);
+  }
+}
+
+function customerSafeConclusion(conclusion: string): string {
+  return conclusion.replace(/\b(src|app|packages?|node_modules|vendor)\/[^\s，。；)）]+/g, '相关系统位置');
+}
+
+function redactInternalKnowledgePath(text: string): string {
+  return text.replace(/knowledge\/_sources\/whitepapers\/[^\s，。；)）\]]+/g, '原始白皮书资料');
 }
 
 function formatQ2Result(result: DiagnosticResult, unsupportedFacts: DiagnosticClaim[]): string {

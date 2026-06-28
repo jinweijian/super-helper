@@ -425,7 +425,7 @@ export interface KnowledgeChunk {
   parent_terms?: string[];
   quality_status?: 'unchecked' | 'ok' | 'warn' | 'error';
   chunking_strategy?: string;
-  artifact_version?: 2;
+  artifact_version?: 2 | 3;
   legacy?: boolean;
   manual_split_required?: boolean;
   overlap_chars?: number;

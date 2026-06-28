@@ -8,6 +8,7 @@ export interface DeepQueryPlan {
   artifactTargets: string[];
   anchorTerms: string[];
   likelyPaths: string[];
+  projectType: string;
   avoidAssumptions: string[];
   correctionActions: string[];
   attempt: number;
@@ -29,22 +30,26 @@ export function planDeepQuery(input: {
   previousArtifactTargets?: string[];
   triedQueries?: string[];
   failedReasons?: string[];
+  projectType?: string;
+  glossaryTerms?: string[];
 }): DeepQueryPlan {
   const attempt = input.attempt ?? 1;
   const maxAttempts = input.maxAttempts ?? 2;
+  const projectType = normalizeProjectType(input.projectType);
   const artifactTargets = inferArtifactTargets(input.question, input.route);
-  const anchorTerms = Array.from(new Set([
+  const anchorTerms = filterMeaningfulAnchorTerms(Array.from(new Set([
     ...input.route.keywords,
     ...input.route.moduleCandidates,
     ...input.route.intentCandidates,
     ...input.evidencePack.results.flatMap((result) => result.matched_terms),
-  ])).slice(0, 24);
+  ])), input.glossaryTerms).slice(0, 24);
 
   return {
     permission: 'read_only',
     artifactTargets,
     anchorTerms,
-    likelyPaths: likelyPathsFor(artifactTargets),
+    likelyPaths: likelyPathsFor(artifactTargets, projectType),
+    projectType,
     avoidAssumptions: [
       '不要把用户猜测的方向直接当作根因。',
       '如果知识库证据不足，请用 Read/Glob/Grep 找当前实现证据。',
@@ -123,9 +128,29 @@ export function attachDeepQueryContext(input: {
   ]));
 }
 
+const MODULE_TO_ARTIFACT_TARGETS: Record<string, string[]> = {
+  'marketing-theme': ['template', 'widget', 'config'],
+  'ai-companion': ['service', 'config'],
+  'edusoho-training': ['service', 'controller', 'template', 'config'],
+};
+
+const BIGRAM_NOISE = new Set(['销主', '题中', '中关']);
+
 function inferArtifactTargets(question: string, route: KnowledgeRoute): string[] {
-  const text = `${question}\n${route.codeEscalationSignals.join('\n')}`;
   const targets = new Set<string>();
+  for (const module of route.moduleCandidates) {
+    for (const target of MODULE_TO_ARTIFACT_TARGETS[module] ?? []) {
+      targets.add(target);
+    }
+  }
+  addRegexArtifactTargets(targets, `${question}\n${route.codeEscalationSignals.join('\n')}`, false);
+  if (targets.size === 0) {
+    addRegexArtifactTargets(targets, `${question}\n${route.codeEscalationSignals.join('\n')}`, true);
+  }
+  return Array.from(targets);
+}
+
+function addRegexArtifactTargets(targets: Set<string>, text: string, fallback: boolean): void {
   if (/定时|cron|scheduler|job|任务/.test(text)) targets.add('scheduler');
   if (/queue|consumer|event|消息|队列/.test(text)) targets.add('queue');
   if (/callback|webhook|回调/.test(text)) targets.add('callback');
@@ -135,12 +160,12 @@ function inferArtifactTargets(question: string, route: KnowledgeRoute): string[]
   if (/config|配置|env|开关/.test(text)) targets.add('config');
   if (/\/[A-Za-z0-9_\-/{}:?=&.]+|接口|route|router|controller/.test(text)) targets.add('route');
   if (/service|服务|实现|代码|当前实现/.test(text)) targets.add('service');
-  if (targets.size === 0) targets.add('service');
-  return Array.from(targets);
+  if (fallback && targets.size === 0) targets.add('service');
 }
 
-function likelyPathsFor(targets: string[]): string[] {
-  const patterns: Record<string, string[]> = {
+function likelyPathsFor(targets: string[], projectType: string): string[] {
+  const patternByType: Record<string, Record<string, string[]>> = {
+    generic: {
     scheduler: ['src/**/scheduler*', 'src/**/*job*', 'src/**/*cron*', 'src/**/*task*'],
     queue: ['src/**/*queue*', 'src/**/*consumer*', 'src/**/*event*'],
     callback: ['src/**/*callback*', 'src/**/*webhook*', 'src/**/*handler*'],
@@ -150,6 +175,50 @@ function likelyPathsFor(targets: string[]): string[] {
     config: ['src/**/*config*', '**/*.env*', '**/*settings*'],
     route: ['src/**/*route*', 'src/**/*router*', 'src/**/*controller*'],
     service: ['src/**/*service*', 'src/**/*manager*', 'src/**/*repository*'],
+    },
+    symfony: {
+      template: ['web/themes/**/*.twig', 'app/Resources/**/*.twig'],
+      widget: ['web/themes/**/*widget*', 'web/themes/**/*block*', 'web/themes/**/parts/**/*.twig'],
+      config: ['app/config/**/*.yml', 'app/config/**/*.yaml'],
+      route: ['app/config/**/*routing*.yml', 'src/Bundle/**/*Controller.php'],
+      controller: ['src/Bundle/**/*Controller.php'],
+      service: ['src/Bundle/**/*Service*.php', 'src/Bundle/**/*Manager*.php', 'src/Bundle/**/*Repository*.php'],
+      permission: ['src/Bundle/**/*Voter.php', 'src/Bundle/**/*Permission*.php'],
+      queue: ['src/Bundle/**/*Consumer*.php', 'src/Bundle/**/*Event*.php'],
+      scheduler: ['src/Bundle/**/*Job*.php', 'src/Bundle/**/*Task*.php'],
+    },
+    node: {
+      service: ['src/**/*service*', 'lib/**/*service*'],
+      route: ['src/**/*route*', 'src/**/*router*', 'src/**/*controller*', 'lib/**/*route*'],
+      config: ['src/**/*config*', 'config/**/*', '**/*.env*'],
+      queue: ['src/**/*queue*', 'lib/**/*queue*', 'src/**/*consumer*'],
+    },
+    vue: {
+      template: ['src/**/*.vue', 'src/**/components/**/*'],
+      widget: ['src/**/components/**/*', 'src/**/widgets/**/*'],
+      config: ['src/**/*config*', 'vite.config.*', 'vue.config.*'],
+      service: ['src/**/*service*', 'src/**/api/**/*'],
+      route: ['src/**/*router*', 'src/**/routes*'],
+    },
   };
+  const patterns = patternByType[projectType] ?? patternByType.generic;
   return Array.from(new Set(targets.flatMap((target) => patterns[target] ?? []))).slice(0, 20);
+}
+
+function filterMeaningfulAnchorTerms(terms: string[], glossaryTerms: string[] = []): string[] {
+  const glossary = new Set(glossaryTerms.map((term) => term.trim()).filter(Boolean));
+  return terms.filter((term) => {
+    const value = term.trim();
+    if (!value) return false;
+    if (glossary.has(value)) return true;
+    if (/^[A-Za-z][A-Za-z0-9_-]+$/.test(value)) return true;
+    if (!/^[\u4e00-\u9fff]{2,}$/.test(value)) return value.length >= 2;
+    if (BIGRAM_NOISE.has(value)) return false;
+    return true;
+  });
+}
+
+function normalizeProjectType(projectType: string | undefined): string {
+  const value = projectType?.trim().toLowerCase();
+  return value || 'generic';
 }

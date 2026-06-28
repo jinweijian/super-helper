@@ -1,5 +1,5 @@
 import type { DiagnosticLogEvent, LogSeverity } from '../domain.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 
 export interface DiagnosticLogBlock {
   id: string;
@@ -19,7 +19,9 @@ export interface DiagnosticLogBlock {
 }
 
 export function buildLogBlocks(caseSession: StoredCase): DiagnosticLogBlock[] {
-  return (caseSession.logs ?? [])
+  const logs = caseSession.logs ?? [];
+  const evidenceById = knowledgeEvidenceById(logs);
+  return logs
     .map((event) => ({
       id: event.id,
       createdAt: event.createdAt,
@@ -32,11 +34,55 @@ export function buildLogBlocks(caseSession: StoredCase): DiagnosticLogBlock[] {
       severity: event.severity ?? severityForEvent(event),
       title: event.summary,
       summary: event.summary,
-      detail: event.detail,
+      detail: detailForDisplay(event, evidenceById),
       command: commandForEvent(event),
       tags: tagsForEvent(event),
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function knowledgeEvidenceById(events: DiagnosticLogEvent[]): Map<string, unknown> {
+  const evidenceById = new Map<string, unknown>();
+  for (const event of events) {
+    if (event.phase !== 'knowledge_search_result' || !isObjectRecord(event.detail)) {
+      continue;
+    }
+    const results = event.detail.results;
+    if (!Array.isArray(results)) {
+      continue;
+    }
+    for (const result of results) {
+      if (isObjectRecord(result) && typeof result.evidence_id === 'string') {
+        evidenceById.set(result.evidence_id, result);
+      }
+    }
+  }
+  return evidenceById;
+}
+
+function detailForDisplay(event: DiagnosticLogEvent, evidenceById: Map<string, unknown>): unknown {
+  if (!isObjectRecord(event.detail) || 'evidence' in event.detail) {
+    return event.detail;
+  }
+  const evidenceIds = event.detail.evidenceIds;
+  if (!Array.isArray(evidenceIds)) {
+    return event.detail;
+  }
+  const evidence = evidenceIds
+    .filter((id): id is string => typeof id === 'string')
+    .map((id) => evidenceById.get(id))
+    .filter((item): item is unknown => item !== undefined);
+  if (!evidence.length) {
+    return event.detail;
+  }
+  return {
+    ...event.detail,
+    evidence,
+  };
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function formatLogSection(title: string, events: DiagnosticLogEvent[]): string {

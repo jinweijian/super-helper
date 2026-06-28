@@ -1,5 +1,5 @@
 import type { DiagnosticRequest } from '../domain.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from './file-memory-store.js';
 
 export function buildDiagnosticRequestContext(
   caseSession: StoredCase,

@@ -135,6 +135,9 @@ test('app exposes a model settings and test entry', () => {
   assert.match(html, /保存配置/);
   assert.match(html, /id="embeddingEnabled"/);
   assert.match(html, /id="rerankEnabled"/);
+  assert.match(html, /id="rerankTopN" type="number" value="8"/);
+  assert.match(html, /rerank\.topN \|\| 8/);
+  assert.match(html, /document\.getElementById\('rerankTopN'\)\.value \|\| 8/);
   assert.match(html, /enabled: document\.getElementById\('embeddingEnabled'\)\.checked/);
   assert.match(html, /enabled: document\.getElementById\('rerankEnabled'\)\.checked/);
   assert.match(html, /payload = readEmbeddingForm\(true\)[\s\S]*payload\.enabled = true/);
@@ -142,6 +145,26 @@ test('app exposes a model settings and test entry', () => {
   assert.match(html, /上下文窗口 Tokens/);
   assert.match(html, /id="contextWindowTokens"/);
   assert.match(html, /contextWindowTokens: Number\(document\.getElementById\('contextWindowTokens'\)\.value/);
+});
+
+test('helper answers render concise body with collapsed evidence and claims before evidence', () => {
+  const html = renderApp();
+
+  assert.match(html, /renderHelperMessage/);
+  assert.match(html, /answer-emphasis/);
+  assert.match(html, /answer-section-title/);
+  assert.match(html, /\.msg\.helper strong[\s\S]*font-weight: 850/);
+  assert.match(html, /class="answer-evidence"/);
+  assert.match(html, /查看关键证据/);
+  assert.match(html, /已支持判断/);
+  assert.match(html, /关键证据/);
+  assert.match(html, /findRunResultForMessage/);
+  assert.match(html, /renderAnswerEvidence/);
+  assert.match(html, /splitLegacyEvidenceSections/);
+  assert.match(
+    html,
+    /renderInsightEvidence[\s\S]*已支持判断[\s\S]*证据列表/,
+  );
 });
 
 test('app surfaces interrupted requests and exposes session controls', () => {
@@ -167,6 +190,14 @@ test('app surfaces interrupted requests and exposes session controls', () => {
   assert.match(html, /\.msg\.helper pre/);
   assert.match(html, /preBlocks/);
   assert.match(html, /escapeHtml\(raw\)/);
+});
+
+test('app switches sessions with lightweight fetches and background refreshes', () => {
+  const html = renderApp();
+
+  assert.match(html, /includeKnowledgeHealth=false/);
+  assert.match(html, /refreshCurrentKnowledgeHealth/);
+  assert.match(html, /loadSessionsInBackground/);
 });
 
 test('history session list keeps its own scroll area instead of compressing items', () => {
@@ -493,6 +524,18 @@ test('sessions API lists, creates, and loads reusable chat sessions', async () =
     }).then((res) => res.json());
     assert.equal(blank.session.title, '新项目提问');
     assert.equal(blank.session.messages.length, 0);
+
+    const lightweight = await fetch(`http://127.0.0.1:43972/api/session?caseId=${blank.session.id}&includeKnowledgeHealth=false`).then((res) => res.json());
+    assert.equal(lightweight.session.id, blank.session.id);
+    assert.equal(Object.hasOwn(lightweight.session, 'knowledgeHealth'), false);
+
+    const blankLightweight = await fetch('http://127.0.0.1:43972/api/sessions?includeKnowledgeHealth=false', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '轻量新会话' }),
+    }).then((res) => res.json());
+    assert.equal(blankLightweight.session.title, '轻量新会话');
+    assert.equal(Object.hasOwn(blankLightweight.session, 'knowledgeHealth'), false);
   } finally {
     if (server) {
       await server.close();
@@ -1171,9 +1214,11 @@ test('runtime answers directly from knowledge evidence before calling the worker
     assert.equal(response.caseSession.runs.length, 1);
     assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
     assert.match(response.assistantMessage, /AI伴学助手如何制定学习计划/);
-    assert.match(response.assistantMessage, /支撑证据/);
-    assert.match(response.assistantMessage, /来源：knowledge\/faq\/ai-companion/);
+    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.doesNotMatch(response.assistantMessage, /支撑证据/);
+    assert.match(response.caseSession.runs[0].result.evidence[0].source, /knowledge\/faq\/ai-companion/);
     assert.equal(response.caseSession.logs.some((event) => event.phase === 'knowledge_search_result'), true);
+    assert.equal(response.caseSession.logs.some((event) => event.phase === 'preflight_decision' && event.detail?.decision === 'knowledge_answer'), true);
     const retrievalTrace = response.caseSession.logs.find((event) => event.phase === 'knowledge_retrieval_trace')?.detail;
     assert.equal(retrievalTrace.strategies.find((item) => item.id === 'bm25')?.status, 'ran');
     assert.equal(retrievalTrace.strategies.find((item) => item.id === 'embedding')?.status, 'skipped');
@@ -2257,7 +2302,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
     assert.equal(modelCalls.length, 2);
     assert.match(modelCalls[1][0].content, /只负责.*claim\/evidence ID/);
     assert.doesNotMatch(modelCalls[1][1].content, /claude -p|stdout|stderr/);
-    assert.match(response.assistantMessage, /目前判断：存在可验证证据/);
+    assert.match(response.assistantMessage, /\*\*结论：/);
     assert.match(response.assistantMessage, /存在可验证证据/);
     assert.equal(response.decision, 'final');
     assert.equal(response.caseSession.logs.some((item) => item.actor === 'claude' && item.phase === 'raw_output'), true);
@@ -2335,9 +2380,10 @@ test('agent falls back to local reviewed formatting when presentation model retu
     });
 
     assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /目前判断：部门创建入口按 15 级限制展示。/);
+    assert.match(response.assistantMessage, /\*\*结论：/);
     assert.match(response.assistantMessage, /部门创建入口按 15 级限制展示。/);
-    assert.match(response.assistantMessage, /org-manage\/index\.html\.twig:82/);
+    assert.doesNotMatch(response.assistantMessage, /org-manage\/index\.html\.twig:82/);
+    assert.match(response.caseSession.runs[0].result.evidence[0].source, /org-manage\/index\.html\.twig:82/);
     assert.doesNotMatch(response.assistantMessage, /美化输出 Agent 调用模型失败/);
     assert.doesNotMatch(response.assistantMessage, /<pre>/);
     assert.doesNotMatch(response.assistantMessage, /The `org\.create` event has no depth check/);
@@ -2572,6 +2618,25 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     assert.equal(request.userPersona, 'developer');
     assert.deepEqual(request.allowedMcpToolIds, ['readonly-docs']);
     assert.equal(request.context.isFollowUp, false);
+    assert.match(request.constraints.join('\n'), /开发视角/);
+    assert.match(request.constraints.join('\n'), /问题位置、确认方式、下一步排查/);
+
+    const operationsCase = store.createCase({
+      tenantId: 'local',
+      userId: 'local-user',
+      workspaceId: 'current',
+      title: 'operations request',
+    });
+    operationsCase.userPersona = 'operations';
+    const operationsRequest = buildDiagnosticRequest({
+      caseSession: operationsCase,
+      userMessage: '后台视频倍速开关在哪里设置？',
+      unknowns: [],
+      config,
+    });
+    assert.match(operationsRequest.constraints.join('\n'), /运营视角/);
+    assert.match(operationsRequest.constraints.join('\n'), /系统 bug、设计使然、配置或使用问题/);
+    assert.notEqual(operationsRequest.constraints.join('\n'), request.constraints.join('\n'));
 
     const result = {
       status: 'partial',
@@ -2632,6 +2697,33 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     assert.equal(personaName('developer'), '开发人员');
     assert.equal(personaGuide('operations').focus.includes('配置入口'), true);
     assert.match(formatPreflightQuestion('请补充页面。', ['页面']), /缺少关键信息：页面/);
+    const reviewedResult = {
+      status: 'concluded',
+      summary: '倍速开关由播放器初始化配置控制',
+      missingInfo: ['线上租户配置值'],
+      evidence: [
+        { id: 'ev_player', kind: 'workspace', source: 'src/player.ts', summary: '播放器初始化读取 enablePlaybackRates 配置。', confidence: 'high' },
+      ],
+      claims: [
+        { type: 'fact', text: '倍速开关由播放器初始化配置控制。', evidenceIds: ['ev_player'] },
+      ],
+      recommendedNextAction: 'final_answer',
+    };
+    const operationsReply = ruleBasedReviewAndFormat(reviewedResult, 'operations');
+    const developerReply = ruleBasedReviewAndFormat(reviewedResult, 'developer');
+    const supportReply = ruleBasedReviewAndFormat(reviewedResult, 'support');
+    const customerReply = ruleBasedReviewAndFormat(reviewedResult, 'customer');
+    assert.match(operationsReply, /\*\*结论：/);
+    assert.match(operationsReply, /系统 bug|设计使然|配置或使用问题|目前不能确认/);
+    assert.match(operationsReply, /\*\*对业务的影响：\*\*/);
+    assert.doesNotMatch(operationsReply, /支撑证据：/);
+    assert.doesNotMatch(operationsReply, /src\/player\.ts/);
+    assert.match(developerReply, /\*\*结论：/);
+    assert.match(developerReply, /\*\*定位依据：\*\*/);
+    assert.match(developerReply, /\*\*下一步排查：\*\*/);
+    assert.match(supportReply, /\*\*建议处理：\*\*/);
+    assert.match(customerReply, /\*\*你现在可以这样做：\*\*/);
+    assert.notEqual(operationsReply, developerReply);
     assert.match(
       ruleBasedReviewAndFormat({
         status: 'concluded',
@@ -2726,7 +2818,7 @@ test('model preflight cannot block an inspectable workspace question with generi
     assert.match(workerRequests[0].userGoal, /倍速播放/);
     assert.equal(workerRequests[0].unknowns.length, 0);
     assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /目前判断：问题可以通过当前 workspace 先做只读排查/);
+    assert.match(response.assistantMessage, /\*\*结论：/);
     assert.match(response.assistantMessage, /问题可以通过当前 workspace 先做只读排查/);
     assert.equal(
       response.caseSession.logs.some((item) => item.phase === 'model_preflight_overridden_by_local_dispatch'),
@@ -2855,7 +2947,7 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
     assert.equal(workerRequests.length, 2);
     assert.equal(workerRequests[1].runId, 'run_02');
     assert.equal(workerRequests[1].claudeSessionId, workerRequests[0].claudeSessionId);
-    assert.match(response.assistantMessage, /目前判断：倍速开关由播放器初始化配置控制/);
+    assert.match(response.assistantMessage, /\*\*结论：/);
     assert.match(response.assistantMessage, /倍速开关由播放器初始化配置控制/);
     assert.equal(response.decision, 'final');
   } finally {
@@ -2963,7 +3055,7 @@ test('follow-up diagnostic requests carry prior assistant replies and evidence c
     assert.equal(followUpContext.isFollowUp, true);
     assert.ok(
       followUpContext.recentMessages.some(
-        (message) => message.role === 'helper' && /edu_cloud\/video\/setting|云视频设置页/.test(message.body),
+        (message) => message.role === 'helper' && /倍速播放开关入口在云视频设置页|结论/.test(message.body),
       ),
     );
     assert.ok(

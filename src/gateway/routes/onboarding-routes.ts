@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { OnboardingService } from '../../onboarding/index.js';
+import type { OnboardingReviewQuery, OnboardingService } from '../../onboarding/index.js';
 import { readJson, sendJson, startEventStream, writeEvent } from '../http-utils.js';
 
 export async function handleOnboardingRoutes(
@@ -41,7 +41,7 @@ export async function handleOnboardingRoutes(
     }
 
     if (req.method === 'GET' && url.pathname === '/api/onboarding/review') {
-      sendJson(res, 200, { review: service.getReviewState() });
+      sendJson(res, 200, { review: service.getReviewState(reviewQueryFromUrl(url)) });
       return true;
     }
 
@@ -100,6 +100,29 @@ export async function handleOnboardingRoutes(
   }
 
   return false;
+}
+
+function reviewQueryFromUrl(url: URL): OnboardingReviewQuery {
+  const query: OnboardingReviewQuery = {};
+  const offset = parseIntegerQuery(url.searchParams.get('offset'));
+  const limit = parseIntegerQuery(url.searchParams.get('limit'));
+  const severity = url.searchParams.get('severity');
+  const search = url.searchParams.get('search')?.trim();
+  if (offset !== undefined) query.offset = offset;
+  if (limit !== undefined) query.limit = limit;
+  if (severity === 'all' || severity === 'warn' || severity === 'error') {
+    query.severity = severity;
+  }
+  if (search) query.search = search;
+  return query;
+}
+
+function parseIntegerQuery(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function sendOnboardingError(res: ServerResponse, error: unknown): void {

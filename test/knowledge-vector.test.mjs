@@ -8,6 +8,7 @@ import {
   buildKnowledgeVectorIndex,
   checkKnowledgeVectorCompatibility,
   chunksPath,
+  isChunkEligibleForRemoteEmbedding,
   readKnowledgeVectorManifest,
   readKnowledgeVectorRecords,
   vectorBuildReportPath,
@@ -24,8 +25,8 @@ function tempWorkspace() {
 function writeChunks(indexes, chunks) {
   mkdirSync(indexes, { recursive: true });
   writeFileSync(join(indexes, 'chunks.jsonl'), chunks.map((chunk, index) => JSON.stringify({
-    artifact_version: 2,
-    chunking_strategy: 'parent-child-v2',
+    artifact_version: 3,
+    chunking_strategy: 'parent-child-v3',
     legacy: false,
     child_order: index + 1,
     source_block_ids: [`blk_${index + 1}`],
@@ -214,4 +215,63 @@ test('knowledge vector compatibility detects missing, matching, mismatch, and st
   const stale = checkKnowledgeVectorCompatibility({ workspaceRoot: workspace, embeddingConfig: config });
   assert.equal(stale.status, 'rebuild-required');
   assert.deepEqual(stale.mismatches, ['source_chunks']);
+});
+
+test('knowledge vector compatibility accepts v3 chunks and rebuilds stale v2 vectors', async () => {
+  const { workspace, indexes } = tempWorkspace();
+  const config = {
+    enabled: true,
+    provider: 'fake',
+    model: 'fake-vector',
+    dimensions: 3,
+    distance: 'cosine',
+  };
+
+  try {
+    writeChunks(indexes, [{
+      chunk_id: 'chk_one',
+      parent_id: 'doc_one',
+      source: 'knowledge/faq/one.md',
+      module: 'ai-companion',
+      intent: 'policy',
+      source_type: 'faq',
+      status: 'active',
+      confidence: 'high',
+      visibility: 'internal',
+      headings: [],
+      keywords: ['提醒'],
+      text: '提醒规则',
+      artifact_version: 2,
+      chunking_strategy: 'parent-child-v2',
+    }]);
+    const provider = createEmbeddingProvider(config);
+    await buildKnowledgeVectorIndex({ workspaceRoot: workspace, provider, config });
+
+    writeChunks(indexes, [{
+      chunk_id: 'chk_one',
+      parent_id: 'doc_one',
+      source: 'knowledge/faq/one.md',
+      module: 'ai-companion',
+      intent: 'policy',
+      source_type: 'faq',
+      status: 'active',
+      confidence: 'high',
+      visibility: 'internal',
+      headings: [],
+      keywords: ['提醒'],
+      text: '提醒规则',
+      artifact_version: 3,
+      chunking_strategy: 'parent-child-v3',
+      legacy: false,
+    }]);
+
+    const loaded = JSON.parse(readFileSync(chunksPath(workspace), 'utf8').trim());
+    assert.deepEqual(isChunkEligibleForRemoteEmbedding(loaded), { eligible: true });
+
+    const stale = checkKnowledgeVectorCompatibility({ workspaceRoot: workspace, embeddingConfig: config });
+    assert.equal(stale.status, 'rebuild-required');
+    assert.deepEqual(stale.mismatches, ['source_chunks']);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
 });

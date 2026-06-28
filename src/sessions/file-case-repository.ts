@@ -1,1 +1,1 @@
-export { FileMemoryStore as FileCaseRepository } from '../storage.js';
+export { FileMemoryStore as FileCaseRepository } from './file-memory-store.js';

@@ -18,7 +18,7 @@ import type {
   KnowledgeAcceptanceReport,
   KnowledgeAcceptanceScenario,
 } from '../knowledge/types.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 import { curateSolvedCase } from './case-curator.js';
 import { planDeepQuery } from './deep-query-planner.js';
 import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';

@@ -16,6 +16,7 @@ import {
   writeSourceQualityReport,
 } from '../knowledge/index.js';
 import type { OnboardingDraft, OnboardingStageId } from './types.js';
+import { providerHasExecutionCredentials } from './provider-credentials.js';
 
 export interface KnowledgeStageProgress {
   stage: OnboardingStageId;
@@ -46,6 +47,7 @@ export async function runOnboardingKnowledgePipeline(input: {
   initKnowledgeWorkspace({
     workspaceRoot: input.workspaceRoot,
     qualityGate: 'off',
+    chunking: input.draft.knowledge.chunking,
   });
 
   const files = discoverSourceFiles(input.draft.knowledge.sourceDir)
@@ -122,7 +124,10 @@ export async function runOnboardingKnowledgePipeline(input: {
     message: `Published ${publish.publishedIds.length}/${approval.approvedIds.length} quality-clean draft slices`,
   });
 
-  const index = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot });
+  const index = updateKnowledgeIndex({
+    workspaceRoot: input.workspaceRoot,
+    chunking: input.draft.knowledge.chunking,
+  });
   input.report({
     stage: 'build_keyword_index',
     processed: index.chunkCount,
@@ -158,6 +163,15 @@ async function maybeBuildVectorIndex(input: {
       processed: 0,
       total: 0,
       message: 'Vector index skipped: embedding disabled or vector build not requested',
+    });
+    return 0;
+  }
+  if (!providerHasExecutionCredentials(input.draft.embedding)) {
+    input.report({
+      stage: 'build_vector_index',
+      processed: 0,
+      total: 0,
+      message: 'Vector index skipped: embedding credentials unavailable',
     });
     return 0;
   }

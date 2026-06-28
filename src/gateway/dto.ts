@@ -2,9 +2,8 @@ import type { SuperHelperConfig } from '../config.js';
 import { resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
-import { buildKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/index.js';
-import { createConfiguredKnowledgeRetriever } from '../retrieval/configured-search.js';
-import type { StoredCase } from '../storage.js';
+import { getKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/health-service.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 
 export type {
@@ -52,6 +51,14 @@ export interface AgentActivityItem {
   severity: string;
 }
 
+export type SerializedSession = SessionSummary
+  & Pick<StoredCase, 'messages' | 'runs'>
+  & { knowledgeHealth?: KnowledgeHealthSummary };
+
+export interface SerializeSessionOptions {
+  includeKnowledgeHealth?: boolean;
+}
+
 export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConfig): SessionSummary {
   const lastMessage = caseSession.messages.at(-1);
   return {
@@ -76,21 +83,24 @@ export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConf
 export async function serializeSession(
   caseSession: StoredCase,
   config: SuperHelperConfig,
-): Promise<SessionSummary & Pick<StoredCase, 'messages' | 'runs'> & { knowledgeHealth: KnowledgeHealthSummary }> {
-  return {
+  options: SerializeSessionOptions = {},
+): Promise<SerializedSession> {
+  const session: SerializedSession = {
     ...sessionSummary(caseSession, config),
     messages: caseSession.messages,
     runs: caseSession.runs.map((run) => ({
       ...run,
       workerTrace: run.workerTrace ? sanitizeWorkerTrace(run.workerTrace) : undefined,
     })),
-    knowledgeHealth: await buildKnowledgeHealthSummary({
+  };
+  if (options.includeKnowledgeHealth !== false) {
+    session.knowledgeHealth = await getKnowledgeHealthSummary({
       config,
       workspaceId: caseSession.workspaceId,
       query: knowledgeHealthQuery(caseSession),
-      retrieveEvidence: createConfiguredKnowledgeRetriever(config),
-    }),
-  };
+    });
+  }
+  return session;
 }
 
 function recentAgentActivity(caseSession: StoredCase): AgentActivityItem[] {

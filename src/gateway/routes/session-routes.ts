@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
 import type { UserPersona } from '../../domain.js';
-import type { FileMemoryStore } from '../../storage.js';
+import type { FileMemoryStore } from '../../sessions/file-memory-store.js';
 import { recoverStaleActiveTurn } from '../../sessions/stale-turn.js';
 import { serializeSession, sessionSummary } from '../dto.js';
 import { readJson, sendJson } from '../http-utils.js';
@@ -33,7 +33,7 @@ export async function handleSessionRoutes(
     });
     caseSession.userPersona = body.persona ?? config.agent.defaultUserPersona;
     store.saveCase(caseSession);
-    sendJson(res, 200, { session: await serializeSession(caseSession, config) });
+    sendJson(res, 200, { session: await serializeSession(caseSession, config, serializeOptions(url)) });
     return true;
   }
 
@@ -51,7 +51,7 @@ export async function handleSessionRoutes(
     }
 
     recoverStaleActiveTurn(caseSession, store, config);
-    sendJson(res, 200, { session: await serializeSession(caseSession, config) });
+    sendJson(res, 200, { session: await serializeSession(caseSession, config, serializeOptions(url)) });
     return true;
   }
 
@@ -78,7 +78,7 @@ export async function handleSessionRoutes(
       sendJson(res, 400, { error: 'unsupported session action' });
       return true;
     }
-    sendJson(res, 200, { session: await serializeSession(caseSession, config) });
+    sendJson(res, 200, { session: await serializeSession(caseSession, config, serializeOptions(url)) });
     return true;
   }
 
@@ -98,4 +98,10 @@ export async function handleSessionRoutes(
   }
 
   return false;
+}
+
+function serializeOptions(url: URL): { includeKnowledgeHealth: boolean } {
+  return {
+    includeKnowledgeHealth: url.searchParams.get('includeKnowledgeHealth') !== 'false',
+  };
 }

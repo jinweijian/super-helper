@@ -44,10 +44,23 @@ export function renderSetupApp(): string {
     .bar { height: 100%; width: 0%; background: #1f6feb; transition: width .2s ease; }
     .stages { display: grid; gap: 8px; }
     .stage { display: flex; justify-content: space-between; gap: 10px; padding: 10px; border: 1px solid #e5eaf2; border-radius: 10px; background: #fbfcfe; }
+    .review-toolbar, .review-selection, .review-actions, .review-pager { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-top: 12px; }
+    .review-toolbar label { min-width: 180px; flex: 1; }
+    .review-list { display: grid; gap: 10px; margin-top: 12px; }
     .review-item { display: grid; gap: 6px; padding: 12px; border: 1px solid #e5eaf2; border-radius: 10px; background: #fbfcfe; }
+    .review-item.selected { border-color: #1f6feb; background: #f4f8ff; }
     .review-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .review-check { display: flex; grid-template-columns: auto 1fr; gap: 8px; align-items: center; font-weight: 800; font-size: 14px; color: #172033; }
+    .review-check input { width: 16px; height: 16px; padding: 0; }
+    .issue-list { display: grid; gap: 8px; }
+    .issue { border-left: 3px solid #f2c94c; padding-left: 10px; display: grid; gap: 4px; }
+    .issue.error { border-left-color: #d92d20; }
+    .issue-title { font-weight: 800; color: #344054; }
+    .issue-detail { color: #667085; line-height: 1.55; }
+    .review-page-text, .selection-text { color: #667085; line-height: 1.6; }
     .badge { display: inline-flex; align-items: center; height: 24px; border-radius: 999px; padding: 0 10px; background: #fff4d6; color: #8a5a00; font-size: 12px; font-weight: 800; }
     .badge.error { background: #fee4e2; color: #b42318; }
+    button.danger { background: #b42318; border-color: #b42318; color: #fff; }
     .warning { border-color: #f2c94c; background: #fff8df; color: #6f4b00; }
     .ok { border-color: #9bd5ad; background: #f0fbf4; color: #146c2e; }
     @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
@@ -107,7 +120,7 @@ export function renderSetupApp(): string {
           <label>端口 <input id="port" type="number" value="4317" /></label>
           <label>Embedding dimensions <input id="dimensions" type="number" value="1024" /></label>
           <label>Embedding batchSize <input id="batchSize" type="number" value="16" /></label>
-          <label>Rerank topN <input id="topN" type="number" value="2" /></label>
+          <label>Rerank topN <input id="topN" type="number" value="8" /></label>
         </div>
       </details>
     </section>
@@ -131,10 +144,36 @@ export function renderSetupApp(): string {
     <section id="reviewPanel" hidden>
       <h2>审核知识切片</h2>
       <p class="muted" id="reviewSummary">等待审核项...</p>
-      <div class="stages" id="reviewItems"></div>
+      <div class="review-toolbar">
+        <label>严重级别
+          <select id="reviewSeverity">
+            <option value="all">全部</option>
+            <option value="warn">仅警告</option>
+            <option value="error">仅 blocked</option>
+          </select>
+        </label>
+        <label>搜索
+          <input id="reviewSearch" placeholder="按标题、来源、模块或问题原因搜索" />
+        </label>
+        <button class="secondary" id="refreshReviewButton">刷新审核项</button>
+      </div>
+      <div class="review-selection">
+        <button class="secondary" id="selectReviewPageButton">选择当前页</button>
+        <button class="secondary" id="clearReviewSelectionButton">清空选择</button>
+        <span class="selection-text" id="reviewSelectionSummary">已选择 0 条。</span>
+      </div>
+      <div class="review-list" id="reviewItems"></div>
+      <div class="review-pager">
+        <button class="secondary" id="reviewPrevButton">上一页</button>
+        <span class="review-page-text" id="reviewPageText">第 1 页</span>
+        <button class="secondary" id="reviewNextButton">下一页</button>
+      </div>
       <label style="margin-top: 12px">审核备注 <input id="reviewNotes" placeholder="例如：已人工确认可作为知识库内容" /></label>
-      <button id="acceptReviewButton">接受警告并发布</button>
-      <button class="secondary" id="refreshReviewButton">刷新审核项</button>
+      <div class="review-actions">
+        <button id="acceptSelectedReviewButton">发布选中</button>
+        <button class="secondary" id="requestEditsReviewButton">退回修改</button>
+        <button class="danger" id="rejectReviewButton">不发布选中</button>
+      </div>
     </section>
 
     <section class="ok" id="done" hidden>
@@ -164,12 +203,23 @@ export function renderSetupApp(): string {
     </div>
   </div>
   <script>
-    const state = { runId: null, eventSource: null, review: null };
+    const state = {
+      runId: null,
+      eventSource: null,
+      review: null,
+      draft: null,
+      reviewOffset: 0,
+      reviewLimit: 20,
+      selectedReviewIds: new Set(),
+      selectedReviewMeta: new Map(),
+      reviewSearchTimer: null
+    };
     const $ = (id) => document.getElementById(id);
     $('bindMode').addEventListener('change', () => { $('lanWarning').hidden = $('bindMode').value !== 'lan'; });
 
     async function loadState() {
       const snapshot = await fetch('/api/onboarding').then((res) => res.json());
+      hydrateDraft(snapshot.draft);
       if (snapshot.latestRun) renderRun(snapshot.latestRun);
       renderReview(snapshot.review);
       if (snapshot.latestRun && snapshot.latestRun.status === 'completed' && !needsReview(snapshot.latestRun, snapshot.review)) {
@@ -177,16 +227,82 @@ export function renderSetupApp(): string {
       }
     }
 
+    function hydrateDraft(draft) {
+      if (!draft) return;
+      state.draft = draft;
+      $('workspacePath').value = draft.workspace?.rootPath || '';
+      $('knowledgeRoot').value = draft.knowledge?.rootDir || '';
+      $('sourceDir').value = draft.knowledge?.sourceDir || '';
+      $('bindMode').value = draft.server?.bindMode || 'loopback';
+      $('lanWarning').hidden = $('bindMode').value !== 'lan';
+      $('port').value = draft.server?.port || 4317;
+      $('agentBaseUrl').value = draft.agent?.provider?.baseUrl || 'https://api.minimaxi.com/v1';
+      $('agentModel').value = draft.agent?.provider?.model || '';
+      $('agentKey').placeholder = draft.agent?.provider?.hasApiKey ? '已保存，留空继续使用' : '';
+      $('embeddingBaseUrl').value = draft.embedding?.baseUrl || 'https://api.siliconflow.cn/v1';
+      $('embeddingModel').value = draft.embedding?.model || '';
+      $('embeddingKey').placeholder = draft.embedding?.hasApiKey ? '已保存，留空继续使用' : '';
+      $('rerankBaseUrl').value = draft.rerank?.baseUrl || 'https://api.siliconflow.cn/v1';
+      $('rerankModel').value = draft.rerank?.model || '';
+      $('rerankKey').placeholder = draft.rerank?.hasApiKey ? '已保存，留空继续使用' : '';
+      $('dimensions').value = draft.embedding?.dimensions || 1024;
+      $('batchSize').value = draft.embedding?.batchSize || 16;
+      $('topN').value = draft.rerank?.topN || 8;
+    }
+
     function draftPayload() {
+      const current = state.draft || {};
+      const workspace = current.workspace || {};
+      const knowledge = current.knowledge || {};
+      const server = current.server || {};
+      const agentProvider = publicProviderInput(current.agent?.provider);
+      const embedding = publicProviderInput(current.embedding);
+      const rerank = publicProviderInput(current.rerank);
       return {
         draft: {
           version: 1,
-          workspace: { id: 'current', name: 'Current Project', rootPath: $('workspacePath').value },
-          knowledge: { rootDir: $('knowledgeRoot').value, sourceDir: $('sourceDir').value || undefined, buildVectorIndex: true },
-          server: { bindMode: $('bindMode').value, port: Number($('port').value || 4317) },
-          agent: { providerId: 'default', provider: { type: 'openai-compatible', baseUrl: $('agentBaseUrl').value, model: $('agentModel').value } },
-          embedding: { enabled: true, provider: 'siliconflow', baseUrl: $('embeddingBaseUrl').value, model: $('embeddingModel').value, dimensions: Number($('dimensions').value || 1024), distance: 'cosine', batchSize: Number($('batchSize').value || 16) },
-          rerank: { enabled: true, provider: 'siliconflow', baseUrl: $('rerankBaseUrl').value, model: $('rerankModel').value, topN: Number($('topN').value || 2) }
+          workspace: {
+            id: workspace.id || 'current',
+            name: workspace.name || 'Current Project',
+            rootPath: $('workspacePath').value
+          },
+          knowledge: {
+            rootDir: $('knowledgeRoot').value,
+            sourceDir: $('sourceDir').value || undefined,
+            buildVectorIndex: knowledge.buildVectorIndex ?? true
+          },
+          server: {
+            bindMode: $('bindMode').value,
+            host: server.host,
+            port: Number($('port').value || 4317)
+          },
+          agent: {
+            providerId: current.agent?.providerId || 'default',
+            provider: {
+              ...agentProvider,
+              type: agentProvider.type || 'openai-compatible',
+              baseUrl: $('agentBaseUrl').value,
+              model: $('agentModel').value
+            }
+          },
+          embedding: {
+            ...embedding,
+            enabled: current.embedding?.enabled ?? true,
+            provider: embedding.provider || 'siliconflow',
+            baseUrl: $('embeddingBaseUrl').value,
+            model: $('embeddingModel').value,
+            dimensions: Number($('dimensions').value || 1024),
+            distance: embedding.distance || 'cosine',
+            batchSize: Number($('batchSize').value || 16)
+          },
+          rerank: {
+            ...rerank,
+            enabled: current.rerank?.enabled ?? true,
+            provider: rerank.provider || 'siliconflow',
+            baseUrl: $('rerankBaseUrl').value,
+            model: $('rerankModel').value,
+            topN: Number($('topN').value || 8)
+          }
         },
         secrets: {
           agentApiKey: $('agentKey').value || undefined,
@@ -196,8 +312,20 @@ export function renderSetupApp(): string {
       };
     }
 
+    function publicProviderInput(provider) {
+      const copy = { ...(provider || {}) };
+      delete copy.apiKey;
+      delete copy.apiKeyEnv;
+      delete copy.hasApiKey;
+      if (copy.apiKeyRef?.source !== 'env') {
+        delete copy.apiKeyRef;
+      }
+      return copy;
+    }
+
     async function runSetup() {
-      await fetch('/api/onboarding/draft', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(draftPayload()) });
+      const saved = await fetch('/api/onboarding/draft', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(draftPayload()) }).then((res) => res.json());
+      hydrateDraft(saved.draft);
       const validation = await fetch('/api/onboarding/validate', { method: 'POST' }).then((res) => res.json());
       $('preflight').textContent = JSON.stringify(validation, null, 2);
       if (!validation.ok) return;
@@ -250,29 +378,129 @@ export function renderSetupApp(): string {
       location.href = '/';
     }
 
-    async function refreshReview() {
-      const result = await fetch('/api/onboarding/review').then((res) => res.json());
+    async function refreshReview(options = {}) {
+      if (options.resetOffset) state.reviewOffset = 0;
+      const params = new URLSearchParams();
+      params.set('offset', String(state.reviewOffset));
+      params.set('limit', String(state.reviewLimit));
+      params.set('severity', $('reviewSeverity') ? $('reviewSeverity').value : 'all');
+      params.set('search', $('reviewSearch') ? $('reviewSearch').value.trim() : '');
+      const result = await fetch('/api/onboarding/review?' + params.toString()).then((res) => res.json());
       renderReview(result.review);
       return result.review;
     }
 
     function renderReview(review) {
-      state.review = review || { required: false, pendingCount: 0, blockedCount: 0, items: [] };
+      state.review = review || {
+        required: false,
+        pendingCount: 0,
+        blockedCount: 0,
+        totalCount: 0,
+        page: { offset: 0, limit: state.reviewLimit, total: 0, returned: 0, hasMore: false, severity: 'all', search: '' },
+        items: []
+      };
       const required = state.review.required;
       $('reviewPanel').hidden = !required;
+      syncReviewControlsFromState();
       if (!required) {
         $('reviewItems').innerHTML = '';
         $('reviewSummary').textContent = '没有待审核切片。';
+        updateReviewButtons();
         return;
       }
-      $('reviewSummary').textContent = '待审核 ' + state.review.pendingCount + '，blocked ' + state.review.blockedCount + '。';
+      const page = state.review.page || { offset: 0, limit: state.reviewLimit, total: state.review.items.length, returned: state.review.items.length, hasMore: false };
+      $('reviewSummary').textContent = '待审核 ' + state.review.pendingCount + '，blocked ' + state.review.blockedCount + '，当前筛选 ' + page.total + ' 条。';
       $('reviewItems').innerHTML = (state.review.items || []).map((item) => {
-        const issues = (item.issues || []).slice(0, 3).map((issue) => escapeHtml(issue.code + ' · ' + issue.message)).join('<br>');
+        const selected = state.selectedReviewIds.has(item.id);
+        const issues = (item.issues || []).slice(0, 4).map((issue) => renderReviewIssue(issue)).join('');
         const badgeClass = item.qualitySeverity === 'error' ? 'badge error' : 'badge';
-        return '<div class="review-item"><div class="review-head"><strong>' + escapeHtml(item.title) + '</strong><span class="' + badgeClass + '">' + escapeHtml(item.qualitySeverity) + '</span></div><div class="muted">' + escapeHtml(item.sourceDocumentId + ' / ' + item.id) + '</div><div class="muted">' + escapeHtml(item.excerptPreview || '') + '</div><div class="muted">' + issues + '</div></div>';
+        return '<div class="review-item' + (selected ? ' selected' : '') + '">' +
+          '<div class="review-head"><label class="review-check"><input type="checkbox" class="reviewSelect" data-id="' + escapeHtml(item.id) + '"' + (selected ? ' checked' : '') + ' />' + escapeHtml(item.title) + '</label><span class="' + badgeClass + '">' + escapeHtml(item.qualitySeverity) + '</span></div>' +
+          '<div class="muted">' + escapeHtml(item.sourceDocumentId + ' / ' + item.id) + '</div>' +
+          '<div class="muted">' + escapeHtml(item.path || '') + '</div>' +
+          '<div class="muted">' + escapeHtml(item.excerptPreview || '') + '</div>' +
+          '<div class="issue-list">' + issues + '</div>' +
+        '</div>';
       }).join('');
-      const canAccept = (state.review.items || []).some((item) => item.qualitySeverity === 'warn');
-      $('acceptReviewButton').disabled = !canAccept;
+      document.querySelectorAll('.reviewSelect').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => toggleReviewSelection(checkbox.dataset.id, checkbox.checked));
+      });
+      renderReviewPage(page);
+      updateReviewButtons();
+    }
+
+    function syncReviewControlsFromState() {
+      const page = state.review?.page;
+      if (!page) return;
+      state.reviewOffset = page.offset || 0;
+      state.reviewLimit = page.limit || state.reviewLimit;
+      if ($('reviewSeverity')) $('reviewSeverity').value = page.severity || 'all';
+      if ($('reviewSearch')) $('reviewSearch').value = page.search || '';
+    }
+
+    function renderReviewIssue(issue) {
+      const explanation = issue.explanation || {
+        reason: '原因：质量审计标记了该问题。',
+        impact: '影响：该切片暂不满足自动发布质量门禁。',
+        suggestion: '建议：人工确认后再选择发布、退回或不发布。',
+        missingInfo: ['人工审核结论']
+      };
+      const missing = (explanation.missingInfo || []).length
+        ? '<div class="issue-detail">缺少：' + escapeHtml(explanation.missingInfo.join('、')) + '</div>'
+        : '';
+      return '<div class="issue ' + (issue.severity === 'error' ? 'error' : '') + '">' +
+        '<div class="issue-title">' + escapeHtml(issue.code + ' · ' + issue.severity) + '</div>' +
+        '<div class="issue-detail">' + escapeHtml(explanation.reason) + '</div>' +
+        '<div class="issue-detail">' + escapeHtml(explanation.impact) + '</div>' +
+        '<div class="issue-detail">' + escapeHtml(explanation.suggestion) + '</div>' +
+        missing +
+      '</div>';
+    }
+
+    function renderReviewPage(page) {
+      const start = page.total === 0 ? 0 : page.offset + 1;
+      const end = page.offset + page.returned;
+      $('reviewPageText').textContent = '显示 ' + start + '-' + end + ' / ' + page.total;
+      $('reviewPrevButton').disabled = page.offset <= 0;
+      $('reviewNextButton').disabled = !page.hasMore;
+    }
+
+    function toggleReviewSelection(id, checked) {
+      const item = (state.review?.items || []).find((entry) => entry.id === id);
+      if (!item) return;
+      if (checked) {
+        state.selectedReviewIds.add(id);
+        state.selectedReviewMeta.set(id, { title: item.title, qualitySeverity: item.qualitySeverity });
+      } else {
+        state.selectedReviewIds.delete(id);
+        state.selectedReviewMeta.delete(id);
+      }
+      renderReview(state.review);
+    }
+
+    function selectCurrentReviewPage() {
+      for (const item of state.review?.items || []) {
+        state.selectedReviewIds.add(item.id);
+        state.selectedReviewMeta.set(item.id, { title: item.title, qualitySeverity: item.qualitySeverity });
+      }
+      renderReview(state.review);
+    }
+
+    function clearReviewSelection() {
+      state.selectedReviewIds.clear();
+      state.selectedReviewMeta.clear();
+      renderReview(state.review);
+    }
+
+    function updateReviewButtons() {
+      const selectedCount = state.selectedReviewIds.size;
+      const selected = Array.from(state.selectedReviewMeta.values());
+      const hasError = selected.some((item) => item.qualitySeverity === 'error');
+      const hasWarn = selected.some((item) => item.qualitySeverity === 'warn');
+      $('reviewSelectionSummary').textContent = '已选择 ' + selectedCount + ' 条。' + (hasError ? ' blocked 不能发布，只能退回或不发布。' : '');
+      $('acceptSelectedReviewButton').disabled = selectedCount === 0 || hasError || !hasWarn;
+      $('requestEditsReviewButton').disabled = selectedCount === 0;
+      $('rejectReviewButton').disabled = selectedCount === 0;
     }
 
     function needsReview(run, review) {
@@ -283,6 +511,54 @@ export function renderSetupApp(): string {
     function showDone() {
       $('reviewPanel').hidden = true;
       $('done').hidden = false;
+    }
+
+    function currentReviewQuery() {
+      return {
+        offset: state.reviewOffset,
+        limit: state.reviewLimit,
+        severity: $('reviewSeverity') ? $('reviewSeverity').value : 'all',
+        search: $('reviewSearch') ? $('reviewSearch').value.trim() : ''
+      };
+    }
+
+    async function submitSelectedReview(action) {
+      const ids = Array.from(state.selectedReviewIds);
+      if (ids.length === 0) return;
+      if (action === 'accept_warnings') {
+        const hasBlocked = Array.from(state.selectedReviewMeta.values()).some((item) => item.qualitySeverity === 'error');
+        if (hasBlocked) {
+          $('preflight').textContent = 'blocked 切片不能直接发布，请改用“退回修改”或“不发布选中”。';
+          updateReviewButtons();
+          return;
+        }
+      }
+      const defaultNotes = action === 'accept_warnings'
+        ? 'Dashboard reviewer accepted selected warning-quality slices for publish.'
+        : action === 'request_edits'
+          ? 'Dashboard reviewer requested edits for selected slices.'
+          : 'Dashboard reviewer rejected selected slices.';
+      const response = await fetch('/api/onboarding/review', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          reviewer: 'super-helper-dashboard',
+          notes: $('reviewNotes').value || defaultNotes,
+          ids,
+          query: currentReviewQuery()
+        })
+      });
+      const result = await response.json();
+      $('preflight').textContent = JSON.stringify(result, null, 2);
+      if (!response.ok) return;
+      state.selectedReviewIds.clear();
+      state.selectedReviewMeta.clear();
+      renderReview(result.review);
+      if (!result.review.required) {
+        showDone();
+        location.href = '/';
+      }
     }
 
     function escapeHtml(value) {
@@ -414,27 +690,25 @@ export function renderSetupApp(): string {
     });
 
     $('runButton').addEventListener('click', runSetup);
-    $('acceptReviewButton').addEventListener('click', async () => {
-      const review = state.review || { items: [] };
-      const ids = review.items.filter((item) => item.qualitySeverity === 'warn').map((item) => item.id);
-      const result = await fetch('/api/onboarding/review', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: 'accept_warnings',
-          reviewer: 'super-helper-dashboard',
-          notes: $('reviewNotes').value || 'Dashboard reviewer accepted warning-quality slices for publish.',
-          ids
-        })
-      }).then((res) => res.json());
-      renderReview(result.review);
-      $('preflight').textContent = JSON.stringify(result, null, 2);
-      if (!result.review.required) {
-        showDone();
-        location.href = '/';
-      }
-    });
     $('refreshReviewButton').addEventListener('click', refreshReview);
+    $('selectReviewPageButton').addEventListener('click', selectCurrentReviewPage);
+    $('clearReviewSelectionButton').addEventListener('click', clearReviewSelection);
+    $('acceptSelectedReviewButton').addEventListener('click', () => submitSelectedReview('accept_warnings'));
+    $('requestEditsReviewButton').addEventListener('click', () => submitSelectedReview('request_edits'));
+    $('rejectReviewButton').addEventListener('click', () => submitSelectedReview('reject'));
+    $('reviewPrevButton').addEventListener('click', () => {
+      state.reviewOffset = Math.max(0, state.reviewOffset - state.reviewLimit);
+      refreshReview();
+    });
+    $('reviewNextButton').addEventListener('click', () => {
+      state.reviewOffset += state.reviewLimit;
+      refreshReview();
+    });
+    $('reviewSeverity').addEventListener('change', () => refreshReview({ resetOffset: true }));
+    $('reviewSearch').addEventListener('input', () => {
+      if (state.reviewSearchTimer) clearTimeout(state.reviewSearchTimer);
+      state.reviewSearchTimer = setTimeout(() => refreshReview({ resetOffset: true }), 250);
+    });
     $('retryButton').addEventListener('click', async () => {
       if (!state.runId) return;
       const retried = await fetch('/api/onboarding/runs/' + state.runId + '/retry', { method: 'POST' }).then((res) => res.json());

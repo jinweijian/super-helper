@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { findExperienceMatch, findRejectedExperienceCandidates } from './experience-agent.js';

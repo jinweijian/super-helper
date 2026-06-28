@@ -35,7 +35,14 @@ export function createBm25RecallStrategy(): RecallStrategy {
         ])].map((term) => term.trim()).filter((term) => term.length >= 2),
       ));
       const tokenizerOptions = { businessTerms, registeredSingleCharacterTerms };
-      const queryTokens = tokenizeForBm25(input.query, tokenizerOptions);
+      // BM25 用 normalized + expandedTerms 增强 tokenize：归一化消除全/半角、繁简差异，
+      // expandedTerms 把 alias 对应的 term 加入查询词，提升同义换述召回。
+      const normalizedQuery = input.normalizedQuery;
+      const queryText = normalizedQuery?.normalized ?? input.query;
+      const queryTokens = [
+        ...tokenizeForBm25(queryText, tokenizerOptions),
+        ...(normalizedQuery?.expandedTerms ?? []).flatMap((term) => tokenizeForBm25(term, tokenizerOptions)),
+      ];
       const documents = eligibleChunks.map((chunk) => ({
           id: chunk.chunk_id,
           fields: {

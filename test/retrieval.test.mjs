@@ -7,6 +7,7 @@ import { buildKnowledgeVectorIndex } from '../dist/knowledge/index.js';
 import {
   createBm25RecallStrategy,
   createEmbeddingRecallStrategy,
+  createProviderReranker,
   createRetrievalService,
 } from '../dist/retrieval/index.js';
 import { defaultConfig } from '../dist/config.js';
@@ -37,8 +38,8 @@ function baseChunk(overrides) {
     headings: overrides.headings ?? [],
     keywords: overrides.keywords ?? [],
     text: overrides.text,
-    artifact_version: 2,
-    chunking_strategy: 'parent-child-v2',
+    artifact_version: 3,
+    chunking_strategy: 'parent-child-v3',
     legacy: false,
     child_order: overrides.child_order ?? 1,
     source_block_ids: overrides.source_block_ids ?? ['blk_test'],
@@ -234,7 +235,7 @@ test('configured retrieval fuses BM25 with configured fake embedding', async () 
     writeChunks(indexesRoot, [
       baseChunk({
         chunk_id: 'chk_configured_hybrid',
-        text: 'Hybrid configured retrieval exact semantic target.',
+        text: 'Hybrid configured retrieval exact semantic target',
       }),
       baseChunk({
         chunk_id: 'chk_configured_other',
@@ -257,7 +258,7 @@ test('configured retrieval fuses BM25 with configured fake embedding', async () 
     assert.equal(typeof configured.createConfiguredRetrievalService, 'function');
     const result = await configured.createConfiguredRetrievalService(config).retrieve({
       workspaceRoot,
-      query: 'Hybrid configured retrieval exact semantic target.',
+      query: 'Hybrid configured retrieval exact semantic target',
       limit: 3,
     });
 
@@ -441,3 +442,104 @@ function stubCandidate(chunkId, score) {
     score,
   };
 }
+
+test('rerank finalScore min-max normalizes rerank and rrf into [0,1] with rerank weight 0.7', async () => {
+  const seenTopN = [];
+  const reranker = createProviderReranker({
+    provider: {
+      async rerank(input) {
+        seenTopN.push(input.topN);
+        return {
+          results: [
+            { id: 'chk_high', score: 0.95 },
+            { id: 'chk_mid', score: 0.5 },
+            { id: 'chk_low', score: 0.05 },
+          ],
+        };
+      },
+    },
+    topN: 8,
+  });
+  const result = await reranker.rerank({
+    query: 'normalized rerank',
+    candidates: [
+      { ...stubCandidate('chk_high', 0.5), finalScore: 0.01 },
+      { ...stubCandidate('chk_mid', 0.4), finalScore: 0.02 },
+      { ...stubCandidate('chk_low', 0.3), finalScore: 0.03 },
+    ],
+    limit: 8,
+  });
+
+  assert.deepEqual(seenTopN, [8]);
+  const byId = new Map(result.candidates.map((item) => [item.chunkId, item]));
+  // rerank 高分归一化为 1，低分归一化为 0；rrf 反向（chk_low rrf 最高）。
+  assert.equal(byId.get('chk_high').finalScore, 0.7);
+  assert.equal(byId.get('chk_low').finalScore, 0.3);
+  // mid: rerank (0.5-0.05)/(0.95-0.05)=0.5, rrf (0.02-0.01)/(0.03-0.01)=0.5 → 0.7*0.5+0.3*0.5=0.5
+  assert.equal(byId.get('chk_mid').finalScore, 0.5);
+  assert.equal(result.candidates.every((item) => item.finalScore >= 0 && item.finalScore <= 1), true);
+});
+
+test('rerank finalScore degenerates to pure rrf ordering when all rerank scores are equal', async () => {
+  const reranker = createProviderReranker({
+    provider: {
+      async rerank() {
+        return {
+          results: [
+            { id: 'chk_a', score: 0.5 },
+            { id: 'chk_b', score: 0.5 },
+          ],
+        };
+      },
+    },
+  });
+  const result = await reranker.rerank({
+    query: 'degenerate rerank',
+    candidates: [
+      { ...stubCandidate('chk_a', 0.4), finalScore: 0.02 },
+      { ...stubCandidate('chk_b', 0.3), finalScore: 0.01 },
+    ],
+    limit: 2,
+  });
+
+  const byId = new Map(result.candidates.map((item) => [item.chunkId, item]));
+  // max===min → normalizedRerank=0, finalScore = 0.3 * normalizedRrf。
+  // chk_a rrf 更高 → 归一化为 1，chk_b 归一化为 0。
+  assert.equal(byId.get('chk_a').finalScore, 0.3);
+  assert.equal(byId.get('chk_b').finalScore, 0);
+  assert.deepEqual(result.candidates.map((item) => item.chunkId), ['chk_a', 'chk_b']);
+});
+
+test('rerank passes configured topN to provider and falls back to limit when unset', async () => {
+  const seenTopN = [];
+  const reranker = createProviderReranker({
+    provider: {
+      async rerank(input) {
+        seenTopN.push(input.topN);
+        return { results: [] };
+      },
+    },
+    topN: 8,
+  });
+  await reranker.rerank({
+    query: 'topN passthrough',
+    candidates: [stubCandidate('chk_one', 0.5)],
+    limit: 5,
+  });
+
+  const fallbackReranker = createProviderReranker({
+    provider: {
+      async rerank(input) {
+        seenTopN.push(input.topN);
+        return { results: [] };
+      },
+    },
+  });
+  await fallbackReranker.rerank({
+    query: 'topN fallback',
+    candidates: [stubCandidate('chk_two', 0.5)],
+    limit: 3,
+  });
+
+  assert.deepEqual(seenTopN, [8, 3]);
+});

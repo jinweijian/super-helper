@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
 import { resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import {
@@ -38,7 +38,7 @@ export class KnowledgeTurnService {
       return undefined;
     }
 
-    const { route, evidencePack, judge, retrievalTrace } = diagnosis;
+    const { route, evidencePack, judge, retrievalTrace, glossaryTerms } = diagnosis;
     this.events.knowledgeRouterResult(caseSession, route);
     this.events.knowledgeSearchStarted(caseSession, {
       workspaceRoot,
@@ -59,6 +59,8 @@ export class KnowledgeTurnService {
         route,
         evidencePack,
         judge,
+        projectType: this.config.knowledge.projectType,
+        glossaryTerms,
       });
       this.events.codeEscalationRequested(caseSession, request);
       return undefined;
@@ -75,6 +77,7 @@ export class KnowledgeTurnService {
     this.store.addRun(caseSession, run);
     caseSession.status = caseStatusFromDiagnosticResult(result);
     this.store.saveCase(caseSession);
+    this.events.preflightKnowledgeAnswer(caseSession, result);
     this.events.knowledgeAnswerSelected(caseSession, result);
     const review = await this.reviewer.reviewAndFormat(caseSession, result, run);
     this.events.presentationPrepared(caseSession, review.decision);

@@ -6,6 +6,7 @@ import {
   knowledgeRoot,
   routeKnowledgeQuestion,
   type KnowledgeEvidencePack,
+  type KnowledgeDocument,
   type KnowledgeRoute,
   type KnowledgeSearchQuery,
   type KnowledgeVisibility,
@@ -38,6 +39,7 @@ export async function prepareKnowledgeDiagnosis(input: {
   evidencePack: KnowledgeEvidencePack;
   judge: EvidenceJudgeResult;
   retrievalTrace: RetrievalTrace;
+  glossaryTerms: string[];
 } | undefined> {
   if (!existsSync(knowledgeRoot(input.workspaceRoot))) {
     return undefined;
@@ -82,7 +84,7 @@ export async function prepareKnowledgeDiagnosis(input: {
     evidencePack,
     question: input.question,
   });
-  return { route, evidencePack, judge, retrievalTrace };
+  return { route, evidencePack, judge, retrievalTrace, glossaryTerms: glossaryTermsFromDocuments(docs) };
 }
 
 export function attachKnowledgeCodeEscalationContext(input: {
@@ -91,12 +93,16 @@ export function attachKnowledgeCodeEscalationContext(input: {
   route: KnowledgeRoute;
   evidencePack: KnowledgeEvidencePack;
   judge: EvidenceJudgeResult;
+  projectType?: string;
+  glossaryTerms?: string[];
 }): void {
   const deepQuery = planDeepQuery({
     question: input.question,
     route: input.route,
     evidencePack: input.evidencePack,
     judge: input.judge,
+    projectType: input.projectType,
+    glossaryTerms: input.glossaryTerms,
   });
   attachDeepQueryContext({
     request: input.request,
@@ -105,6 +111,22 @@ export function attachKnowledgeCodeEscalationContext(input: {
     judge: input.judge,
     deepQuery,
   });
+}
+
+export function glossaryTermsFromDocuments(documents: KnowledgeDocument[]): string[] {
+  return Array.from(new Set(documents
+    .filter((document) => (
+      document.frontmatter.type === 'glossary_term' ||
+      document.frontmatter.source_type === 'glossary' ||
+      document.relativePath.startsWith('glossary/')
+    ))
+    .flatMap((document) => [
+      document.frontmatter.title,
+      ...document.frontmatter.related_terms,
+      ...document.headings,
+    ])
+    .map((term) => term.trim())
+    .filter(Boolean)));
 }
 
 export function diagnosticResultFromKnowledge(input: {

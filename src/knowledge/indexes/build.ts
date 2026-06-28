@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildKnowledgeChunks } from '../documents/chunks.js';
+import { buildKnowledgeChunks, type KnowledgeChunkingOptions } from '../documents/chunks.js';
 import { discoverKnowledgeDocuments, loadSourceDocuments } from '../documents/discovery.js';
 import { normalizeKnowledgeText } from '../documents/terms.js';
 import {
@@ -20,11 +20,14 @@ import {
 import type { KnowledgeChunk, KnowledgeIndexManifest, KnowledgeUpdateResult } from '../types.js';
 import { validateKnowledgeTaxonomyCoverage } from '../taxonomy.js';
 
-export function updateKnowledgeIndex(input: { workspaceRoot: string }): KnowledgeUpdateResult {
+export function updateKnowledgeIndex(input: {
+  workspaceRoot: string;
+  chunking?: KnowledgeChunkingOptions;
+}): KnowledgeUpdateResult {
   const root = knowledgeRoot(input.workspaceRoot);
   const docs = discoverKnowledgeDocuments(input.workspaceRoot);
   const sourceDocuments = loadSourceDocuments(input.workspaceRoot);
-  const chunks = buildKnowledgeChunks(docs);
+  const chunks = buildKnowledgeChunks(docs, input.chunking);
   const taxonomy = validateKnowledgeTaxonomyCoverage({
     workspaceRoot: input.workspaceRoot,
     modules: docs.map((document) => document.frontmatter.module),
@@ -73,9 +76,10 @@ export function updateKnowledgeIndex(input: { workspaceRoot: string }): Knowledg
 export function updateKnowledgeIndexWithQuality(input: {
   workspaceRoot: string;
   qualityGate?: KnowledgeQualityGate;
+  chunking?: KnowledgeChunkingOptions;
 }): KnowledgeUpdateResult {
   const gate = input.qualityGate ?? 'warn';
-  const result = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot });
+  const result = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot, chunking: input.chunking });
   if (gate === 'off') {
     return {
       ...result,

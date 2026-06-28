@@ -51,6 +51,9 @@ function createServiceFixture(options = {}) {
   config.storage.rootDir = root;
   return {
     root,
+    config,
+    drafts,
+    secrets,
     secretsPath: join(root, 'secrets.json'),
     service: new OnboardingService({
       config,
@@ -187,6 +190,133 @@ test('draft repository rejects plaintext provider secrets', () => {
     assert.equal(repository.load(), undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('service exposes existing config as sanitized setup defaults when no draft exists', () => {
+  const fixture = createServiceFixture();
+  try {
+    const agentRef = fixture.secrets.set('providers.agent.minimax', 'agent-secret');
+    const embeddingRef = fixture.secrets.set('providers.embedding', 'embedding-secret');
+    const rerankRef = fixture.secrets.set('providers.rerank', 'rerank-secret');
+    fixture.config.server = { host: '0.0.0.0', bindMode: 'lan', port: 4455 };
+    fixture.config.workspaces = [{
+      id: 'current',
+      name: 'Saved Workspace',
+      rootPath: fixture.root,
+      mcpToolIds: ['read_only_db'],
+    }];
+    fixture.config.knowledge = {
+      ...fixture.config.knowledge,
+      rootDir: join(fixture.root, 'knowledge'),
+      sourceDir: fixture.root,
+      buildVectorIndex: true,
+    };
+    fixture.config.models.providers.minimax = {
+      type: 'openai-compatible',
+      baseUrl: 'https://api.minimaxi.com/v1',
+      model: 'MiniMax-M3',
+      apiKeyRef: agentRef,
+    };
+    fixture.config.agent.modelProvider = 'minimax';
+    fixture.config.embedding = {
+      ...embeddingFixture({ enabled: true }),
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      dimensions: 1024,
+      apiKeyRef: embeddingRef,
+    };
+    fixture.config.rerank = {
+      enabled: true,
+      provider: 'siliconflow',
+      model: 'BAAI/bge-reranker-v2-m3',
+      topN: 8,
+      apiKeyRef: rerankRef,
+    };
+
+    const state = fixture.service.getState();
+
+    assert.equal(state.draft.workspace.name, 'Saved Workspace');
+    assert.equal(state.draft.workspace.rootPath, fixture.root);
+    assert.equal(state.draft.knowledge.rootDir, join(fixture.root, 'knowledge'));
+    assert.equal(state.draft.server.bindMode, 'lan');
+    assert.equal(state.draft.server.port, 4455);
+    assert.equal(state.draft.agent.providerId, 'minimax');
+    assert.equal(state.draft.agent.provider.model, 'MiniMax-M3');
+    assert.equal(state.draft.agent.provider.hasApiKey, true);
+    assert.equal(state.draft.embedding.hasApiKey, true);
+    assert.equal(state.draft.rerank.hasApiKey, true);
+    assert.equal(JSON.stringify(state).includes('agent-secret'), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('service preserves existing setup secret refs when saving defaults without new keys', async () => {
+  const fixture = createServiceFixture();
+  try {
+    const agentRef = fixture.secrets.set('providers.agent.minimax', 'agent-secret');
+    const embeddingRef = fixture.secrets.set('providers.embedding', 'embedding-secret');
+    const rerankRef = fixture.secrets.set('providers.rerank', 'rerank-secret');
+    fixture.config.models.providers.minimax = {
+      type: 'openai-compatible',
+      baseUrl: 'https://api.minimaxi.com/v1',
+      model: 'MiniMax-M3',
+      apiKeyRef: agentRef,
+    };
+    fixture.config.agent.modelProvider = 'minimax';
+    fixture.config.embedding = {
+      ...embeddingFixture({ enabled: true }),
+      provider: 'siliconflow',
+      model: 'Qwen/Qwen3-Embedding-0.6B',
+      dimensions: 1024,
+      apiKeyRef: embeddingRef,
+    };
+    fixture.config.rerank = {
+      enabled: true,
+      provider: 'siliconflow',
+      model: 'BAAI/bge-reranker-v2-m3',
+      topN: 8,
+      apiKeyRef: rerankRef,
+    };
+
+    await fixture.service.saveDraft({
+      draft: {
+        version: 1,
+        workspace: { id: 'current', name: 'Saved Workspace', rootPath: fixture.root },
+        knowledge: { rootDir: join(fixture.root, 'knowledge'), sourceDir: fixture.root, buildVectorIndex: true },
+        server: { bindMode: 'loopback', port: 4317 },
+        agent: {
+          providerId: 'minimax',
+          provider: {
+            type: 'openai-compatible',
+            baseUrl: 'https://api.minimaxi.com/v1',
+            model: 'MiniMax-M3',
+          },
+        },
+        embedding: {
+          enabled: true,
+          provider: 'siliconflow',
+          model: 'Qwen/Qwen3-Embedding-0.6B',
+          dimensions: 1024,
+          distance: 'cosine',
+        },
+        rerank: {
+          enabled: true,
+          provider: 'siliconflow',
+          model: 'BAAI/bge-reranker-v2-m3',
+          topN: 8,
+        },
+      },
+    });
+
+    const saved = fixture.drafts.load();
+    assert.deepEqual(saved.agent.provider.apiKeyRef, agentRef);
+    assert.deepEqual(saved.embedding.apiKeyRef, embeddingRef);
+    assert.deepEqual(saved.rerank.apiKeyRef, rerankRef);
+    assert.equal((await fixture.service.validateDraft()).ok, true);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
   }
 });
 
@@ -345,9 +475,10 @@ test('runner failure preserves old config and retries from failed stage', async 
   }
 });
 
-test('validator reports missing workspace and enabled provider credentials', () => {
+test('validator reports missing workspace without blocking optional embedding credentials', () => {
   const draft = onboardingDraftFixture({
     workspace: { id: 'current', name: 'Demo', rootPath: '/does/not/exist' },
+    knowledge: { buildVectorIndex: true },
     embedding: {
       ...embeddingFixture(),
       enabled: true,
@@ -358,7 +489,24 @@ test('validator reports missing workspace and enabled provider credentials', () 
   const result = validateOnboardingDraft(draft, { resolveSecret: () => undefined });
   assert.equal(result.ok, false);
   assert.ok(result.issues.some((issue) => issue.field === 'workspace.rootPath'));
-  assert.ok(result.issues.some((issue) => issue.field === 'embedding.apiKeyRef'));
+  assert.equal(result.issues.some((issue) => issue.field === 'embedding.apiKeyRef'), false);
+});
+
+test('validator allows enabled embedding without credentials so retrieval can degrade to BM25', () => {
+  const draft = onboardingDraftFixture({
+    knowledge: { buildVectorIndex: true },
+    embedding: {
+      ...embeddingFixture(),
+      enabled: true,
+      provider: 'siliconflow',
+      apiKeyRef: undefined,
+    },
+  });
+  const result = validateOnboardingDraft(draft, {
+    resolveSecret: (ref) => ref?.key === 'providers.agent.default' ? 'agent-secret' : undefined,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.some((issue) => issue.field === 'embedding.apiKeyRef'), false);
 });
 
 test('planner skips unchanged sources and compatible vector artifacts', () => {
@@ -380,7 +528,7 @@ test('provider test runner reports agent embedding and rerank independently', as
   const calls = [];
   const result = await testOnboardingProviders(onboardingDraftFixture({
     embedding: { enabled: true },
-    rerank: { enabled: true },
+    rerank: { enabled: true, provider: 'fake' },
   }), {
     testAgent: async () => (calls.push('agent'), {
       ok: true,
@@ -404,6 +552,33 @@ test('provider test runner reports agent embedding and rerank independently', as
   assert.deepEqual(new Set(calls), new Set(['agent', 'embedding', 'rerank']));
   assert.equal(result.ok, true);
   assert.equal(result.agent.ok, true);
+});
+
+test('provider test runner skips enabled retrieval providers when credentials are absent', async () => {
+  const calls = [];
+  const result = await testOnboardingProviders(onboardingDraftFixture({
+    embedding: { enabled: true, provider: 'siliconflow', apiKeyRef: undefined },
+    rerank: { enabled: true, provider: 'siliconflow', apiKeyRef: undefined },
+  }), {
+    testAgent: async () => (calls.push('agent'), {
+      ok: true,
+      model: 'agent',
+      durationMs: 1,
+      provider: 'fake',
+    }),
+    testEmbedding: async () => {
+      throw new Error('embedding test should be skipped without credentials');
+    },
+    testRerank: async () => {
+      throw new Error('rerank test should be skipped without credentials');
+    },
+  });
+  assert.deepEqual(calls, ['agent']);
+  assert.equal(result.ok, true);
+  assert.equal(result.embedding.skipped, true);
+  assert.equal(result.embedding.reason, 'missing_credentials');
+  assert.equal(result.rerank.skipped, true);
+  assert.equal(result.rerank.reason, 'missing_credentials');
 });
 
 test('knowledge pipeline reports real file and slice counts', async () => {
@@ -475,6 +650,41 @@ test('knowledge pipeline reports vector build batch progress', async () => {
   }
 });
 
+test('knowledge pipeline skips vector build when default embedding credentials are absent', async () => {
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-pipeline-no-embedding-key-'));
+  const sourceDir = mkdtempSync(join(tmpdir(), 'super-helper-sources-no-embedding-key-'));
+  try {
+    writeFileSync(
+      join(sourceDir, 'vector.md'),
+      '# 课程访问排查\n\n当学员反馈课程无法访问时，需要检查课程发布状态、班级授权、订单支付状态和浏览器缓存。',
+      'utf8',
+    );
+    const events = [];
+    const result = await runOnboardingKnowledgePipeline({
+      draft: onboardingDraftFixture({
+        knowledge: { rootDir: workspaceRoot, sourceDir, buildVectorIndex: true },
+        embedding: {
+          enabled: true,
+          provider: 'siliconflow',
+          model: 'Qwen/Qwen3-Embedding-0.6B',
+          dimensions: 1024,
+          distance: 'cosine',
+          apiKeyRef: undefined,
+        },
+      }),
+      workspaceRoot,
+      report: (event) => events.push(event),
+    });
+
+    const vectorEvent = events.find((event) => event.stage === 'build_vector_index');
+    assert.equal(result.vectorCount, 0);
+    assert.match(vectorEvent?.message ?? '', /credentials unavailable/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(sourceDir, { recursive: true, force: true });
+  }
+});
+
 test('one dashboard run configures providers, publishes clean knowledge, and commits config', async () => {
   const fixture = await fullOnboardingFixture({
     sources: {
@@ -539,6 +749,72 @@ test('dashboard review accepts warning slices before starting daily use', async 
     assert.equal(state.completed, true);
     assert.equal(state.needsReview, false);
     assert.equal(state.latestRun.counters.pendingReviewSlices, 0);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('dashboard review state supports pagination, search, and issue explanations', async () => {
+  const fixture = await fullOnboardingFixture({
+    sources: {
+      'login-short.md': '# 登录短切片\n\n内容较短。',
+      'refund-short.md': '# 退款短切片\n\n内容较短。',
+    },
+  });
+  try {
+    await fixture.saveDraft();
+    const run = await fixture.startAndWait();
+    assert.equal(run.status, 'completed', run.safeError?.message);
+
+    const firstPage = fixture.getReviewState({ offset: 0, limit: 1, severity: 'warn' });
+    assert.equal(firstPage.items.length, 1);
+    assert.equal(firstPage.page.offset, 0);
+    assert.equal(firstPage.page.limit, 1);
+    assert.equal(firstPage.page.returned, 1);
+    assert.equal(firstPage.page.total, 2);
+    assert.equal(firstPage.page.hasMore, true);
+
+    const issue = firstPage.items[0].issues.find((item) => item.code === 'not_answer_bearing')
+      ?? firstPage.items[0].issues[0];
+    assert.ok(issue.explanation.reason.includes('原因'));
+    assert.ok(issue.explanation.impact.includes('影响'));
+    assert.ok(issue.explanation.suggestion.includes('建议'));
+    assert.ok(Array.isArray(issue.explanation.missingInfo));
+    assert.ok(issue.explanation.missingInfo.length >= 1);
+
+    const searchResult = fixture.getReviewState({ offset: 0, limit: 20, search: '登录' });
+    assert.equal(searchResult.items.length, 1);
+    assert.match(searchResult.items[0].title, /登录/);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('dashboard review publishes only selected warning slices', async () => {
+  const fixture = await fullOnboardingFixture({
+    sources: {
+      'login-short.md': '# 登录短切片\n\n内容较短。',
+      'refund-short.md': '# 退款短切片\n\n内容较短。',
+    },
+  });
+  try {
+    await fixture.saveDraft();
+    const run = await fixture.startAndWait();
+    assert.equal(run.status, 'completed', run.safeError?.message);
+
+    const pending = fixture.getReviewState({ offset: 0, limit: 20 });
+    assert.equal(pending.pendingCount, 2);
+
+    const reviewed = await fixture.submitReview({
+      action: 'accept_warnings',
+      reviewer: 'tester',
+      notes: '只发布选中的登录切片',
+      ids: [pending.items[0].id],
+    });
+    assert.equal(reviewed.publishedSlices, 1);
+    assert.equal(reviewed.review.pendingCount, 1);
+    assert.equal(reviewed.review.items.length, 1);
+    assert.notEqual(reviewed.review.items[0].id, pending.items[0].id);
   } finally {
     await fixture.close();
   }

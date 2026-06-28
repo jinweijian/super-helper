@@ -1,9 +1,9 @@
 import type { SuperHelperConfig } from '../config.js';
-import type { AgentModelClient } from '../model.js';
-import type { PreflightDecision } from '../preflight.js';
-import { isSafetyPermissionDecision } from '../preflight.js';
+import type { AgentModelClient } from '../providers/model/adapter.js';
+import type { PreflightDecision } from './preflight-decision.js';
+import { isSafetyPermissionDecision } from './preflight-decision.js';
 import type { ResolvedTurnContext } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from './preflight-gate.js';

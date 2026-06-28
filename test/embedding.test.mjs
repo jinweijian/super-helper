@@ -22,17 +22,24 @@ import {
   redactEmbeddingErrorMessage,
 } from '../dist/providers/errors.js';
 
-test('default config keeps embedding disabled and independent from agent model providers', () => {
+test('default config keeps embedding enabled by default with graceful degradation and independent from agent model providers', () => {
   const config = defaultConfig();
 
-  assert.equal(config.embedding.enabled, false);
+  assert.equal(config.embedding.enabled, true);
   assert.equal(config.embedding.provider, 'siliconflow');
   assert.equal(config.embedding.model, 'Qwen/Qwen3-Embedding-0.6B');
   assert.equal(config.embedding.baseUrl, 'https://api.siliconflow.cn/v1');
   assert.equal(config.embedding.apiKeyEnv, 'SILICONFLOW_API_KEY');
   assert.equal(config.embedding.dimensions, 1024);
   assert.equal(config.embedding.distance, 'cosine');
-  assert.equal(isEmbeddingEnabled(config), false);
+  assert.equal(isEmbeddingEnabled(config), true);
+  assert.equal(config.knowledge.buildVectorIndex, true);
+  assert.deepEqual(config.knowledge.chunking, {
+    maxChars: 800,
+    overlapStrategy: 'sentence',
+    overlapChars: 120,
+    minChars: 80,
+  });
   assert.equal(getEmbeddingConfig(config).provider, 'siliconflow');
 
   config.models.providers.agent = {
@@ -466,6 +473,7 @@ test('minimax provider is docs-gated and does not guess network calls', async ()
 
 test('embedding CLI reports disabled state without calling network', () => {
   const home = mkdtempSync(join(tmpdir(), 'super-helper-embedding-cli-'));
+  writeFileSync(join(home, 'config.json'), `${JSON.stringify({ ...defaultConfig(), embedding: { ...defaultConfig().embedding, enabled: false } }, null, 2)}\n`);
   const result = spawnSync(process.execPath, [
     'dist/cli.js',
     'embedding',

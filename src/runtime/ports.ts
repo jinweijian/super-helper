@@ -1,8 +1,8 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticLogEvent } from '../domain.js';
-import type { AgentModelClient } from '../model.js';
+import type { AgentModelClient } from '../providers/model/adapter.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 
 export interface RuntimeEventRecorder {

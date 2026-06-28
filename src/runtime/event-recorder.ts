@@ -8,9 +8,9 @@ import type {
   WorkerTrace,
 } from '../domain.js';
 import type { KnowledgeEvidencePack, KnowledgeRoute } from '../knowledge/index.js';
-import type { PreflightDecision } from '../preflight.js';
+import type { PreflightDecision } from './preflight-decision.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 import type { EvidenceJudgeResult } from './evidence-judge.js';
 import type { RetrievalTrace } from '../retrieval/types.js';
 import type { RuntimeEventRecorder } from './ports.js';
@@ -161,7 +161,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       severity: parsed.action === 'dispatch' ? 'ok' : 'warn',
       summary: 'Agent 模型完成预检判断',
       detail: {
-        raw,
+        raw: redactProviderErrorMessage(raw).slice(0, 2000),
         parsed,
       },
     });
@@ -204,7 +204,24 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: '预检',
       severity: 'ok',
       summary: 'Preflight Gate 决定派发 Claude Code 诊断',
-      detail: request,
+      detail: diagnosticRequestLogDetail(request, 'dispatch'),
+    });
+  }
+
+  preflightKnowledgeAnswer(caseSession: StoredCase, result: DiagnosticResult): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.inputReview, {
+      actor: 'agent',
+      phase: 'preflight_decision',
+      label: '预检',
+      severity: 'ok',
+      summary: 'Preflight Gate 决定使用知识库证据直接回答',
+      detail: {
+        decision: 'knowledge_answer',
+        status: result.status,
+        summary: result.summary,
+        recommendedNextAction: result.recommendedNextAction,
+        evidenceIds: evidenceIdsFromResult(result),
+      },
     });
   }
 
@@ -219,7 +236,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: '调用 CC',
       severity: 'ok',
       summary: options.followUp ? 'Agent 生成追查 DiagnosticRequest' : 'Agent 生成 DiagnosticRequest',
-      detail: request,
+      detail: diagnosticRequestLogDetail(request, options.followUp ? 'follow_up_dispatch' : 'dispatch'),
     });
   }
 
@@ -250,7 +267,13 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       summary: 'Agent 开始审核 Claude Code 返回结果',
       detail: {
         runId: run.id,
-        result,
+        status: result.status,
+        summary: result.summary,
+        missingInfo: result.missingInfo,
+        recommendedNextAction: result.recommendedNextAction,
+        evidenceIds: evidenceIdsFromResult(result),
+        claimCount: result.claims.length,
+        evidenceCount: result.evidence.length,
       },
     });
   }
@@ -333,7 +356,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: '最终输出',
       severity: decision === 'final' ? 'ok' : 'warn',
       summary: 'Agent 完成证据审核并回复用户',
-      detail: { reply, decision, tag: '最终回答' },
+      detail: { reply, decision, evidenceIds: [], tag: '最终回答' },
     });
   }
 
@@ -490,7 +513,15 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: '知识直答',
       severity: 'ok',
       summary: 'Evidence Judge 选择使用知识库证据直接回答',
-      detail: result,
+      detail: {
+        status: result.status,
+        summary: result.summary,
+        missingInfo: result.missingInfo,
+        recommendedNextAction: result.recommendedNextAction,
+        evidenceIds: evidenceIdsFromResult(result),
+        claimCount: result.claims.length,
+        evidenceCount: result.evidence.length,
+      },
     });
   }
 
@@ -662,7 +693,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       severity: rawOutputSeverity(safeTrace),
       summary: 'Claude Code 返回的原始数据',
       detail: {
-        stdout: safeTrace.stdout,
+        stdout: redactProviderErrorMessage(safeTrace.stdout),
         stderr: safeTrace.stderr,
         exitCode: safeTrace.exitCode,
         signal: safeTrace.signal,
@@ -670,6 +701,38 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       },
     });
   }
+}
+
+function evidenceIdsFromResult(result: DiagnosticResult): string[] {
+  return Array.from(new Set([
+    ...result.evidence.map((evidence) => evidence.id),
+    ...result.claims.flatMap((claim) => claim.evidenceIds),
+  ].filter(Boolean)));
+}
+
+function evidenceIdsFromRequest(request: DiagnosticRequest): string[] {
+  const knowledgeEvidence = request.context?.knowledge?.evidence?.map((item) => item.id) ?? [];
+  const previousEvidence = request.context?.previousRuns?.flatMap((run) => run.evidence.map((item) => item.id)) ?? [];
+  return Array.from(new Set([...knowledgeEvidence, ...previousEvidence].filter(Boolean)));
+}
+
+function diagnosticRequestLogDetail(
+  request: DiagnosticRequest,
+  decision: string,
+): Record<string, unknown> {
+  return {
+    decision,
+    caseId: request.caseId,
+    runId: request.runId,
+    workspaceId: request.workspaceId,
+    userGoal: request.userGoal,
+    knownFacts: request.knownFacts,
+    unknowns: request.unknowns,
+    constraints: request.constraints,
+    allowedMcpToolIds: request.allowedMcpToolIds,
+    evidenceIds: evidenceIdsFromRequest(request),
+    deepQuery: request.context?.deepQuery,
+  };
 }
 
 function rawOutputSeverity(trace: WorkerTrace): LogSeverity {

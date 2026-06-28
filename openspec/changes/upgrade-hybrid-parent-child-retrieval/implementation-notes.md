@@ -48,3 +48,19 @@
 - 真实 source 不在仓库/当前 workspace，不能执行 4.3–4.5 的人工 review/publish 批次。
 - 缺少 SiliconFlow 凭证，真实 provider 验收 5.2 为 `not run`。
 - 50 题真实 holdout 尚未对 reviewed corpus 执行，6.2 不能标记完成；当前 change 保持 active，不能归档。
+
+## 2026-06-28 Blocker Recheck
+
+复核命令与结果：
+
+- `openspec instructions apply --change upgrade-hybrid-parent-child-retrieval --json`：仍为 18/23，剩余 4.3、4.4、4.5、5.2、6.2。
+- 本机 `~/.super-helper/config.json`：`embedding.enabled=false`、`rerank.enabled=false`，无 inline key、无 `apiKeyRef`；`SILICONFLOW_API_KEY` 仅为 env 名称配置，当前没有可确认的 materialized credential。
+- `find ~/.super-helper -path '*migration-report.json' -o -path '*migration-review-queue.json'`：未发现现成 migration report 或 review queue。
+- `reports/optimize-local-rag-pipeline-eval-2026-06-28.json` 是 offline BM25-only 评测报告，不是真实 provider + reviewed corpus holdout 证明。
+
+结论：
+
+- 4.3–4.5 需要真实 source pipeline artifacts 与人工 review 结果。当前不能自动批准 warning/error 或伪造 review queue，因此保持未完成。
+- 5.2 需要明确凭证 opt-in 才能运行 SiliconFlow smoke/vector/rerank/holdout。当前配置禁用且无凭证，因此保持未完成。
+- 6.2 需要 reviewed corpus 的 holdout 指标证明；当前 offline 报告 Recall@5/MRR 为 0，不能冒充通过。
+- 本次 `optimize-local-rag-pipeline` 已把 current chunk artifact 推进到 `parent-child-v3`。该 change 的历史任务名仍写 v2，是该 change 创建时的版本语义；真实 completion gate 仍取决于人工 review/provider/holdout，而不是任务文字里的 v2/v3 名称差异。

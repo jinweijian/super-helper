@@ -1,12 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
 import {
-  buildKnowledgeHealthSummary,
-  initKnowledgeWorkspace,
-  resolveKnowledgeWorkspaceRoot,
-  updateKnowledgeIndexWithQuality,
-} from '../../knowledge/index.js';
-import { createConfiguredKnowledgeRetriever } from '../../retrieval/configured-search.js';
+  bindKnowledgeWorkspace,
+  getKnowledgeHealthSummary,
+  reindexKnowledgeWorkspace,
+} from '../../knowledge/health-service.js';
 import { readJson, sendJson } from '../http-utils.js';
 
 type KnowledgeActionBody = {
@@ -30,11 +28,10 @@ export async function handleKnowledgeRoutes(
     sendJson(res, 200, {
       ok: true,
       workspaceId,
-      knowledgeHealth: await buildKnowledgeHealthSummary({
+      knowledgeHealth: await getKnowledgeHealthSummary({
         config,
         workspaceId,
         query: url.searchParams.get('query') ?? undefined,
-        retrieveEvidence: createConfiguredKnowledgeRetriever(config),
       }),
     });
     return true;
@@ -48,17 +45,15 @@ export async function handleKnowledgeRoutes(
       return true;
     }
 
-    const knowledgeWorkspaceRoot = resolveKnowledgeWorkspaceRoot(config, workspaceId);
-    const init = initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspaceRoot });
+    const init = bindKnowledgeWorkspace({ config, workspaceId });
     sendJson(res, 200, {
       ok: true,
       workspaceId,
       init,
-      knowledgeHealth: await buildKnowledgeHealthSummary({
+      knowledgeHealth: await getKnowledgeHealthSummary({
         config,
         workspaceId,
         query: body.query,
-        retrieveEvidence: createConfiguredKnowledgeRetriever(config),
       }),
     });
     return true;
@@ -72,18 +67,15 @@ export async function handleKnowledgeRoutes(
       return true;
     }
 
-    const knowledgeWorkspaceRoot = resolveKnowledgeWorkspaceRoot(config, workspaceId);
-    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspaceRoot });
-    const update = updateKnowledgeIndexWithQuality({ workspaceRoot: knowledgeWorkspaceRoot });
+    const update = reindexKnowledgeWorkspace({ config, workspaceId });
     sendJson(res, 200, {
       ok: true,
       workspaceId,
       update,
-      knowledgeHealth: await buildKnowledgeHealthSummary({
+      knowledgeHealth: await getKnowledgeHealthSummary({
         config,
         workspaceId,
         query: body.query,
-        retrieveEvidence: createConfiguredKnowledgeRetriever(config),
       }),
     });
     return true;

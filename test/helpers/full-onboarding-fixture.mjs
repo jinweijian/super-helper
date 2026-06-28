@@ -51,8 +51,8 @@ export async function fullOnboardingFixture({ sources }) {
     getState() {
       return service.getState();
     },
-    getReviewState() {
-      return service.getReviewState();
+    getReviewState(query) {
+      return service.getReviewState(query);
     },
     submitReview(input) {
       return service.submitReview(input);

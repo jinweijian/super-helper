@@ -190,6 +190,7 @@ export interface DiagnosticRequestContext {
     artifactTargets: string[];
     anchorTerms: string[];
     likelyPaths: string[];
+    projectType?: string;
     avoidAssumptions: string[];
     correctionActions: string[];
     attempt?: number;

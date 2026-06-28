@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ingestSourceDocuments } from './ingest.js';
 import { updateKnowledgeIndex } from './indexes/build.js';
+import type { KnowledgeChunkingOptions } from './documents/chunks.js';
 import { chunksPath, dirtyFlagPath, ingestReportPath, keywordIndexPath, knowledgeRoot, manifestPath } from './paths.js';
 import {
   auditKnowledgeQuality,
@@ -25,6 +26,7 @@ export function initKnowledgeWorkspace(input: {
   sourceDir?: string;
   legacyActivePublish?: boolean;
   qualityGate?: KnowledgeQualityGate;
+  chunking?: KnowledgeChunkingOptions;
 }): KnowledgeInitResult {
   const root = knowledgeRoot(input.workspaceRoot);
   const createdDirectories: string[] = [];
@@ -67,7 +69,10 @@ export function initKnowledgeWorkspace(input: {
   let sourceQualityReportFile: string | undefined;
   let qualityGateResult: ReturnType<typeof evaluateQualityGate> | undefined;
   if (ingestReport.sourceDocuments > 0 || ingestReport.skipped.length > 0) {
-    const update = updateKnowledgeIndex({ workspaceRoot: input.workspaceRoot });
+    const update = updateKnowledgeIndex({
+      workspaceRoot: input.workspaceRoot,
+      chunking: input.chunking,
+    });
     ingestReport.chunks = update.chunkCount;
     writeFileSync(ingestReportPath(input.workspaceRoot), `${JSON.stringify(ingestReport, null, 2)}\n`, 'utf8');
     createdFiles.push(ingestReportPath(input.workspaceRoot));

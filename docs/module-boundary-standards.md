@@ -115,6 +115,8 @@ src/providers/
 
 拆分时不得顺手改变 public API、config shape、case JSON shape、knowledge artifact shape。确需改变时，必须有 OpenSpec、迁移策略和兼容测试。
 
+根目录历史入口迁移时，只有 OpenSpec 明确列出兼容消费者和删除窗口，才允许保留 deprecation re-export。该 re-export 必须只转发到新 owner 模块，不得继续承载私有组合逻辑、默认值、业务策略或命令输出。内部新代码必须从新 owner 路径导入，旧路径只服务公开兼容过渡，并且需要对应 import 兼容测试和后续删除任务。
+
 ## 控制流边界
 
 一个用户请求的控制流必须保持单向、可审计：

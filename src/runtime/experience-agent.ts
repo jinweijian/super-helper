@@ -1,5 +1,5 @@
 import type { DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import { validateDiagnosticResult } from './result-validator.js';
 
 export interface ExperienceMatch {

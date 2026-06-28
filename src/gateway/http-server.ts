@@ -5,6 +5,7 @@ import { renderSetupApp } from '../setup-ui.js';
 import { renderApp } from '../ui.js';
 import { sendHtml, sendJson, sendRedirect } from './http-utils.js';
 import { GatewayApplicationContext } from './application-context.js';
+import { createDefaultDiagnosticWorker, type DiagnosticWorkerFactory } from '../workers/default-worker-factory.js';
 import { handleChatRoutes } from './routes/chat-routes.js';
 import { handleFsRoutes } from './routes/fs-routes.js';
 import { handleKnowledgeRoutes } from './routes/knowledge-routes.js';
@@ -16,6 +17,7 @@ import { handleSettingsRoutes } from './routes/settings-routes.js';
 export interface StartServerOptions {
   config: SuperHelperConfig;
   onboarding?: OnboardingService;
+  workerFactory?: DiagnosticWorkerFactory;
 }
 
 export interface StartedServer {
@@ -28,7 +30,7 @@ export interface StartedServer {
 export function startServer(options: StartServerOptions): Promise<StartedServer> {
   const secrets = new FileSecretsRepository(options.config.storage.rootDir);
   const runtimeConfig = materializeConfigSecrets(options.config, secrets);
-  const context = new GatewayApplicationContext(runtimeConfig);
+  const context = new GatewayApplicationContext(runtimeConfig, options.workerFactory ?? createDefaultDiagnosticWorker);
   const onboarding = options.onboarding ?? createOnboardingService({
     config: runtimeConfig,
     onConfigCommitted: (config) => context.reload(materializeConfigSecrets(config, secrets)),

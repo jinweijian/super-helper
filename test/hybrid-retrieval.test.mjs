@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { buildKnowledgeChunks } from '../dist/knowledge/documents/chunks.js';
+import { buildKnowledgeChunks, markLegacyChunk } from '../dist/knowledge/documents/chunks.js';
 import { createBm25RecallStrategy } from '../dist/retrieval/recall/bm25/strategy.js';
 import { tokenizeForBm25 } from '../dist/retrieval/recall/bm25/tokenizer.js';
 import { createRetrievalService } from '../dist/retrieval/service.js';
@@ -87,6 +87,61 @@ test('same-section children overlap by at most one bounded sentence', () => {
   assert.equal((chunks[1].overlap_chars ?? 0) > 0, true);
   assert.equal((chunks[1].overlap_chars ?? 0) <= 120, true);
   assert.deepEqual(chunks[0].section_path, chunks[1].section_path);
+});
+
+test('parent-child builder accepts chunking options and emits v3 sentence-window chunks', () => {
+  const sentence = '课程发布后，学员端会根据发布范围、有效期和可加入条件决定是否展示入口。';
+  const body = `# 规则\n\n## 长段落\n\n${Array.from({ length: 10 }, () => sentence).join('')}`;
+  const chunks = buildKnowledgeChunks([
+    parentDocument({ body, headings: ['规则', '长段落'] }),
+  ], {
+    maxChars: 180,
+    overlapStrategy: 'sentence',
+    overlapChars: 60,
+    minChars: 80,
+  });
+
+  assert.equal(chunks.length > 1, true);
+  assert.equal(chunks.every((chunk) => chunk.text.length <= 180), true);
+  assert.equal(chunks.every((chunk) => !chunk.manual_split_required), true);
+  assert.equal(chunks.every((chunk) => chunk.chunking_strategy === 'parent-child-v3'), true);
+  assert.equal(chunks.every((chunk) => chunk.artifact_version === 3), true);
+  assert.equal(chunks.every((chunk) => chunk.legacy === false), true);
+  assert.equal((chunks[1].overlap_chars ?? 0) > 0, true);
+  assert.equal((chunks[1].overlap_chars ?? 0) <= 60, true);
+});
+
+test('chunk legacy marker treats v3 as current and v2 as legacy', () => {
+  assert.equal(markLegacyChunk({
+    chunk_id: 'chk_v3',
+    parent_id: 'doc',
+    source: 'doc.md',
+    module: 'course',
+    intent: 'how_to',
+    source_type: 'faq',
+    status: 'active',
+    confidence: 'high',
+    headings: [],
+    keywords: [],
+    text: 'v3',
+    chunking_strategy: 'parent-child-v3',
+    artifact_version: 3,
+  }).legacy, false);
+  assert.equal(markLegacyChunk({
+    chunk_id: 'chk_v2',
+    parent_id: 'doc',
+    source: 'doc.md',
+    module: 'course',
+    intent: 'how_to',
+    source_type: 'faq',
+    status: 'active',
+    confidence: 'high',
+    headings: [],
+    keywords: [],
+    text: 'v2',
+    chunking_strategy: 'parent-child-v2',
+    artifact_version: 2,
+  }).legacy, true);
 });
 
 test('multiple child hits collapse to one parent while preserving strongest answer span and scores', async () => {
@@ -207,8 +262,8 @@ test('embedding artifacts apply metadata, visibility, quality, and legacy filter
       confidence: 'high',
       headings: [],
       keywords: [],
-      artifact_version: 2,
-      chunking_strategy: 'parent-child-v2',
+      artifact_version: 3,
+      chunking_strategy: 'parent-child-v3',
       legacy: false,
       child_order: 1,
       source_block_ids: ['blk'],

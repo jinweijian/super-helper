@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticRequest, DiagnosticResult } from '../domain.js';
+import type { DiagnosticRequest, DiagnosticResult, UserPersona } from '../domain.js';
 import { buildDiagnosticRequestContext } from '../sessions/context-builder.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export function buildDiagnosticRequest(input: {
@@ -25,7 +25,7 @@ export function buildDiagnosticRequest(input: {
     unknowns: Array.from(new Set([...unknowns, ...resolvedTurn.unknowns.map((item) => item.text)])),
     constraints: [
       'Claude Code is an inspection tool and must not respond directly to the user.',
-      `User-facing persona is ${caseSession.userPersona}; return evidence for super helper Agent to translate.`,
+      ...personaDiagnosticConstraints(caseSession.userPersona),
       'Handle both troubleshooting requests and general project questions.',
       'Return structured evidence, assumptions, missing information, and recommended next action.',
       'Do not make final claims without evidence.',
@@ -56,12 +56,24 @@ export function buildFollowUpDiagnosticRequest(input: {
     unknowns: previousResult.missingInfo,
     constraints: [
       ...previousRequest.constraints,
+      ...personaDiagnosticConstraints(caseSession.userPersona),
       'This is a follow-up run in the same Claude session; reuse earlier context and focus only on the missing evidence.',
     ],
     userPersona: caseSession.userPersona,
   };
   attachCaseContext(caseSession, request);
   return request;
+}
+
+export function personaDiagnosticConstraints(persona: UserPersona): string[] {
+  const shared = `User-facing persona is ${persona}; return evidence for super helper Agent to translate.`;
+  const personaSpecific: Record<UserPersona, string> = {
+    operations: '运营视角：优先判断这是系统 bug、设计使然、配置或使用问题；优先提取功能名、页面入口、角色、期望行为和业务影响，不要要求用户提供代码路径。',
+    developer: '开发视角：优先返回问题位置、确认方式、下一步排查路径；重点保留接口、错误、日志、复现条件、版本/分支和可疑模块。',
+    support: '技术支持视角：优先提取客户环境、账号角色、时间范围、URL、截图/报错和影响范围；输出可转交研发的证据包和升级条件。',
+    customer: '客户视角：优先提取所在页面、操作步骤和看到的提示；避免技术化追问和内部代码路径，输出非技术化说明。',
+  };
+  return [shared, personaSpecific[persona] ?? personaSpecific.operations];
 }
 
 export function attachCaseContext(caseSession: StoredCase, request: DiagnosticRequest): void {

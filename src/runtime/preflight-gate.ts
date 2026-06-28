@@ -1,8 +1,8 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { HelperAgentConfig } from '../domain.js';
-import { preflight, type PreflightDecision } from '../preflight.js';
-import type { StoredCase } from '../storage.js';
-import { attachCaseContext } from './request-builder.js';
+import { preflight, type PreflightDecision } from './preflight-decision.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
+import { attachCaseContext, personaDiagnosticConstraints } from './request-builder.js';
 
 export function buildLocalPreflightDecision(input: {
   config: SuperHelperConfig;
@@ -21,7 +21,7 @@ export function buildLocalPreflightDecision(input: {
     localDecision.request.constraints = Array.from(
       new Set([
         ...localDecision.request.constraints,
-        `User-facing persona is ${caseSession.userPersona}; return evidence for super helper Agent to translate.`,
+        ...personaDiagnosticConstraints(caseSession.userPersona),
       ]),
     );
     attachCaseContext(caseSession, localDecision.request);

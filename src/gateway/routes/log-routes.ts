@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { FileMemoryStore } from '../../storage.js';
+import type { FileMemoryStore } from '../../sessions/file-memory-store.js';
 import { buildLogBlocks, formatLogSection } from '../../observability/log-blocks.js';
 import { sanitizeWorkerTrace } from '../../observability/worker-trace.js';
 import { sendJson } from '../http-utils.js';

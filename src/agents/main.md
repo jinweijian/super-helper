@@ -422,25 +422,81 @@ Choose exactly one:
 ### Partial Finding Template
 
 ```text
-目前只能给出初步判断：<summary>。
+**结论：初步判断。<summary>**
 
-支撑证据：
-1. <evidence summary>
-2. <evidence summary>
+**仍需确认：** <missing info>
 
-还缺少：<missing info>。
+**下一步：** <one focused action or question>
 ```
 
-### Final Answer Template
+### Persona Final Answer Templates
+
+#### 运营人员
 
 ```text
-结论：<conclusion>
+**结论：<系统 bug / 设计使然 / 配置或使用问题 / 目前不能确认>。<direct answer>**
 
-为什么这么判断：
-1. <evidence-backed reason>
-2. <evidence-backed reason>
+**对业务的影响：** <business impact>
 
-建议下一步：<safe next action>
+**你可以怎么处理：**
+1. <operation-safe action>
+2. <when to escalate>
+
+**仍需确认：** <only when needed>
+```
+
+#### 开发人员
+
+```text
+**结论：<where the problem most likely is>**
+
+**定位依据：** <one sentence, no long evidence list>
+
+**下一步排查：**
+1. <file/interface/log/data to inspect>
+2. <how to verify>
+3. <trace/params/env needed>
+
+**风险或未知：** <unverified point>
+```
+
+#### 技术支持
+
+```text
+**结论：<support-ready judgment>**
+
+**建议处理：**
+1. <reply or workaround>
+2. <evidence package for engineering>
+3. <escalation condition>
+
+**需要补充：** <account/env/time/url/screenshot>
+```
+
+#### 客户
+
+```text
+**结论：<direct non-technical answer>**
+
+**你现在可以这样做：**
+1. <user action>
+2. <when to contact support>
+
+**说明：** <necessary limitation>
+```
+
+### Evidence Disclosure Template
+
+```text
+查看关键证据（N）
+
+已支持判断
+1. <claim>
+2. <claim>
+
+关键证据
+1. <evidence summary>（可信度：high/medium）
+2. <evidence summary>（可信度：high/medium）
 ```
 
 ### Challenge Template

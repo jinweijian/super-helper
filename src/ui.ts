@@ -50,8 +50,20 @@ export function renderApp(): string {
     .msg.helper ul, .msg.helper ol { margin: 6px 0; padding-left: 20px; }
     .msg.helper code { background: #eef2f6; border-radius: 5px; padding: 1px 5px; font-size: 12px; overflow-wrap: anywhere; }
     .msg.helper pre { max-width: 100%; margin: 8px 0 0; padding: 10px; border: 1px solid #cbd6e2; border-radius: 7px; background: #0f172a; color: #e5edf7; font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; overflow: auto; max-height: 420px; word-break: break-word; }
-    .msg.helper strong { color: #1b6fd8; }
+    .msg.helper strong { color: #1b6fd8; font-weight: 850; }
     .msg.helper mark { background: #fff2b8; color: #4d3800; padding: 0 3px; border-radius: 3px; }
+    .answer-body { display: grid; gap: 8px; }
+    .answer-body br + br { display: none; }
+    .answer-emphasis { color: #183b6d; font-weight: 850; }
+    .answer-section-title { color: #182230; font-weight: 850; }
+    .answer-evidence { margin-top: 12px; border-top: 1px solid #d9e2ec; padding-top: 10px; }
+    .answer-evidence summary { cursor: pointer; color: #1b6fd8; font-size: 12px; font-weight: 850; list-style: none; }
+    .answer-evidence summary::-webkit-details-marker { display: none; }
+    .answer-evidence-body { display: grid; gap: 10px; padding-top: 10px; }
+    .answer-evidence-group { display: grid; gap: 6px; }
+    .answer-evidence-group strong { color: #182230; }
+    .answer-evidence-row { display: grid; gap: 3px; padding: 8px; border: 1px solid #d9e2ec; border-radius: 8px; background: #f8fafc; font-size: 12px; line-height: 1.45; }
+    .answer-evidence-row span { color: #697b8c; overflow-wrap: anywhere; }
     .msg.thinking { display: flex; align-items: flex-start; gap: 10px; color: #3d4f60; }
     .thinking-indicator { display: inline-flex; align-items: center; gap: 4px; min-width: 34px; }
     .thinking-indicator span { width: 7px; height: 7px; border-radius: 999px; background: #2f80ed; animation: pulse-dot 1.1s infinite ease-in-out; }
@@ -312,7 +324,7 @@ export function renderApp(): string {
     .msg.helper h1, .msg.helper h2, .msg.helper h3 { color: var(--text); white-space: normal; }
     .msg.helper code { background: var(--surface-strong); border-radius: 6px; font: 12px var(--font-mono); }
     .msg.helper pre { border-color: #263550; border-radius: var(--radius); background: #101828; font: 12px var(--font-mono); }
-    .msg.helper strong { color: var(--accent); font-weight: 800; }
+    .msg.helper strong { color: var(--accent); font-weight: 850; }
     .msg.thinking { color: var(--muted); }
     .msg.progress { width: min(720px, 90%); max-width: min(720px, 90%); padding: 0; border: 0; background: transparent; box-shadow: none; }
     .msg.progress.thinking { display: block; }
@@ -1935,7 +1947,7 @@ export function renderApp(): string {
         <label>Base URL<input id="rerankBaseUrl" value="https://api.siliconflow.cn/v1" /></label>
         <div class="field-row">
           <label>API Key 环境变量<input id="rerankApiKeyEnv" value="SILICONFLOW_API_KEY" /></label>
-          <label>Top N<input id="rerankTopN" type="number" value="2" /></label>
+          <label>Top N<input id="rerankTopN" type="number" value="8" /></label>
         </div>
         <label>API Key<input id="rerankApiKey" type="password" autocomplete="off" placeholder="可选：仅本次保存或测试使用" /></label>
         <div class="field-row">
@@ -2009,7 +2021,7 @@ export function renderApp(): string {
       document.getElementById('rerankModel').value = rerank.model || 'BAAI/bge-reranker-v2-m3';
       document.getElementById('rerankBaseUrl').value = rerank.baseUrl || 'https://api.siliconflow.cn/v1';
       document.getElementById('rerankApiKeyEnv').value = rerank.apiKeyEnv || 'SILICONFLOW_API_KEY';
-      document.getElementById('rerankTopN').value = rerank.topN || 2;
+      document.getElementById('rerankTopN').value = rerank.topN || 8;
       document.getElementById('claudeTimeoutMs').value = json.claude.timeoutMs ?? 1200000;
       document.getElementById('claudeMaxBudgetUsd').value = json.claude.maxBudgetUsd ?? '';
       document.getElementById('sessionBusyMaxRetries').value = json.claude.sessionBusyMaxRetries ?? 3;
@@ -2036,7 +2048,7 @@ export function renderApp(): string {
       const div = document.createElement('div');
       div.className = 'msg ' + role;
       if (role.includes('helper') && !role.includes('thinking') && options.rich !== false) {
-        div.innerHTML = renderRichText(body);
+        div.innerHTML = renderHelperMessage(body, options.result);
       } else {
         div.textContent = body;
       }
@@ -2140,9 +2152,19 @@ export function renderApp(): string {
           const meta = statePrefix + state + ' / ' + (session.lastMessage || '暂无消息');
           const pinAction = session.pinnedAt ? 'unpin' : 'pin';
           const pinLabel = session.pinnedAt ? '取消置顶' : '置顶';
-          return '<div class="session-item ' + (session.id === caseId ? 'active' : '') + '" title="' + escapeHtml(title + '\\n' + meta) + '"><button class="session-open" onclick="openSession(\\'' + escapeHtml(session.id) + '\\')"><span class="session-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span><span class="session-state status-' + escapeHtml(normalizeStatusClass(session.archivedAt ? 'archived' : session.status)) + '">' + escapeHtml(state) + '</span><span class="session-meta" title="' + escapeHtml(meta) + '">' + escapeHtml(meta) + '</span></button><div class="session-menu-wrap"><button class="session-more" onclick="toggleSessionMenu(event, \\'' + escapeHtml(session.id) + '\\')" title="更多选项">...</button><div class="session-menu" id="session-menu-' + escapeHtml(session.id) + '"><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'' + pinAction + '\\')">' + pinLabel + '</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'archive\\')">归档</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'delete\\')">删除</button></div></div></div>';
+          return '<div class="session-item ' + (session.id === caseId ? 'active' : '') + '" data-session-id="' + escapeHtml(session.id) + '" title="' + escapeHtml(title + '\\n' + meta) + '"><button class="session-open" onclick="openSession(\\'' + escapeHtml(session.id) + '\\')"><span class="session-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span><span class="session-state status-' + escapeHtml(normalizeStatusClass(session.archivedAt ? 'archived' : session.status)) + '">' + escapeHtml(state) + '</span><span class="session-meta" title="' + escapeHtml(meta) + '">' + escapeHtml(meta) + '</span></button><div class="session-menu-wrap"><button class="session-more" onclick="toggleSessionMenu(event, \\'' + escapeHtml(session.id) + '\\')" title="更多选项">...</button><div class="session-menu" id="session-menu-' + escapeHtml(session.id) + '"><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'' + pinAction + '\\')">' + pinLabel + '</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'archive\\')">归档</button><button onclick="sessionAction(event, \\'' + escapeHtml(session.id) + '\\', \\'delete\\')">删除</button></div></div></div>';
         }).join('')
         : '<div class="muted">' + (allSessions.length ? '没有符合筛选的会话。' : '还没有历史会话。') + '</div>';
+    }
+
+    function loadSessionsInBackground() {
+      loadSessions().catch(() => {});
+    }
+
+    function markActiveSession(id) {
+      document.querySelectorAll('.session-item').forEach((item) => {
+        item.classList.toggle('active', item.dataset.sessionId === id);
+      });
     }
 
     function toggleSessionMenu(event, id) {
@@ -2184,23 +2206,27 @@ export function renderApp(): string {
     }
 
     async function openSession(id) {
-      const res = await fetch('/api/session?caseId=' + encodeURIComponent(id));
+      const res = await fetch(lightweightSessionUrl(id));
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json.error || 'session load failed');
       }
       caseId = json.session.id;
       localStorage.setItem('super-helper.caseId', caseId);
+      markActiveSession(caseId);
       chat.innerHTML = '';
       for (const message of json.session.messages || []) {
-        add(message.role === 'user' ? 'user' : 'helper', message.body);
+        add(message.role === 'user' ? 'user' : 'helper', message.body, {
+          result: message.role === 'helper' ? findRunResultForMessage(json.session, message) : undefined,
+        });
       }
       if (!(json.session.messages || []).length) {
         showEmptyChat();
       }
       setCaseHeader(json.session);
       restorePendingTurn(json.session);
-      await loadSessions();
+      loadSessionsInBackground();
+      refreshCurrentKnowledgeHealth(json.session).catch(() => {});
     }
 
     function restorePendingTurn(session) {
@@ -2264,7 +2290,7 @@ export function renderApp(): string {
     async function pollSessionUntilSettled(pending, pollingCaseId, userMessageId) {
       let lastStatusText = '';
       while (true) {
-        const sessionRes = await fetch('/api/session?caseId=' + encodeURIComponent(pollingCaseId));
+        const sessionRes = await fetch(lightweightSessionUrl(pollingCaseId));
         const sessionJson = await sessionRes.json();
         if (!sessionRes.ok) {
           throw new Error(sessionJson.error || 'session load failed');
@@ -2283,8 +2309,13 @@ export function renderApp(): string {
         if (finished) {
           pending.classList.remove('thinking', 'progress');
           pending.textContent = '';
-          await typeWriter(pending, latestHelper.body || '本轮没有返回内容，请查看诊断日志。');
-          await loadSessions();
+          await typeWriter(
+            pending,
+            latestHelper.body || '本轮没有返回内容，请查看诊断日志。',
+            findRunResultForMessage(session, latestHelper),
+          );
+          loadSessionsInBackground();
+          refreshCurrentKnowledgeHealth(session).catch(() => {});
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -2465,7 +2496,7 @@ export function renderApp(): string {
       }
     }
 
-    async function typeWriter(element, text) {
+    async function typeWriter(element, text, result) {
       element.classList.remove('thinking', 'progress');
       element.classList.add('helper');
       const chars = Array.from(text);
@@ -2474,7 +2505,7 @@ export function renderApp(): string {
         chat.scrollTop = chat.scrollHeight;
         await new Promise((resolve) => setTimeout(resolve, 14));
       }
-      element.innerHTML = renderRichText(text);
+      element.innerHTML = renderHelperMessage(text, result);
     }
 
     async function openLogs() {
@@ -2563,7 +2594,7 @@ export function renderApp(): string {
         baseUrl: document.getElementById('rerankBaseUrl').value.trim(),
         apiKeyEnv: document.getElementById('rerankApiKeyEnv').value.trim(),
         apiKey: includeKey && apiKey ? apiKey : undefined,
-        topN: Number(document.getElementById('rerankTopN').value || 2)
+        topN: Number(document.getElementById('rerankTopN').value || 8)
       };
     }
 
@@ -2661,7 +2692,7 @@ export function renderApp(): string {
       document.getElementById('drawer').classList.remove('open');
     }
     async function newCase() {
-      const res = await fetch('/api/sessions', {
+      const res = await fetch('/api/sessions?includeKnowledgeHealth=false', {
         method: 'POST',
         headers: {'content-type': 'application/json'},
         body: JSON.stringify({ title: '新对话', persona: personaSelect.value })
@@ -2669,10 +2700,15 @@ export function renderApp(): string {
       const json = await res.json();
       caseId = json.session.id;
       localStorage.setItem('super-helper.caseId', caseId);
+      markActiveSession(caseId);
       chat.innerHTML = '';
       setCaseHeader(json.session);
       showEmptyChat();
-      await loadSessions();
+      loadSessionsInBackground();
+      refreshCurrentKnowledgeHealth(json.session).catch(() => {});
+    }
+    function lightweightSessionUrl(id) {
+      return '/api/session?caseId=' + encodeURIComponent(id) + '&includeKnowledgeHealth=false';
     }
     function errorMessage(error) {
       return error instanceof Error ? error.message : String(error);
@@ -2758,14 +2794,20 @@ export function renderApp(): string {
     function renderInsightEvidence(session) {
       const run = latestRunWithResult(session);
       const evidence = run?.result?.evidence || [];
+      const claims = (run?.result?.claims || []).filter((claim) => ['fact', 'inference'].includes(claim.type) && (claim.evidenceIds || []).length);
       const missing = run?.result?.missingInfo || [];
+      const claimRows = claims.length
+        ? claims.slice(0, 6).map((claim) => '<div class="evidence-row"><strong>' + escapeHtml(claim.type || 'claim') + '</strong><span>' + escapeHtml(claim.text || '') + '</span></div>').join('')
+        : '<div class="evidence-row placeholder-note"><strong>暂无已支持判断</strong><span>当前结果还没有通过审核的事实或推断。</span></div>';
       const rows = evidence.length
         ? evidence.slice(0, 6).map((item) => '<div class="evidence-row"><strong>' + escapeHtml(item.kind || 'evidence') + ' / ' + escapeHtml(item.confidence || 'unknown') + '</strong><span>' + escapeHtml(item.summary || '') + '</span><span>' + escapeHtml(item.source || '') + '</span></div>').join('')
         : '<div class="evidence-row placeholder-note"><strong>暂无结构化证据</strong><span>当前后端还没有把知识库 evidence pack 接入主聊天路径。现有证据会优先在诊断日志和最终回答里出现。</span></div>';
       const missingHtml = missing.length
         ? '<div class="insight-card"><strong>未知项</strong>' + missing.slice(0, 5).map((item) => '<p>' + escapeHtml(item) + '</p>').join('') + '</div>'
         : '';
-      return '<div class="insight-card"><strong>证据列表</strong><p>这里展示当前 case 已返回的结构化 evidence。后续知识库接入后，会显示 FAQ、runbook、solved case 和白皮书切片。</p></div>'
+      return '<div class="insight-card"><strong>已支持判断</strong><p>先看通过审核的事实或推断，再查看下方证据来源。</p></div>'
+        + claimRows
+        + '<div class="insight-card"><strong>证据列表</strong><p>这里展示当前 case 已返回的结构化 evidence。后续知识库接入后，会显示 FAQ、runbook、solved case 和白皮书切片。</p></div>'
         + rows
         + missingHtml;
     }
@@ -2857,6 +2899,25 @@ export function renderApp(): string {
       if (health.search?.status === 'warn') return '知识未命中';
       return '知识库正常';
     }
+    async function refreshCurrentKnowledgeHealth(session) {
+      if (!session?.id || !session.workspaceId) {
+        return;
+      }
+      const targetCaseId = session.id;
+      const workspaceId = session.workspaceId;
+      const query = latestUserQuery(session) || session.title || '';
+      const res = await fetch('/api/knowledge/health?workspaceId=' + encodeURIComponent(workspaceId) + '&query=' + encodeURIComponent(query));
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || '请求失败：HTTP ' + res.status);
+      }
+      if (caseId !== targetCaseId || !json.knowledgeHealth) {
+        return;
+      }
+      currentSession = { ...(currentSession || session), knowledgeHealth: json.knowledgeHealth };
+      setCaseHeader(currentSession);
+      updateInsightPanel(currentSession);
+    }
     async function healthAction(action) {
       if (!currentSession?.workspaceId) {
         knowledgeActionNotice = '请先打开一个会话，再检查或绑定当前服务的知识库。';
@@ -2931,6 +2992,69 @@ export function renderApp(): string {
       activeInsightTab = 'progress';
       setInsightTab('progress');
     }
+    function renderHelperMessage(text, result) {
+      const split = splitLegacyEvidenceSections(text);
+      const bodyHtml = '<div class="answer-body">' + renderRichText(split.body || text) + '</div>';
+      return bodyHtml + renderAnswerEvidence(result, split);
+    }
+    function renderAnswerEvidence(result, legacy) {
+      const claims = (result?.claims || [])
+        .filter((claim) => ['fact', 'inference'].includes(claim.type) && (claim.evidenceIds || []).length)
+        .map((claim) => claim.text);
+      const evidence = (result?.evidence || [])
+        .filter((item) => item.confidence !== 'low')
+        .map((item) => ({
+          summary: item.summary || '',
+          source: item.source || '',
+          confidence: item.confidence || 'unknown',
+        }));
+      const claimRows = (claims.length ? claims : legacy.claims).slice(0, 4);
+      const evidenceRows = (evidence.length ? evidence : legacy.evidence).slice(0, 3);
+      const count = claimRows.length + evidenceRows.length;
+      if (!count) return '';
+      const claimsHtml = claimRows.length
+        ? '<div class="answer-evidence-group"><strong class="answer-section-title">已支持判断</strong>' + claimRows.map((claim, index) => '<div class="answer-evidence-row"><b>' + (index + 1) + '. ' + escapeHtml(claim) + '</b></div>').join('') + '</div>'
+        : '';
+      const evidenceHtml = evidenceRows.length
+        ? '<div class="answer-evidence-group"><strong class="answer-section-title">关键证据</strong>' + evidenceRows.map((item, index) => '<div class="answer-evidence-row"><b>' + (index + 1) + '. ' + escapeHtml(item.summary) + '</b><span>' + escapeHtml(item.source ? item.source + ' · 可信度：' + item.confidence : '可信度：' + item.confidence) + '</span></div>').join('') + '</div>'
+        : '';
+      return '<details class="answer-evidence"><summary>查看关键证据（' + count + '）</summary><div class="answer-evidence-body">' + claimsHtml + evidenceHtml + '</div></details>';
+    }
+    function splitLegacyEvidenceSections(text) {
+      const raw = String(text || '');
+      const supportIndex = raw.search(/\\n支撑证据：|^支撑证据：/m);
+      const supportedIndex = raw.search(/\\n已支持判断：|^已支持判断：/m);
+      const firstIndex = [supportIndex, supportedIndex].filter((index) => index >= 0).sort((a, b) => a - b)[0];
+      const body = firstIndex >= 0 ? raw.slice(0, firstIndex).trim() : raw;
+      const supportText = supportIndex >= 0
+        ? raw.slice(supportIndex, supportedIndex > supportIndex ? supportedIndex : raw.length)
+        : '';
+      const supportedText = supportedIndex >= 0
+        ? raw.slice(supportedIndex, supportIndex > supportedIndex ? supportIndex : raw.length)
+        : '';
+      return {
+        body,
+        claims: extractNumberedLines(supportedText.replace(/已支持判断：/, '')),
+        evidence: extractNumberedLines(supportText.replace(/支撑证据：/, '')).map((line) => ({
+          summary: line.replace(/（来源：[\\s\\S]*$/, '').trim(),
+          source: (line.match(/来源：([^，）]+)/)?.[1] || '').trim(),
+          confidence: (line.match(/可信度：([^）]+)/)?.[1] || 'unknown').trim(),
+        })),
+      };
+    }
+    function extractNumberedLines(text) {
+      return String(text || '')
+        .split(/\\n+/)
+        .map((line) => line.trim().replace(/^\\d+\\.\\s*/, '').replace(/^[-*]\\s*/, ''))
+        .filter(Boolean);
+    }
+    function findRunResultForMessage(session, message) {
+      if (!session || !message?.replyToMessageId) return latestRunWithResult(session)?.result;
+      const matched = [...(session.runs || [])].reverse().find((run) =>
+        run.result && run.request?.context?.resolvedTurn?.latestUserMessageId === message.replyToMessageId
+      );
+      return matched?.result || latestRunWithResult(session)?.result;
+    }
     function renderRichText(text) {
       const preBlocks = [];
       const tokenized = String(text).replace(/<pre>\\n?([\\s\\S]*?)\\n?<\\/pre>/g, (_match, raw) => {
@@ -2942,7 +3066,7 @@ export function renderApp(): string {
         .replace(/^###\\s+(.+)$/gm, '<h3>$1</h3>')
         .replace(/^##\\s+(.+)$/gm, '<h2>$1</h2>')
         .replace(/^#\\s+(.+)$/gm, '<h1>$1</h1>')
-        .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\*\\*(.+?)\\*\\*/g, '<strong class="answer-emphasis">$1</strong>')
         .replace(new RegExp('\\\\x60([^\\\\x60]+)\\\\x60', 'g'), '<code>$1</code>')
         .replace(/^(?:-|\\*)\\s+(.+)$/gm, '<li>$1</li>');
       html = html.replace(/(<li>[\\s\\S]*?<\\/li>)(?!(?:\\n?<li>))/g, '<ul>$1</ul>');

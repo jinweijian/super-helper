@@ -131,6 +131,33 @@ test('deleted compatibility symbols are not re-exported or routed under new name
   );
 });
 
+test('root deprecation re-exports match owner module symbols', async () => {
+  const [
+    oldModel,
+    newModel,
+    oldSmoke,
+    newSmoke,
+    oldPreflight,
+    newPreflight,
+    oldStorage,
+    newStorage,
+  ] = await Promise.all([
+    import('../dist/model.js'),
+    import('../dist/providers/model/adapter.js'),
+    import('../dist/model-smoke-test.js'),
+    import('../dist/providers/model/smoke-test.js'),
+    import('../dist/preflight.js'),
+    import('../dist/runtime/preflight-decision.js'),
+    import('../dist/storage.js'),
+    import('../dist/sessions/file-memory-store.js'),
+  ]);
+
+  assert.equal(oldModel.createModelClient, newModel.createModelClient);
+  assert.equal(oldSmoke.runModelSmokeTest, newSmoke.runModelSmokeTest);
+  assert.equal(oldPreflight.preflight, newPreflight.preflight);
+  assert.equal(oldStorage.FileMemoryStore, newStorage.FileMemoryStore);
+});
+
 test('retrieval CLI uses configured retrieval instead of manual BM25-only wiring', () => {
   assertNoImportPattern(
     [join(srcRoot, 'cli', 'command-retrieval.ts')],
@@ -354,6 +381,19 @@ test('gateway settings route delegates settings orchestration to settings servic
       /from\s+['"]\.\.\/\.\.\/(?:embedding|providers|model-smoke-test|runtime)\/?/,
     ],
     'settings route must stay at HTTP/body/status/serialization boundary and delegate orchestration',
+  );
+});
+
+test('gateway delegates knowledge health and worker construction to owner services', () => {
+  assertNoImportPattern(
+    tsFilesUnder(join(srcRoot, 'gateway')),
+    [
+      /\bbuildKnowledgeHealthSummary\b/,
+      /\bcreateConfiguredKnowledgeRetriever\b/,
+      /\bnew\s+ClaudeCodeWorker\b/,
+      /from\s+['"][^'"]*workers\/claude\/claude-code-worker\.js['"]/,
+    ],
+    'gateway must not own knowledge health orchestration or concrete worker construction',
   );
 });
 

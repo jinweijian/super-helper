@@ -1,13 +1,15 @@
-import { defaultConfig, type SuperHelperConfig } from '../config.js';
+import { defaultConfig, resolveEmbeddingSecret, resolveSecret, type SuperHelperConfig } from '../config.js';
+import { loadKnowledgeTaxonomy } from '../knowledge/taxonomy.js';
 import type { KnowledgeEvidencePack, KnowledgeSearchQuery } from '../knowledge/types.js';
 import { formatProviderSafeError } from '../providers/errors.js';
 import type { EmbeddingProvider } from '../providers/embedding/contract.js';
 import { createEmbeddingProvider } from '../providers/embedding/factory.js';
 import type { RerankProvider } from '../providers/rerank/contract.js';
 import { createRerankProvider } from '../providers/rerank/factory.js';
+import { normalizeAndExpandQuery } from './query/normalize.js';
 import { createDefaultRetrievalStrategies } from './registry.js';
 import { createProviderReranker } from './rerank/service.js';
-import { createRetrievalService, type RetrievalService } from './service.js';
+import { createRetrievalService, type QueryNormalizer, type RetrievalService } from './service.js';
 import type { RetrievalTrace } from './types.js';
 
 interface ProviderResolution<T> {
@@ -34,7 +36,16 @@ export function createConfiguredRetrievalService(config: SuperHelperConfig): Ret
     rerankerUnavailableReason: rerank.reason,
     recallLimit: 40,
     fusionLimit: 20,
+    // configured-search 注入带 taxonomy aliases 的 normalizer；service 不直接依赖 knowledge 模块。
+    queryNormalizer: createConfiguredQueryNormalizer(),
   });
+}
+
+function createConfiguredQueryNormalizer(): QueryNormalizer {
+  return (query, workspaceRoot) => {
+    const taxonomy = loadKnowledgeTaxonomy(workspaceRoot);
+    return normalizeAndExpandQuery({ query, aliases: taxonomy.aliases });
+  };
 }
 
 export interface ConfiguredKnowledgeRetrievalResult {
@@ -91,6 +102,10 @@ function resolveConfiguredEmbeddingProvider(
   if (config.enabled !== true) {
     return { reason: 'embedding disabled' };
   }
+  if (config.provider !== 'fake' && !resolveEmbeddingSecret(config)) {
+    // 默认 enabled=true 但无 API key 时优雅降级为纯 BM25，避免 strategy 进入 failed 状态。
+    return { reason: 'embedding unavailable: missing API key' };
+  }
   try {
     return { provider: createEmbeddingProvider(config) };
   } catch (error) {
@@ -103,6 +118,9 @@ function resolveConfiguredRerankProvider(
 ): ProviderResolution<RerankProvider> {
   if (config.enabled !== true) {
     return { reason: 'rerank disabled' };
+  }
+  if (config.provider !== 'fake' && !resolveSecret(config.apiKey, config.apiKeyEnv)) {
+    return { reason: 'rerank unavailable: missing API key' };
   }
   try {
     return { provider: createRerankProvider(config) };

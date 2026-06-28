@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { SuperHelperConfig } from '../config.js';
+import { resolveEmbeddingSecret, resolveSecret, type SuperHelperConfig } from '../config.js';
 import {
   routeKnowledgeQuestion,
   type KnowledgeEvidencePack,
@@ -162,7 +162,9 @@ export async function runRuntimeRetrievalEvaluation(input: {
     version: 1,
     generatedAt: new Date().toISOString(),
     passed: input.questions.length > 0 && releaseQuestions.every((question) => question.passed) && metricsPassed,
-    offline: input.config.embedding.enabled !== true && input.config.rerank.enabled !== true,
+    // offline = 没有 embedding/rerank 真正可用（enabled 但无 key 时优雅降级为纯 BM25，仍算 offline）。
+    offline: !providerWillRun(input.config.embedding.enabled, input.config.embedding.provider, resolveEmbeddingSecret(input.config.embedding))
+      && !providerWillRun(input.config.rerank.enabled, input.config.rerank.provider, resolveSecret(input.config.rerank.apiKey, input.config.rerank.apiKeyEnv)),
     questionCount: input.questions.length,
     thresholds,
     metrics,
@@ -176,6 +178,12 @@ export async function runRuntimeRetrievalEvaluation(input: {
     writeFileSync(input.reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   }
   return report;
+}
+
+function providerWillRun(enabled: boolean | undefined, provider: string | undefined, secret: string | undefined): boolean {
+  if (enabled !== true) return false;
+  if (provider === 'fake') return true;
+  return Boolean(secret);
 }
 
 export function loadRuntimeRetrievalEvaluationQuestions(

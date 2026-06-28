@@ -18,6 +18,13 @@ export interface RetrievalInput {
   intentCandidates?: string[];
   sourceTypes?: KnowledgeSourceType[];
   visibility?: KnowledgeVisibility[];
+  normalizedQuery?: NormalizedQuery;
+}
+
+export interface NormalizedQuery {
+  original: string;
+  normalized: string;
+  expandedTerms: string[];
 }
 
 export interface RetrievalCandidate {

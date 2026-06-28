@@ -6,13 +6,14 @@ import {
   runRerankSmokeTest,
   type RerankProviderHealthCheckResult,
 } from '../providers/rerank/index.js';
-import { runModelSmokeTest, type ModelSmokeTestResult } from '../model-smoke-test.js';
+import { runModelSmokeTest, type ModelSmokeTestResult } from '../providers/model/smoke-test.js';
 import type { OnboardingDraft } from './types.js';
+import { providerHasExecutionCredentials } from './provider-credentials.js';
 
 export interface SkippedProviderTestResult {
   ok: true;
   skipped: true;
-  reason: 'disabled';
+  reason: 'disabled' | 'missing_credentials';
 }
 
 export interface OnboardingProviderTestResult {
@@ -38,16 +39,22 @@ export async function testOnboardingProviders(
   draft: OnboardingDraft,
   dependencies: ProviderTestDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<OnboardingProviderTestResult> {
-  const skipped = (): SkippedProviderTestResult => ({
+  const skipped = (reason: SkippedProviderTestResult['reason']): SkippedProviderTestResult => ({
     ok: true,
     skipped: true,
-    reason: 'disabled',
+    reason,
   });
+  const embeddingReady = draft.embedding.enabled && providerHasExecutionCredentials(draft.embedding);
+  const rerankReady = draft.rerank.enabled && providerHasExecutionCredentials(draft.rerank);
 
   const [agent, embedding, rerank] = await Promise.all([
     dependencies.testAgent(draft),
-    draft.embedding.enabled ? dependencies.testEmbedding(draft) : Promise.resolve(skipped()),
-    draft.rerank.enabled ? dependencies.testRerank(draft) : Promise.resolve(skipped()),
+    embeddingReady
+      ? dependencies.testEmbedding(draft)
+      : Promise.resolve(skipped(draft.embedding.enabled ? 'missing_credentials' : 'disabled')),
+    rerankReady
+      ? dependencies.testRerank(draft)
+      : Promise.resolve(skipped(draft.rerank.enabled ? 'missing_credentials' : 'disabled')),
   ]);
 
   return {

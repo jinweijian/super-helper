@@ -55,12 +55,6 @@ export function validateOnboardingDraft(
     if (draft.embedding.timeoutMs !== undefined && !isPositiveInteger(draft.embedding.timeoutMs)) {
       add('embedding.timeoutMs', 'invalid_number', 'Embedding timeout must be a positive integer.');
     }
-    if (
-      draft.embedding.provider !== 'fake'
-      && !hasProviderSecret(draft.embedding, dependencies.resolveSecret)
-    ) {
-      add('embedding.apiKeyRef', 'missing_credentials', 'Embedding provider credentials are required.');
-    }
   }
 
   if (draft.rerank.enabled) {
@@ -69,9 +63,6 @@ export function validateOnboardingDraft(
     }
     if (draft.rerank.timeoutMs !== undefined && !isPositiveInteger(draft.rerank.timeoutMs)) {
       add('rerank.timeoutMs', 'invalid_number', 'Rerank timeout must be a positive integer.');
-    }
-    if (draft.rerank.provider !== 'fake' && !hasProviderSecret(draft.rerank, dependencies.resolveSecret)) {
-      add('rerank.apiKeyRef', 'missing_credentials', 'Rerank provider credentials are required.');
     }
   }
 

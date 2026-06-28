@@ -25,6 +25,7 @@ export async function runKnowledgeWorkspaceCommand(
       force: hasFlag(argv, '--force'),
       legacyActivePublish,
       qualityGate: gate,
+      chunking: context.config.knowledge.chunking,
     });
     console.log('knowledge workspace ready');
     console.log(`workspace: ${context.projectWorkspaceRoot}`);
@@ -48,7 +49,11 @@ export async function runKnowledgeWorkspaceCommand(
 
   if (subcommand === 'update') {
     const gate = readQualityGateArg(argv, 'warn');
-    const result = updateKnowledgeIndexWithQuality({ workspaceRoot, qualityGate: gate });
+    const result = updateKnowledgeIndexWithQuality({
+      workspaceRoot,
+      qualityGate: gate,
+      chunking: context.config.knowledge.chunking,
+    });
     console.log('knowledge index updated');
     console.log(`workspace: ${context.projectWorkspaceRoot}`);
     console.log(`knowledge workspace: ${workspaceRoot}`);

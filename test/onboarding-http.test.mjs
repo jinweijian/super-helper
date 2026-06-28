@@ -29,11 +29,13 @@ class FakeOnboardingService {
     this.draft = undefined;
     this.run = undefined;
     this.listeners = new Set();
+    this.lastReviewQuery = undefined;
   }
   getState() {
     return { completed: this.completed, needsReview: this.review.required, draft: this.draft, latestRun: this.run, review: this.review };
   }
-  getReviewState() {
+  getReviewState(query) {
+    this.lastReviewQuery = query;
     return this.review;
   }
   async submitReview() {
@@ -140,12 +142,38 @@ test('setup UI contains QuickStart, advanced settings, progress, and retry contr
   const html = renderSetupApp();
   assert.match(html, /QuickStart/);
   assert.match(html, /高级设置/);
+  assert.match(html, /id="topN" type="number" value="8"/);
   assert.match(html, /检查并执行/);
   assert.match(html, /EventSource/);
   assert.match(html, /从失败阶段重试/);
   assert.match(html, /可信内网/);
   assert.match(html, /审核知识切片/);
   assert.match(html, /开始使用/);
+});
+
+test('setup UI exposes paged multi-select review controls', () => {
+  const html = renderSetupApp();
+  assert.match(html, /id="reviewSeverity"/);
+  assert.match(html, /id="reviewSearch"/);
+  assert.match(html, /id="reviewPrevButton"/);
+  assert.match(html, /id="reviewNextButton"/);
+  assert.match(html, /id="selectReviewPageButton"/);
+  assert.match(html, /id="clearReviewSelectionButton"/);
+  assert.match(html, /id="acceptSelectedReviewButton"/);
+  assert.match(html, /id="requestEditsReviewButton"/);
+  assert.match(html, /id="rejectReviewButton"/);
+  assert.match(html, /发布选中/);
+  assert.match(html, /退回修改/);
+  assert.match(html, /不发布选中/);
+});
+
+test('setup UI hydrates form fields from onboarding draft snapshot', () => {
+  const html = renderSetupApp();
+  assert.match(html, /hydrateDraft\(snapshot\.draft\)/);
+  assert.match(html, /function hydrateDraft\(draft\)/);
+  assert.match(html, /\$\('workspacePath'\)\.value = draft\.workspace\?\.rootPath/);
+  assert.match(html, /\$\('agentBaseUrl'\)\.value = draft\.agent\?\.provider\?\.baseUrl/);
+  assert.match(html, /\$\('agentKey'\)\.placeholder = draft\.agent\?\.provider\?\.hasApiKey/);
 });
 
 test('setup UI exposes the renamed path labels and directory picker buttons', () => {
@@ -201,6 +229,22 @@ test('onboarding review API exposes and clears pending review state', async () =
     }).then((res) => res.json());
     assert.equal(reviewed.review.required, false);
     assert.equal(reviewed.publishedSlices, 1);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('onboarding review API passes pagination and filters to service', async () => {
+  const fixture = await startOnboardingServer({ completed: true, needsReview: true });
+  try {
+    const response = await fetch(`${fixture.url}/api/onboarding/review?offset=20&limit=10&severity=warn&search=${encodeURIComponent('登录')}`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(fixture.service.lastReviewQuery, {
+      offset: 20,
+      limit: 10,
+      severity: 'warn',
+      search: '登录',
+    });
   } finally {
     await fixture.close();
   }

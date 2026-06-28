@@ -1,5 +1,5 @@
 import type { DiagnosticRequest } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { ReviewPresentationResult } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';

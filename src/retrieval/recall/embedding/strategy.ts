@@ -42,7 +42,8 @@ export function createEmbeddingRecallStrategy(input: EmbeddingRecallStrategyOpti
           throw new Error(compatibility.reason ?? compatibility.status);
         }
       }
-      const queryVector = await input.provider.embedQuery({ text: recallInput.query });
+      const queryText = recallInput.normalizedQuery?.normalized ?? recallInput.query;
+      const queryVector = await input.provider.embedQuery({ text: queryText });
       const searched = searchVectorArtifactsWithFilters({
         workspaceRoot: recallInput.workspaceRoot,
         queryVector: queryVector.vector,

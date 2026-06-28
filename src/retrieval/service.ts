@@ -2,6 +2,7 @@ import { retrievalCandidatesToEvidencePack } from './evidence-pack.js';
 import { redactProviderErrorMessage } from '../providers/redaction.js';
 import { fuseWithRrf } from './fusion/rrf.js';
 import { normalizeStrategyCandidates } from './fusion/normalize.js';
+import type { NormalizedQuery } from './query/normalize.js';
 import type { RecallStrategy } from './recall/contract.js';
 import type { RetrievalReranker } from './rerank/service.js';
 import { createEmptyRetrievalTrace } from './trace.js';
@@ -16,12 +17,15 @@ export interface RetrievalService {
   retrieve(input: RetrievalInput): Promise<RetrievalResult>;
 }
 
+export type QueryNormalizer = (query: string, workspaceRoot: string) => NormalizedQuery;
+
 export function createRetrievalService(input: {
   strategies: RecallStrategy[];
   reranker?: RetrievalReranker;
   rerankerUnavailableReason?: string;
   recallLimit?: number;
   fusionLimit?: number;
+  queryNormalizer?: QueryNormalizer;
 }): RetrievalService {
   return {
     async retrieve(request) {
@@ -29,6 +33,8 @@ export function createRetrievalService(input: {
       const recallLimit = input.recallLimit ?? limit;
       const fusionLimit = input.fusionLimit ?? recallLimit;
       const trace = createEmptyRetrievalTrace();
+      const normalizedQuery = request.normalizedQuery ?? input.queryNormalizer?.(request.query, request.workspaceRoot);
+      const recallRequest = { ...request, normalizedQuery };
       const recalled: RetrievalCandidate[] = [];
       const filteredOut: Array<{ reason: string; count: number }> = [];
 
@@ -45,7 +51,7 @@ export function createRetrievalService(input: {
           continue;
         }
         try {
-          const result = await strategy.recall({ ...request, limit: recallLimit });
+          const result = await strategy.recall({ ...recallRequest, limit: recallLimit });
           const normalized = normalizeStrategyCandidates({
             strategyId: strategy.id,
             candidates: result.candidates,
@@ -72,22 +78,27 @@ export function createRetrievalService(input: {
       }
 
       const fused = fuseWithRrf(recalled);
+      // dedupe 在 rerank 之前：同 parent 的多个 child 合并为代表，避免重复消耗 rerank 配额，
+      // 也避免两条 rerank 结果恰好同 parent 而在去重后只剩一条有效。
+      const fusionSliced = fused.candidates.slice(0, fusionLimit);
+      let candidates = dedupeRetrievalCandidatesByParent(fusionSliced);
+      const parentDedupeCount = fusionSliced.length - candidates.length;
       trace.fusion = {
         method: 'rrf',
         inputCount: fused.inputCount,
-        dedupedCount: fused.dedupedCount,
-        finalCandidateCount: fused.candidates.length,
+        // 策略级 chunk 去重 + parent 去重合并计入 dedupedCount，反映 fusion 阶段总缩减量。
+        dedupedCount: fused.dedupedCount + parentDedupeCount,
+        finalCandidateCount: candidates.length,
       };
-
-      let candidates = fused.candidates.slice(0, fusionLimit);
       if (input.reranker && candidates.length > 0) {
         try {
           trace.rerank = {
             status: 'ran',
             inputCount: candidates.length,
           };
+          // rerank 用 original query（避免扩展噪声干扰 cross-encoder）。
           const reranked = await input.reranker.rerank({
-            query: request.query,
+            query: normalizedQuery?.original ?? request.query,
             candidates,
             limit,
           });
@@ -110,7 +121,7 @@ export function createRetrievalService(input: {
         };
       }
 
-      const finalCandidates = dedupeRetrievalCandidatesByParent(candidates).slice(0, limit);
+      const finalCandidates = candidates.slice(0, limit);
       trace.fusion.finalCandidateCount = finalCandidates.length;
       trace.filters = filteredOut;
       return {

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { defaultConfig } from '../dist/config.js';
 
 function tempRoot(prefix = 'super-helper-cli-routing-') {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -16,6 +17,13 @@ function runCli(args) {
     encoding: 'utf8',
     env: { ...process.env },
   });
+}
+
+function writeDisabledProvidersConfig(home) {
+  const config = { ...defaultConfig(), embedding: { ...defaultConfig().embedding, enabled: false }, rerank: { ...defaultConfig().rerank, enabled: false } };
+  config.storage.rootDir = home;
+  config.knowledge.rootDir = join(home, 'knowledge');
+  writeFileSync(join(home, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);
 }
 
 test('CLI routes status without starting the server', () => {
@@ -137,6 +145,7 @@ test('CLI does not register removed knowledge query and eval commands', () => {
 test('CLI routes embedding and rerank smoke tests without network when disabled', () => {
   const home = tempRoot();
   try {
+    writeDisabledProvidersConfig(home);
     const embedding = runCli(['embedding', 'test', '--home', home]);
     assert.equal(embedding.status, 0, embedding.stderr);
     assert.match(embedding.stdout, /embedding disabled/);
@@ -177,9 +186,9 @@ test('knowledge CLI preserves invalid quality gate, disabled vector, and unknown
       '--knowledge-root',
       knowledgeRoot,
     ]);
-    assert.equal(disabledVector.status, 1);
-    assert.match(disabledVector.stdout, /embedding disabled/);
-    assert.match(disabledVector.stdout, /provider: siliconflow/);
+    // 默认 enabled=true 但无 API key 且无 chunks 时优雅完成：不调用网络，返回 0 向量。
+    assert.equal(disabledVector.status, 0, disabledVector.stderr);
+    assert.match(disabledVector.stdout, /vectors: 0/);
 
     const unknown = runCli(['knowledge', 'does-not-exist', '--workspace', workspace, '--knowledge-root', knowledgeRoot]);
     assert.equal(unknown.status, 1);

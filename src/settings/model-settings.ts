@@ -1,6 +1,6 @@
 import type { ModelProviderConfig, SuperHelperConfig } from '../config.js';
 import { inferModelContextWindowTokens, saveConfig } from '../config.js';
-import { runModelSmokeTest } from '../model-smoke-test.js';
+import { runModelSmokeTest } from '../providers/model/smoke-test.js';
 import type { ModelSettingsInput, SettingsSecretStore } from './contracts.js';
 import { publicSettings } from './public-view.js';
 import { applySubmittedSecret } from './secrets.js';

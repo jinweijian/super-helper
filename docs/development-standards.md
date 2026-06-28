@@ -224,22 +224,49 @@ Agent events must include Agent identity metadata so the diagnostic log and load
 
 Preserve established phases unless a documented migration is added:
 
-- `conversation_started`
-- `input_received`
-- `persona_agent_result`
-- `input_review_started`
-- `preflight_started`
-- `local_preflight_result`
-- `model_preflight_result`
-- `preflight_decision`
-- `diagnostic_request`
+- `case_curator_result`
+- `case_curator_started`
+- `case_review_failed`
+- `case_review_result`
+- `case_review_started`
+- `code_escalation_requested`
 - `command`
-- `raw_output`
+- `conversation_started`
+- `deep_query_pivot_selected`
+- `deep_query_retry_requested`
+- `deep_query_stopped`
+- `diagnostic_request`
+- `evidence_judge_result`
+- `evidence_judge_started`
 - `evidence_review_started`
+- `evidence_validation_result`
+- `experience_candidates_rejected`
+- `experience_hit`
+- `experience_miss`
+- `experience_started`
+- `follow_up_diagnostic_requested`
+- `input_received`
+- `input_review_started`
+- `knowledge_answer_selected`
+- `knowledge_retrieval_trace`
+- `knowledge_router_result`
+- `knowledge_router_started`
+- `knowledge_search_result`
+- `knowledge_search_started`
+- `local_preflight_result`
+- `model_preflight_failed`
+- `model_preflight_overridden_by_local_dispatch`
+- `model_preflight_result`
+- `model_review_failed`
 - `model_review_result`
+- `persona_agent_result`
+- `preflight_decision`
+- `preflight_started`
 - `presentation_agent_result`
-- `user_reply`
+- `raw_output`
+- `resolution_confirmed`
 - `turn_failed`
+- `user_reply`
 
 Do not scatter ad hoc log event objects through unrelated modules.
 

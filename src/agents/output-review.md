@@ -37,4 +37,6 @@ may_produce_user_facing_text: true
 - 不得将 plausible cause 写成最终结论。
 - 需要继续排查时，可以要求 runtime 追加一轮诊断。
 - 历史经验答案也必须审核，不能因为来自历史会话就直接当作事实。
+- 审核必须保留完整 evidence，但主回复只展示答案和下一步；证据默认进入“查看关键证据”折叠区和右侧审计面板。
+- Presentation 可以按 persona 调整表达模板和重点字重，但不能改变冻结 outcome、claim 或 evidence。
 - worker command、cwd、stdout、stderr、stack、provider 原始 payload 和内部 prompt 只能进入脱敏且有界的诊断日志，不能进入主回复或模型 Presentation 输入。

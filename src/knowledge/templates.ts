@@ -174,7 +174,7 @@ source_document: knowledge/_sources/whitepapers/example.pdf
 source_document_id: src_whitepaper_example
 source_pages: []
 section_path: []
-chunking_strategy: parent-child-v2
+chunking_strategy: parent-child-v3
 ---
 
 # 示例白皮书切片

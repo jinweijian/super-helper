@@ -29,4 +29,6 @@ export { scoreFieldWeightedBm25, KNOWLEDGE_FIELD_WEIGHTS } from './recall/bm25/f
 export type { Bm25KnowledgeField, FieldWeightedBm25Document, FieldWeightedBm25Result } from './recall/bm25/field-scorer.js';
 export { createProviderReranker } from './rerank/service.js';
 export type { RetrievalReranker } from './rerank/service.js';
+export { normalizeAndExpandQuery } from './query/normalize.js';
+export type { NormalizedQuery, NormalizeAndExpandQueryInput, QueryAlias } from './query/normalize.js';
 export { retrievalCandidatesToEvidencePack } from './evidence-pack.js';

@@ -1,6 +1,6 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { CaseStatus, DiagnosticResult, DiagnosticRun, DiagnosticRunStatus } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from './file-memory-store.js';
 
 const ACTIVE_CASE_STATUSES: CaseStatus[] = ['ready_for_diagnosis', 'diagnosing'];
 const ACTIVE_RUN_STATUSES: DiagnosticRunStatus[] = ['queued', 'running'];

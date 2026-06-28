@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticResult, DiagnosticRun } from '../domain.js';
-import type { AgentModelClient } from '../model.js';
-import type { StoredCase } from '../storage.js';
+import type { AgentModelClient } from '../providers/model/adapter.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 import type { ReviewPresentationResult } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';

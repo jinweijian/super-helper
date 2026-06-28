@@ -4,9 +4,34 @@ import { chunksPath, dirtyFlagPath } from '../paths.js';
 import type { KnowledgeChunk, KnowledgeDocument } from '../types.js';
 import { extractKnowledgeTerms } from './terms.js';
 
+export interface KnowledgeChunkingOptions {
+  maxChars?: number;
+  overlapStrategy?: 'sentence' | 'sliding';
+  overlapChars?: number;
+  minChars?: number;
+}
+
+interface NormalizedChunkingOptions {
+  maxChars: number;
+  overlapStrategy: 'sentence' | 'sliding';
+  overlapChars: number;
+  minChars: number;
+}
+
+const DEFAULT_CHUNKING_OPTIONS: NormalizedChunkingOptions = {
+  maxChars: 800,
+  overlapStrategy: 'sentence',
+  overlapChars: 120,
+  minChars: 80,
+};
+
+const CURRENT_CHUNKING_STRATEGY = 'parent-child-v3';
+const CURRENT_ARTIFACT_VERSION = 3;
+
 export function loadKnowledgeChunksForSearch(
   workspaceRoot: string,
   documents: KnowledgeDocument[],
+  options?: KnowledgeChunkingOptions,
 ): KnowledgeChunk[] {
   const path = chunksPath(workspaceRoot);
   if (existsSync(path) && !existsSync(dirtyFlagPath(workspaceRoot))) {
@@ -25,20 +50,24 @@ export function loadKnowledgeChunksForSearch(
       return parsed;
     }
   }
-  return buildKnowledgeChunks(documents);
+  return buildKnowledgeChunks(documents, options);
 }
 
-export function buildKnowledgeChunks(documents: KnowledgeDocument[]): KnowledgeChunk[] {
-  return documents.flatMap((document) => chunkDocument(document));
+export function buildKnowledgeChunks(
+  documents: KnowledgeDocument[],
+  options?: KnowledgeChunkingOptions,
+): KnowledgeChunk[] {
+  const chunking = normalizeChunkingOptions(options);
+  return documents.flatMap((document) => chunkDocument(document, chunking));
 }
 
-function chunkDocument(document: KnowledgeDocument): KnowledgeChunk[] {
+function chunkDocument(document: KnowledgeDocument, options: NormalizedChunkingOptions): KnowledgeChunk[] {
   const frontmatter = document.frontmatter;
   const sections = sectionBlocks(document);
   if (sections.length === 0) {
     return [];
   }
-  const drafts = buildSectionChildren(sections);
+  const drafts = buildSectionChildren(sections, options);
   return drafts.map((draft, index) => {
     const childOrder = index + 1;
     const sourceBlockIds = sourceBlocksForChild(frontmatter.source_block_ids ?? [], draft.blockIndexes);
@@ -77,8 +106,8 @@ function chunkDocument(document: KnowledgeDocument): KnowledgeChunk[] {
       parent_title: frontmatter.title,
       parent_terms: [...frontmatter.related_terms],
       quality_status: frontmatter.quality_status,
-      chunking_strategy: 'parent-child-v2',
-      artifact_version: 2,
+      chunking_strategy: CURRENT_CHUNKING_STRATEGY,
+      artifact_version: CURRENT_ARTIFACT_VERSION,
       legacy: false,
       manual_split_required: draft.manualSplitRequired || undefined,
       overlap_chars: draft.overlapChars || undefined,
@@ -139,16 +168,16 @@ function sectionBlocks(document: KnowledgeDocument): SectionBlock[] {
   return blocks;
 }
 
-function buildSectionChildren(blocks: SectionBlock[]): ChildDraft[] {
+function buildSectionChildren(blocks: SectionBlock[], options: NormalizedChunkingOptions): ChildDraft[] {
   const bySection = new Map<string, SectionBlock[]>();
   for (const block of blocks) {
     const key = JSON.stringify(block.sectionPath);
     bySection.set(key, [...(bySection.get(key) ?? []), block]);
   }
-  return Array.from(bySection.values()).flatMap((section) => packSection(section));
+  return Array.from(bySection.values()).flatMap((section) => packSection(section, options));
 }
 
-function packSection(blocks: SectionBlock[]): ChildDraft[] {
+function packSection(blocks: SectionBlock[], options: NormalizedChunkingOptions): ChildDraft[] {
   const children: ChildDraft[] = [];
   let texts: string[] = [];
   let indexes: number[] = [];
@@ -164,16 +193,14 @@ function packSection(blocks: SectionBlock[]): ChildDraft[] {
   };
 
   for (const block of blocks) {
-    if (block.text.length > 800) {
+    if (block.text.length > options.maxChars) {
       flush();
-      texts = [block.text];
-      indexes = [block.blockIndex];
-      flush(true);
+      children.push(...splitLongBlock(block, sectionPath, options));
       continue;
     }
     const nextText = [...texts, block.text].join('\n\n');
-    if (texts.length > 0 && nextText.length > 800) {
-      const previousSentence = lastCompleteSentence(texts.at(-1) ?? '');
+    if (texts.length > 0 && nextText.length > options.maxChars) {
+      const previousSentence = overlapText(texts.at(-1) ?? '', options);
       flush();
       if (previousSentence) {
         texts = [previousSentence];
@@ -187,10 +214,94 @@ function packSection(blocks: SectionBlock[]): ChildDraft[] {
   return children;
 }
 
-function lastCompleteSentence(text: string): string | undefined {
-  const sentences = text.match(/[^。！？!?]+[。！？!?]/g) ?? [];
+function splitLongBlock(
+  block: SectionBlock,
+  sectionPath: string[],
+  options: NormalizedChunkingOptions,
+): ChildDraft[] {
+  const sentences = splitIntoSentences(block.text);
+  if (sentences.length <= 1 || sentences.some((sentence) => sentence.length > options.maxChars)) {
+    return [{
+      text: block.text,
+      sectionPath,
+      blockIndexes: [block.blockIndex],
+      manualSplitRequired: true,
+      overlapChars: 0,
+    }];
+  }
+
+  const children: ChildDraft[] = [];
+  let window: string[] = [];
+  let currentOverlapChars = 0;
+  const flush = (): void => {
+    const text = window.join('').trim();
+    if (!text) return;
+    children.push({
+      text,
+      sectionPath,
+      blockIndexes: [block.blockIndex],
+      manualSplitRequired: false,
+      overlapChars: currentOverlapChars,
+    });
+  };
+
+  for (const sentence of sentences) {
+    const candidate = [...window, sentence].join('').trim();
+    if (window.length > 0 && candidate.length > options.maxChars) {
+      flush();
+      const overlap = windowOverlap(window, options);
+      window = overlap ? [overlap] : [];
+      currentOverlapChars = overlap.length;
+    }
+    window.push(sentence);
+  }
+  flush();
+  return children;
+}
+
+function splitIntoSentences(text: string): string[] {
+  return (text.replace(/\r\n/g, '\n').match(/[^。！？!?;；.\n]+(?:[。！？!?;；.]|\n+|$)/g) ?? [])
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function overlapText(text: string, options: NormalizedChunkingOptions): string | undefined {
+  if (options.overlapChars <= 0) return undefined;
+  if (options.overlapStrategy === 'sliding') {
+    const overlap = text.slice(-options.overlapChars).trim();
+    return overlap || undefined;
+  }
+  const sentence = lastBoundedCompleteSentence(text, options.overlapChars);
+  return sentence && sentence.length <= options.overlapChars ? sentence : undefined;
+}
+
+function windowOverlap(window: string[], options: NormalizedChunkingOptions): string {
+  if (options.overlapChars <= 0 || window.length === 0) return '';
+  if (options.overlapStrategy === 'sliding') {
+    return window.join('').slice(-options.overlapChars).trim();
+  }
+  const sentence = window.at(-1)?.trim() ?? '';
+  return sentence.length <= options.overlapChars ? sentence : '';
+}
+
+function lastBoundedCompleteSentence(text: string, maxChars: number): string | undefined {
+  const sentences = text.match(/[^。！？!?;；.]+[。！？!?;；.]/g) ?? [];
   const sentence = sentences.at(-1)?.trim();
-  return sentence && sentence.length <= 120 ? sentence : undefined;
+  return sentence && sentence.length <= maxChars ? sentence : undefined;
+}
+
+function normalizeChunkingOptions(options?: KnowledgeChunkingOptions): NormalizedChunkingOptions {
+  const maxChars = positiveInteger(options?.maxChars, DEFAULT_CHUNKING_OPTIONS.maxChars);
+  return {
+    maxChars,
+    overlapStrategy: options?.overlapStrategy === 'sliding' ? 'sliding' : 'sentence',
+    overlapChars: Math.min(positiveInteger(options?.overlapChars, DEFAULT_CHUNKING_OPTIONS.overlapChars), maxChars),
+    minChars: Math.min(positiveInteger(options?.minChars, DEFAULT_CHUNKING_OPTIONS.minChars), maxChars),
+  };
+}
+
+function positiveInteger(value: number | undefined, fallback: number): number {
+  return Number.isFinite(value) && value && value > 0 ? Math.floor(value) : fallback;
 }
 
 function sourceBlocksForChild(sourceBlockIds: string[], blockIndexes: number[]): string[] {
@@ -214,6 +325,7 @@ function slug(value: string): string {
 }
 
 export function markLegacyChunk(chunk: KnowledgeChunk): KnowledgeChunk {
-  const v2 = chunk.artifact_version === 2 && chunk.chunking_strategy === 'parent-child-v2';
-  return { ...chunk, legacy: chunk.legacy ?? !v2 };
+  const current = chunk.artifact_version === CURRENT_ARTIFACT_VERSION
+    && chunk.chunking_strategy === CURRENT_CHUNKING_STRATEGY;
+  return { ...chunk, legacy: chunk.legacy ?? !current };
 }

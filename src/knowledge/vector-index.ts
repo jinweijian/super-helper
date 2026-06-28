@@ -95,7 +95,7 @@ export function isChunkEligibleForRemoteEmbedding(chunk: KnowledgeChunk): { elig
   if (chunk.status !== 'active') {
     return { eligible: false, reason: `status_${chunk.status}` };
   }
-  if (chunk.legacy || chunk.artifact_version !== 2) {
+  if (chunk.legacy || chunk.artifact_version !== 3 || chunk.chunking_strategy !== 'parent-child-v3') {
     return { eligible: false, reason: 'legacy_chunk' };
   }
   if (chunk.quality_status !== 'ok') {
@@ -277,6 +277,7 @@ function sourceChunkManifestHash(chunks: KnowledgeChunk[]): string {
       source_block_ids: chunk.source_block_ids ?? [],
       section_path: chunk.section_path ?? [],
       chunking_strategy: chunk.chunking_strategy,
+      artifact_version: chunk.artifact_version,
     }))
     .sort((a, b) => a.chunk_id.localeCompare(b.chunk_id));
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');

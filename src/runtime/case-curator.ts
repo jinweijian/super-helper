@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { DiagnosticClaim, DiagnosticResult, DiagnosticRun, Evidence } from '../domain.js';
 import { dirtyFlagPath } from '../knowledge/paths.js';
 import { routeKnowledgeQuestion } from '../knowledge/taxonomy.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 
 export interface SolvedCaseDraft {
   documentId: string;

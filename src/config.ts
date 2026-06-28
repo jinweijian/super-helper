@@ -36,6 +36,13 @@ export interface SuperHelperConfig {
     isolateByWorkspace: boolean;
     sourceDir?: string;
     buildVectorIndex: boolean;
+    projectType?: 'generic' | 'symfony' | 'node' | 'vue' | string;
+    chunking?: {
+      maxChars?: number;
+      overlapStrategy?: 'sentence' | 'sliding';
+      overlapChars?: number;
+      minChars?: number;
+    };
   };
   agent: {
     name: string;
@@ -104,7 +111,16 @@ export function defaultConfig(): SuperHelperConfig {
     knowledge: {
       rootDir: join(DEFAULT_HOME, 'knowledge'),
       isolateByWorkspace: true,
-      buildVectorIndex: false,
+      // 默认启用向量索引构建：双路召回（BM25+Embedding）是默认检索路径，
+      // 无 API key 时 configured-search 会优雅降级为纯 BM25（embedding strategy 标 skipped）。
+      buildVectorIndex: true,
+      projectType: 'generic',
+      chunking: {
+        maxChars: 800,
+        overlapStrategy: 'sentence',
+        overlapChars: 120,
+        minChars: 80,
+      },
     },
     agent: {
       name: 'super helper',
@@ -118,7 +134,8 @@ export function defaultConfig(): SuperHelperConfig {
       providers: {},
     },
     embedding: {
-      enabled: false,
+      // 默认启用 embedding 双路召回；无 API key 时 strategy.enabled() 返回 false 并降级为纯 BM25。
+      enabled: true,
       provider: 'siliconflow',
       model: 'Qwen/Qwen3-Embedding-0.6B',
       baseUrl: 'https://api.siliconflow.cn/v1',
@@ -135,7 +152,9 @@ export function defaultConfig(): SuperHelperConfig {
       baseUrl: 'https://api.siliconflow.cn/v1',
       apiKeyEnv: 'SILICONFLOW_API_KEY',
       timeoutMs: 60_000,
-      topN: 2,
+      // 与最终检索 limit 对齐（configured-search 限制为 8），让 rerank 真正主导全部 top 候选，
+      // 而非只返回 2 条、其余按原序补回导致 cross-encoder 精度优势被浪费。
+      topN: 8,
     },
     claude: {
       enabled: true,

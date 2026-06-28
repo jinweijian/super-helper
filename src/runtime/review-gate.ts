@@ -1,5 +1,5 @@
 import type { DiagnosticResult, WorkerTrace } from '../domain.js';
-import type { StoredCase } from '../storage.js';
+import type { StoredCase } from '../sessions/file-memory-store.js';
 
 export type AgentDecision = 'ask_user' | 'dispatched' | 'final' | 'partial' | 'escalate';
 

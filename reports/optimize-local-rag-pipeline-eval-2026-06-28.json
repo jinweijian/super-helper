@@ -1,0 +1,2741 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-28T02:41:24.076Z",
+  "passed": false,
+  "offline": true,
+  "questionCount": 50,
+  "thresholds": {
+    "recallAt5": 1,
+    "mrr": 1,
+    "directAnswerPrecision": 1,
+    "abstentionAccuracy": 1,
+    "mustEscalateAccuracy": 1
+  },
+  "metrics": {
+    "recallAt5": 0,
+    "mrr": 0,
+    "directAnswerPrecision": 1,
+    "abstentionAccuracy": 1,
+    "mustEscalateAccuracy": 1
+  },
+  "splitMetrics": {
+    "calibration": {
+      "recallAt5": 0,
+      "mrr": 0,
+      "directAnswerPrecision": 1,
+      "abstentionAccuracy": 1,
+      "mustEscalateAccuracy": 1
+    },
+    "holdout": {
+      "recallAt5": 0,
+      "mrr": 0,
+      "directAnswerPrecision": 1,
+      "abstentionAccuracy": 1,
+      "mustEscalateAccuracy": 1
+    }
+  },
+  "failures": [
+    {
+      "questionId": "exact-01",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-02",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-03",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-04",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-05",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-06",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-07",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-08",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-09",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-10",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-11",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "exact-12",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-01",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-02",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-03",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-04",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-05",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-06",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-07",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-08",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-09",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    },
+    {
+      "questionId": "paraphrase-10",
+      "reason": "expected parent kb_eval_course_visibility not found in top 5",
+      "attribution": "retrieval"
+    }
+  ],
+  "questions": [
+    {
+      "id": "exact-01",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-02",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-03",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-04",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-05",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-06",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_048_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_048",
+        "title": "默认计划",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/048-ee7dbd75faf6.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-07",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "escalate_to_human",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence",
+        "high_risk_uncertainty"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-08",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-09",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-10",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-11",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_055_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_055",
+        "title": "课程设置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/055-b57a3af59c41.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "exact-12",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "exact",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-01",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_ai_companion_src_whitepaper_1c0bc3610f76_003_001",
+        "parentId": "kb_whitepaper_ai-companion_src-whitepaper-1c0bc3610f76_003",
+        "title": "产品特色",
+        "source": "knowledge/whitepapers/ai-companion/caae6b4e0380/003-50ca3da9fb9c.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-02",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_145_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_145",
+        "title": "发证管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/145-5585f59b0fee.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-03",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_217_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_217",
+        "title": "商品上架",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/217-625ad4be43b1.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-04",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_098_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_098",
+        "title": "课程/班级购买",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/098-99fa6c14352c.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-05",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_048_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_048",
+        "title": "默认计划",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/048-ee7dbd75faf6.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-06",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-07",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "calibration",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-08",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_201_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_201",
+        "title": "安全设置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/201-8bf435e8a8b5.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-09",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "paraphrase-10",
+      "expectedBehavior": "direct",
+      "expectedParentId": "kb_eval_course_visibility",
+      "split": "holdout",
+      "category": "paraphrase",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_125_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_125",
+        "title": "会员管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/125-e1c61861bfc4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": false
+    },
+    {
+      "id": "generic-01",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_184_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_184",
+        "title": "网校信息",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/184-46b154858978.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-02",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_079_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_079",
+        "title": "题目管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/079-d865d2d077ec.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-03",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_216_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_216",
+        "title": "支付配置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/216-1d3236c6276c.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 24
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 24,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-04",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "generic_keyword_only",
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_195_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_195",
+        "title": "资产设置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/195-15a49717dcda.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-05",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "no_active_evidence"
+      ],
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 0
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 0,
+          "dedupedCount": 0,
+          "finalCandidateCount": 0
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 0,
+          "outputCount": 0
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-06",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_184_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_184",
+        "title": "网校信息",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/184-46b154858978.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-07",
+      "expectedBehavior": "abstain",
+      "split": "holdout",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_166_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_166",
+        "title": "帐号注销",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/166-6ac95171a503.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "generic-08",
+      "expectedBehavior": "abstain",
+      "split": "holdout",
+      "category": "generic",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_074_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_074",
+        "title": "班级设置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/074-2ea4813b33ad.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-01",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_192_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_192",
+        "title": "经营资质",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/192-622a07a26619.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 1
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 1,
+          "dedupedCount": 0,
+          "finalCandidateCount": 1
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 1,
+          "outputCount": 1
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-02",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_126_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_126",
+        "title": "微营销",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/126-10ecfbeaff9d.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 1
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 1,
+          "dedupedCount": 0,
+          "finalCandidateCount": 1
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 1,
+          "outputCount": 1
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-03",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "no_active_evidence"
+      ],
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 0
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 0,
+          "dedupedCount": 0,
+          "finalCandidateCount": 0
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 0,
+          "outputCount": 0
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-04",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_147_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_147",
+        "title": "举报内容复核",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/147-3777a1a02984.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 4
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 4,
+          "dedupedCount": 0,
+          "finalCandidateCount": 4
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 4,
+          "outputCount": 4
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-05",
+      "expectedBehavior": "abstain",
+      "split": "calibration",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 0
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 0,
+          "dedupedCount": 0,
+          "finalCandidateCount": 0
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 0,
+          "outputCount": 0
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-06",
+      "expectedBehavior": "abstain",
+      "split": "holdout",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_216_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_216",
+        "title": "支付配置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/216-1d3236c6276c.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 24
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 24,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-07",
+      "expectedBehavior": "abstain",
+      "split": "holdout",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_145_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_145",
+        "title": "发证管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/145-5585f59b0fee.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "no-hit-08",
+      "expectedBehavior": "abstain",
+      "split": "holdout",
+      "category": "no_hit",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "generic_keyword_only",
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_174_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_174",
+        "title": "网校账单",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/174-16c006fd5c11.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 2
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 2,
+          "dedupedCount": 0,
+          "finalCandidateCount": 2
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 2,
+          "outputCount": 2
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "implementation-01",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "implementation_risk",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_137_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_137",
+        "title": "微网校装修",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/137-e366fe3b85de.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 36
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 36,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "implementation-02",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "implementation_risk",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_204_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_204",
+        "title": "营销应用",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/204-ada5e0ac3064.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "implementation-03",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "implementation_risk",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_185_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_185",
+        "title": "用户设置",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/185-900ef2a6b1f5.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "implementation-04",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "implementation_risk",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_161_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_161",
+        "title": "员工管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/161-13715b1c6648.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "implementation-05",
+      "expectedBehavior": "escalate",
+      "split": "holdout",
+      "category": "implementation_risk",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_046_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_046",
+        "title": "创建课程-普通课程",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/046-33ce57c17c33.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "implementation-06",
+      "expectedBehavior": "escalate",
+      "split": "holdout",
+      "category": "implementation_risk",
+      "answerable": false,
+      "recommendedAction": "escalate_to_human",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence",
+        "high_risk_uncertainty"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_003_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_003",
+        "title": "产品特色",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/003-50ca3da9fb9c.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "visibility-01",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "visibility_stale_conflict",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_signal_terms",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_100_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_100",
+        "title": "课程学习",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/100-5553bb2177ff.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "visibility-02",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "visibility_stale_conflict",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "visibility-03",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "visibility_stale_conflict",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_104_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_104",
+        "title": "课程管理",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/104-47d4cf518ea4.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "visibility-04",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "visibility_stale_conflict",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_130_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_130",
+        "title": "打折活动",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/130-8911c986174e.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "visibility-05",
+      "expectedBehavior": "escalate",
+      "split": "calibration",
+      "category": "visibility_stale_conflict",
+      "answerable": false,
+      "recommendedAction": "escalate_to_human",
+      "blockers": [
+        "low_quality_evidence",
+        "missing_provenance",
+        "low_retrieval_confidence",
+        "high_risk_uncertainty"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_124_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_124",
+        "title": "优惠券",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/124-30f810e77bd1.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    },
+    {
+      "id": "visibility-06",
+      "expectedBehavior": "escalate",
+      "split": "holdout",
+      "category": "visibility_stale_conflict",
+      "answerable": false,
+      "recommendedAction": "dispatch_code_diagnosis",
+      "blockers": [
+        "implementation_detail"
+      ],
+      "topEvidence": {
+        "evidenceId": "ev_kb_kb_whitepaper_edusoho_training_src_whitepaper_7f73dea0a142_137_001",
+        "parentId": "kb_whitepaper_edusoho-training_src-whitepaper-7f73dea0a142_137",
+        "title": "微网校装修",
+        "source": "knowledge/whitepapers/edusoho-training/caae6b4e0380/137-e366fe3b85de.md",
+        "score": 0.01639344,
+        "quality": "warn"
+      },
+      "trace": {
+        "strategies": [
+          {
+            "id": "bm25",
+            "kind": "lexical",
+            "status": "ran",
+            "candidateCount": 40
+          },
+          {
+            "id": "embedding",
+            "kind": "semantic",
+            "status": "skipped",
+            "candidateCount": 0,
+            "reason": "embedding disabled"
+          }
+        ],
+        "fusion": {
+          "method": "rrf",
+          "inputCount": 40,
+          "dedupedCount": 0,
+          "finalCandidateCount": 8
+        },
+        "rerank": {
+          "status": "skipped",
+          "reason": "rerank disabled",
+          "inputCount": 20,
+          "outputCount": 20
+        },
+        "filters": []
+      },
+      "passed": true
+    }
+  ]
+}

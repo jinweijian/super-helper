@@ -1,6 +1,6 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { UserPersona } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../storage.js';
+import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { personaGuide, personaName } from './presenter.js';
 
