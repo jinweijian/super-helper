@@ -90,6 +90,16 @@
       "mayProduceUserFacingText": true,
       "executionMode": "presentation_only",
       "summary": "美化输出 Agent，负责把审核后的判断转成符合用户视角的中文回复，不新增事实。"
+    },
+    {
+      "id": "evidence-coverage",
+      "role": "evidence-coverage-judge",
+      "stage": "evidence_coverage",
+      "configPath": "evidence-coverage.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "证据覆盖 Agent，用模型判断知识证据是否真正覆盖原问题需要的答案要素。"
     }
   ]
 }

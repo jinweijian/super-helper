@@ -3142,6 +3142,7 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
     'case_curator',
     'output_review',
     'presentation',
+    'evidence_coverage',
   ]);
   assert.match(resolveAgentConfig('main').absolutePath, /src\/agents\/main\.md$/);
   assert.match(resolveAgentConfig('preflight').content, /Input Review Agent/);
