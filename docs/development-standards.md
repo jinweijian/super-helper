@@ -236,6 +236,9 @@ Preserve established phases unless a documented migration is added:
 - `deep_query_retry_requested`
 - `deep_query_stopped`
 - `diagnostic_request`
+- `evidence_coverage_failed`
+- `evidence_coverage_result`
+- `evidence_coverage_started`
 - `evidence_judge_result`
 - `evidence_judge_started`
 - `evidence_review_started`
