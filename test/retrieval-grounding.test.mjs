@@ -354,3 +354,97 @@ test('knowledge feature overview aggregates multiple feature facts', () => {
   assert.match(facts.map((claim) => claim.text).join('\n'), /学习问答/);
   assert.equal(result.evidence.length >= 3, true);
 });
+
+import { EvidenceCoverageService } from '../dist/runtime/evidence-coverage-service.js';
+
+function fakeCoverageModel(response) {
+  return {
+    async complete() {
+      return typeof response === 'string' ? response : JSON.stringify(response);
+    },
+  };
+}
+
+function fakeCoverageEvents() {
+  return {
+    evidenceCoverageStarted: () => {},
+    evidenceCoverageResult: () => {},
+    evidenceCoverageFailed: () => {},
+  };
+}
+
+test('coverage agent rejects high-rerank evidence that does not answer operation-procedure question', async () => {
+  const question = '学员管理的学员数据统计里面缺少6月份的数据，如何补上，有没有现成的命令行处理？';
+  const featureEvidence = evidence({
+    evidence_id: 'ev_user_data_statistics',
+    document_id: 'kb_user_data_statistics',
+    parent_id: 'kb_user_data_statistics',
+    title: '用户数据统计',
+    module: 'edusoho-training',
+    intent: 'product_rule',
+    source_type: 'whitepaper',
+    matched_terms: ['学员管理', '数据统计', '学员', '统计'],
+    summary: '用户数据统计：查看用户的基本学习和消费数据详情',
+    answer_span: '查看用户的基本学习和消费数据详情，可以通过学员用户名、手机号进行搜索，支持数据导出。',
+    excerpt: '用户数据统计：- section_path: 用户（有修改） > 学员管理 > 用户数据统计',
+    score: 48.3,
+    retrieval: { source: 'rerank', keywordScore: 48.3, rerankScore: 0.887 },
+  });
+
+  const judge = judgeKnowledgeEvidence({
+    route: route({
+      normalizedQuestion: question,
+      moduleCandidates: [],
+      intentCandidates: [],
+      keywords: ['学员管理', '数据统计', '命令行'],
+      sourceTypes: ['faq', 'runbook'],
+    }),
+    evidencePack: pack(featureEvidence),
+    question,
+  });
+
+  const coverageService = new EvidenceCoverageService(
+    fakeCoverageModel({
+      coverage: 'not_covered',
+      missing_elements: ['补跑/重跑数据的步骤', '命令行名称或参数'],
+      reason: '证据只描述了用户数据统计的页面功能，未覆盖补数据步骤或命令行操作',
+    }),
+    fakeCoverageEvents(),
+    'spec',
+  );
+
+  const coverage = await coverageService.evaluate({ question, evidence: [featureEvidence] });
+  assert.equal(coverage.coverage, 'not_covered');
+  assert.equal(coverage.missingElements.length, 2);
+});
+
+test('coverage agent preserves direct answer when evidence truly covers question', async () => {
+  const question = '学员数据统计缺失如何补跑，有没有命令行？';
+  const runbookEvidence = evidence({
+    evidence_id: 'ev_student_stats_backfill',
+    document_id: 'kb_student_stats_backfill',
+    parent_id: 'kb_student_stats_backfill',
+    title: '学员数据统计补跑命令',
+    module: 'edusoho-training',
+    intent: 'how_to',
+    source_type: 'runbook',
+    matched_terms: ['学员数据统计', '补跑', '命令行'],
+    summary: '学员数据统计缺失时可用命令行补跑指定月份',
+    answer_span: '执行 php app/console student:statistics:rebuild --month=2024-06 补跑指定月份学员数据统计。',
+    excerpt: '步骤1：执行 php app/console student:statistics:rebuild --month=YYYY-MM',
+    retrieval: { source: 'rerank', keywordScore: 30, rerankScore: 0.92 },
+  });
+
+  const coverageService = new EvidenceCoverageService(
+    fakeCoverageModel({
+      coverage: 'covered',
+      missing_elements: [],
+      reason: '证据包含具体补跑命令和参数',
+    }),
+    fakeCoverageEvents(),
+    'spec',
+  );
+
+  const coverage = await coverageService.evaluate({ question, evidence: [runbookEvidence] });
+  assert.equal(coverage.coverage, 'covered');
+});
