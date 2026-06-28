@@ -43,6 +43,7 @@ const agentIdentities = {
   experience: { agentId: 'experience', agentRole: 'prior-session-experience-review', agentName: '经验 Agent' },
   knowledgeRouter: { agentId: 'knowledge-router', agentRole: 'knowledge-router', agentName: '知识路由 Agent' },
   evidenceJudge: { agentId: 'evidence-judge', agentRole: 'evidence-sufficiency-judge', agentName: '证据充分性 Agent' },
+  evidenceCoverage: { agentId: 'evidence-coverage', agentRole: 'evidence-coverage-judge', agentName: '证据覆盖 Agent' },
   caseCurator: { agentId: 'case-curator', agentRole: 'solved-case-curator', agentName: 'Case 沉淀 Agent' },
   outputReview: { agentId: 'output-review', agentRole: 'evidence-and-output-review', agentName: '输出审核 Agent' },
   presentation: { agentId: 'presentation', agentRole: 'persona-aware-presentation', agentName: '美化输出 Agent' },
@@ -503,6 +504,46 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       severity: judge.answerable ? 'ok' : 'warn',
       summary: judge.answerable ? '知识证据足够，可进入输出审核' : '知识证据不足，需要升级查询',
       detail: judge,
+    });
+  }
+
+  evidenceCoverageStarted(caseSession: StoredCase, input: { question: string; evidenceIds: string[] }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceCoverage, {
+      actor: 'agent',
+      phase: 'evidence_coverage_started',
+      label: '证据覆盖',
+      severity: 'ok',
+      summary: '证据覆盖 Agent 开始判断证据是否覆盖原问题',
+      detail: {
+        question: input.question,
+        evidenceIds: input.evidenceIds,
+      },
+    });
+  }
+
+  evidenceCoverageResult(caseSession: StoredCase, coverage: { coverage: string; missingElements: string[]; reason: string }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceCoverage, {
+      actor: 'agent',
+      phase: 'evidence_coverage_result',
+      label: '证据覆盖',
+      severity: coverage.coverage === 'covered' ? 'ok' : 'warn',
+      summary: coverage.coverage === 'covered'
+        ? '证据覆盖原问题答案要素，维持直答'
+        : coverage.coverage === 'unknown'
+          ? '证据覆盖判断失败，降级回 Evidence Judge 结论'
+          : '证据未覆盖原问题答案要素，拒绝直答',
+      detail: coverage,
+    });
+  }
+
+  evidenceCoverageFailed(caseSession: StoredCase, message: string): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.evidenceCoverage, {
+      actor: 'agent',
+      phase: 'evidence_coverage_failed',
+      label: '证据覆盖',
+      severity: 'warn',
+      summary: '证据覆盖 Agent 调用失败，降级回 Evidence Judge 结论',
+      detail: { message },
     });
   }
 
