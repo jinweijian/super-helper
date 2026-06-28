@@ -1275,6 +1275,66 @@ test('runtime broadens source type filters so whitepaper evidence can answer nat
   }
 });
 
+test('runtime degrades coverage agent to noop when model provider missing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已升级排查。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code', kind: 'workspace', source: 'Grep', summary: '命令行排查。', confidence: 'medium' }],
+          claims: [],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: { command: 'worker', cwd: workspace, stdout: '', stderr: '', startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.agent.useModelForEvidenceCoverage = true;
+    config.rerank = { enabled: true, provider: 'fake', model: 'fake-reranker', topN: 8, apiKeyEnv: '' };
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
+      module: 'edusoho-training',
+      title: '学员数据统计补跑命令',
+      body: '学员数据统计缺失时可通过命令行补跑统计：执行 php app/console student:statistics:rebuild --month=YYYY-MM 补跑指定月份的学员数据统计。',
+      terms: ['学员数据统计', '补跑', '命令行', 'app/console'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+
+    await agent.handleUserMessage({
+      message: '学员数据统计缺失如何补跑，有没有现成命令行处理？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 0, 'unknown coverage should NOT escalate; direct answer expected');
+
+    const cases = store.listCases();
+    const caseSession = cases.find((c) => c.logs?.some((log) => log.phase === 'evidence_coverage_result'));
+    assert.ok(caseSession, 'case should have evidence_coverage_result log');
+    const coverageLogs = caseSession.logs.filter((log) => log.phase === 'evidence_coverage_result');
+    assert.ok(coverageLogs.length >= 1, 'coverage agent should record an event even when model missing');
+    assert.equal(coverageLogs[0].detail.coverage, 'unknown');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test('runtime escalates no-hit or implementation-detail knowledge questions with deep query context', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
