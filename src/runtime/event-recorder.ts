@@ -3,7 +3,6 @@ import type {
   DiagnosticRequest,
   DiagnosticResult,
   DiagnosticRun,
-  LogSeverity,
   UserPersona,
   WorkerTrace,
 } from '../domain.js';
@@ -16,8 +15,34 @@ import type { RetrievalTrace } from '../retrieval/types.js';
 import type { RuntimeEventRecorder } from './ports.js';
 import type { ValidatedDiagnosticResult } from './result-validator.js';
 import { redactProviderErrorMessage } from '../providers/redaction.js';
-import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
-import { decisionFromDiagnosticResult } from './review-gate.js';
+import { agentIdentities, type AgentIdentity } from './events/identities.js';
+import {
+  diagnosticRequestLogDetail,
+  evidenceIdsFromResult,
+  type EventRecorderWriter,
+} from './events/common.js';
+import {
+  recordFinalReplyCreated,
+  recordModelReviewFailed,
+  recordModelReviewResult,
+  type ModelReviewParsed,
+  recordPreflightReplyCreated,
+  recordPresentationPrepared,
+} from './events/presentation-events.js';
+import {
+  recordCaseCuratorResult,
+  recordCaseCuratorStarted,
+  recordCaseResolutionConfirmed,
+  recordCaseReviewFailed,
+  recordCaseReviewResult,
+  recordCaseReviewStarted,
+  recordEvidenceReviewStarted,
+  recordEvidenceValidationResult,
+  recordFollowUpDiagnosticRequested,
+} from './events/review-events.js';
+import { recordWorkerTrace } from './events/worker-trace-events.js';
+
+export type { ModelReviewParsed } from './events/presentation-events.js';
 
 export interface ModelPreflightParsed {
   action?: 'ask_user' | 'dispatch';
@@ -26,40 +51,14 @@ export interface ModelPreflightParsed {
   question?: string;
 }
 
-export interface ModelReviewParsed {
-  answerTarget?: string;
-  directAnswer?: string;
-  reply?: string;
-  claimIds?: string[];
-  evidenceIds?: string[];
-  directAnswerClaimIds?: string[];
-}
-
-interface AgentIdentity {
-  agentId: string;
-  agentRole: string;
-  agentName: string;
-}
-
-const agentIdentities = {
-  main: { agentId: 'main', agentRole: 'main-coordinator', agentName: '主 Agent' },
-  inputReview: { agentId: 'input-review', agentRole: 'input-review-and-preflight', agentName: '输入审核 Agent' },
-  experience: { agentId: 'experience', agentRole: 'prior-session-experience-review', agentName: '经验 Agent' },
-  knowledgeRouter: { agentId: 'knowledge-router', agentRole: 'knowledge-router', agentName: '知识路由 Agent' },
-  evidenceJudge: { agentId: 'evidence-judge', agentRole: 'evidence-sufficiency-judge', agentName: '证据充分性 Agent' },
-  caseCurator: { agentId: 'case-curator', agentRole: 'solved-case-curator', agentName: 'Case 沉淀 Agent' },
-  outputReview: { agentId: 'output-review', agentRole: 'evidence-and-output-review', agentName: '输出审核 Agent' },
-  presentation: { agentId: 'presentation', agentRole: 'persona-aware-presentation', agentName: '美化输出 Agent' },
-} satisfies Record<string, AgentIdentity>;
-
-export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
+export class CaseRuntimeEventRecorder implements RuntimeEventRecorder, EventRecorderWriter {
   constructor(private readonly cases: Pick<CaseRepository, 'addLogEvent'>) {}
 
   record(caseSession: StoredCase, event: Omit<DiagnosticLogEvent, 'id' | 'createdAt'>): DiagnosticLogEvent {
     return this.cases.addLogEvent(caseSession, event);
   }
 
-  private recordAgent(
+  recordAgent(
     caseSession: StoredCase,
     agent: AgentIdentity,
     event: Omit<DiagnosticLogEvent, 'id' | 'createdAt' | 'agentId' | 'agentRole' | 'agentName'>,
@@ -249,62 +248,19 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     run: DiagnosticRun,
     result: DiagnosticResult,
   ): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.outputReview, {
-      actor: 'agent',
-      phase: 'follow_up_diagnostic_requested',
-      label: '输出审核',
-      severity: 'warn',
-      summary: 'Agent 审核认为证据仍不足，自动追查一轮 Claude Code',
-      detail: {
-        previousRunId: run.id,
-        reason: result.summary,
-      },
-    });
+    return recordFollowUpDiagnosticRequested(this, caseSession, run, result);
   }
 
   evidenceReviewStarted(caseSession: StoredCase, run: DiagnosticRun, result: DiagnosticResult): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.outputReview, {
-      actor: 'agent',
-      phase: 'evidence_review_started',
-      label: '输出审核',
-      severity: 'ok',
-      summary: 'Agent 开始审核 Claude Code 返回结果',
-      detail: {
-        runId: run.id,
-        status: result.status,
-        summary: result.summary,
-        missingInfo: result.missingInfo,
-        recommendedNextAction: result.recommendedNextAction,
-        evidenceIds: evidenceIdsFromResult(result),
-        claimCount: result.claims.length,
-        evidenceCount: result.evidence.length,
-      },
-    });
+    return recordEvidenceReviewStarted(this, caseSession, run, result);
   }
 
   modelReviewFailed(caseSession: StoredCase, error: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.presentation, {
-      actor: 'agent',
-      phase: 'model_review_failed',
-      label: '美化输出',
-      severity: 'warn',
-      summary: 'Presentation 模型回复未通过校验，降级到本地事实兜底',
-      detail: { error },
-    });
+    return recordModelReviewFailed(this, caseSession, error);
   }
 
   modelReviewResult(caseSession: StoredCase, raw: string, parsed: ModelReviewParsed): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.presentation, {
-      actor: 'agent',
-      phase: 'model_review_result',
-      label: '美化输出',
-      severity: 'ok',
-      summary: 'Presentation 模型完成 Answer Contract 回复整理',
-      detail: {
-        raw: redactProviderErrorMessage(raw).slice(0, 2000),
-        parsed,
-      },
-    });
+    return recordModelReviewResult(this, caseSession, raw, parsed);
   }
 
   evidenceValidationResult(
@@ -312,56 +268,19 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     runId: string,
     validation: ValidatedDiagnosticResult,
   ): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.outputReview, {
-      actor: 'agent',
-      phase: 'evidence_validation_result',
-      label: '确定性审核',
-      severity: validation.issues.length > 0 ? 'warn' : 'ok',
-      summary: `确定性审核冻结结果：接受 ${validation.acceptedClaimIds.length} 条，拒绝 ${validation.rejectedClaimIds.length} 条`,
-      detail: {
-        runId,
-        frozenDecision: decisionFromDiagnosticResult(validation.result),
-        issues: validation.issues,
-        acceptedClaimIds: validation.acceptedClaimIds,
-        rejectedClaimIds: validation.rejectedClaimIds,
-      },
-    });
+    return recordEvidenceValidationResult(this, caseSession, runId, validation);
   }
 
   presentationPrepared(caseSession: StoredCase, decision: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.presentation, {
-      actor: 'agent',
-      phase: 'presentation_agent_result',
-      label: '美观输出',
-      severity: 'ok',
-      summary: '美观输出 agent 完成最终回复整理',
-      detail: {
-        userPersona: caseSession.userPersona,
-        decision,
-      },
-    });
+    return recordPresentationPrepared(this, caseSession, decision);
   }
 
   preflightReplyCreated(caseSession: StoredCase, reply: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.presentation, {
-      actor: 'agent',
-      phase: 'user_reply',
-      label: '最终输出',
-      severity: 'warn',
-      summary: 'Agent 向用户发起追问',
-      detail: { reply, tag: '最终回答' },
-    });
+    return recordPreflightReplyCreated(this, caseSession, reply);
   }
 
   finalReplyCreated(caseSession: StoredCase, reply: string, decision: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.presentation, {
-      actor: 'agent',
-      phase: 'user_reply',
-      label: '最终输出',
-      severity: decision === 'final' ? 'ok' : 'warn',
-      summary: 'Agent 完成证据审核并回复用户',
-      detail: { reply, decision, evidenceIds: [], tag: '最终回答' },
-    });
+    return recordFinalReplyCreated(this, caseSession, reply, decision);
   }
 
   turnFailed(caseSession: StoredCase, error: string): DiagnosticLogEvent {
@@ -599,14 +518,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     action: string;
     reviewer: string;
   }): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
-      actor: 'agent',
-      phase: 'case_review_started',
-      label: 'Case 审核',
-      severity: 'info',
-      summary: `审核 ${detail.documentId} (${detail.action})`,
-      detail,
-    });
+    return recordCaseReviewStarted(this, caseSession, detail);
   }
 
   caseReviewResult(caseSession: StoredCase, detail: {
@@ -616,135 +528,32 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     nextStatus: string;
     targetPath?: string;
   }): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
-      actor: 'agent',
-      phase: 'case_review_result',
-      label: 'Case 审核结果',
-      severity: 'ok',
-      summary: `${detail.documentId} 审核完成: ${detail.nextStatus}`,
-      detail,
-    });
+    return recordCaseReviewResult(this, caseSession, detail);
   }
 
   caseReviewFailed(caseSession: StoredCase, detail: {
     documentId: string;
     reason: string;
   }): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
-      actor: 'agent',
-      phase: 'case_review_failed',
-      label: 'Case 审核失败',
-      severity: 'error',
-      summary: `${detail.documentId} 审核失败: ${detail.reason}`,
-      detail,
-    });
+    return recordCaseReviewFailed(this, caseSession, detail);
   }
 
   caseResolutionConfirmed(caseSession: StoredCase, message: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
-      actor: 'agent',
-      phase: 'resolution_confirmed',
-      label: 'Case 沉淀',
-      severity: 'ok',
-      summary: '用户确认问题已解决，准备沉淀 solved case',
-      detail: { message },
-    });
+    return recordCaseResolutionConfirmed(this, caseSession, message);
   }
 
   caseCuratorStarted(caseSession: StoredCase): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
-      actor: 'agent',
-      phase: 'case_curator_started',
-      label: 'Case 沉淀',
-      severity: 'ok',
-      summary: 'Case Curator 开始生成 solved case 草稿',
-    });
+    return recordCaseCuratorStarted(this, caseSession);
   }
 
   caseCuratorResult(
     caseSession: StoredCase,
     detail: { documentId: string; path: string; moduleId: string; status: string; confidence: string },
   ): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.caseCurator, {
-      actor: 'agent',
-      phase: 'case_curator_result',
-      label: 'Case 沉淀',
-      severity: 'ok',
-      summary: 'Case Curator 已保存 review_required solved case 草稿并标记索引脏',
-      detail,
-    });
+    return recordCaseCuratorResult(this, caseSession, detail);
   }
 
   workerTrace(caseSession: StoredCase, trace: WorkerTrace): void {
-    const safeTrace = sanitizeWorkerTrace(trace);
-    this.record(caseSession, {
-      actor: 'claude',
-      phase: 'command',
-      label: '调用 CC',
-      severity: safeTrace.error ? 'error' : 'ok',
-      summary: '实际调用 Claude Code 的命令',
-      detail: {
-        command: safeTrace.command,
-        cwd: safeTrace.cwd,
-        startedAt: safeTrace.startedAt,
-        finishedAt: safeTrace.finishedAt,
-      },
-    });
-    this.record(caseSession, {
-      actor: 'claude',
-      phase: 'raw_output',
-      label: '调用 CC',
-      severity: rawOutputSeverity(safeTrace),
-      summary: 'Claude Code 返回的原始数据',
-      detail: {
-        stdout: redactProviderErrorMessage(safeTrace.stdout),
-        stderr: safeTrace.stderr,
-        exitCode: safeTrace.exitCode,
-        signal: safeTrace.signal,
-        error: safeTrace.error,
-      },
-    });
+    recordWorkerTrace(this, caseSession, trace);
   }
-}
-
-function evidenceIdsFromResult(result: DiagnosticResult): string[] {
-  return Array.from(new Set([
-    ...result.evidence.map((evidence) => evidence.id),
-    ...result.claims.flatMap((claim) => claim.evidenceIds),
-  ].filter(Boolean)));
-}
-
-function evidenceIdsFromRequest(request: DiagnosticRequest): string[] {
-  const knowledgeEvidence = request.context?.knowledge?.evidence?.map((item) => item.id) ?? [];
-  const previousEvidence = request.context?.previousRuns?.flatMap((run) => run.evidence.map((item) => item.id)) ?? [];
-  return Array.from(new Set([...knowledgeEvidence, ...previousEvidence].filter(Boolean)));
-}
-
-function diagnosticRequestLogDetail(
-  request: DiagnosticRequest,
-  decision: string,
-): Record<string, unknown> {
-  return {
-    decision,
-    caseId: request.caseId,
-    runId: request.runId,
-    workspaceId: request.workspaceId,
-    userGoal: request.userGoal,
-    knownFacts: request.knownFacts,
-    unknowns: request.unknowns,
-    constraints: request.constraints,
-    allowedMcpToolIds: request.allowedMcpToolIds,
-    evidenceIds: evidenceIdsFromRequest(request),
-    deepQuery: request.context?.deepQuery,
-  };
-}
-
-function rawOutputSeverity(trace: WorkerTrace): LogSeverity {
-  if (trace.error || trace.exitCode) {
-    return 'error';
-  }
-  if (trace.stderr || /"subtype":"error_|error_max_budget_usd|timed out|already in use/i.test(trace.stdout)) {
-    return 'warn';
-  }
-  return 'ok';
 }

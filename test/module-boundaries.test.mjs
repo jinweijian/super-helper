@@ -197,6 +197,18 @@ test('production source does not import deprecated root compatibility modules', 
   );
 });
 
+test('ui compatibility facades re-export split renderers', async () => {
+  const [rootUi, splitUi, rootSetupUi, splitSetupUi] = await Promise.all([
+    import('../dist/ui.js'),
+    import('../dist/ui/main-screen.js'),
+    import('../dist/setup-ui.js'),
+    import('../dist/ui/setup-screen.js'),
+  ]);
+
+  assert.equal(rootUi.renderApp, splitUi.renderApp);
+  assert.equal(rootSetupUi.renderSetupApp, splitSetupUi.renderSetupApp);
+});
+
 test('retrieval CLI uses configured retrieval instead of manual BM25-only wiring', () => {
   assertNoImportPattern(
     [join(srcRoot, 'cli', 'command-retrieval.ts')],
