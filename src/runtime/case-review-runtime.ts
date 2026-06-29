@@ -7,11 +7,12 @@ import {
 } from '../knowledge/case-review.js';
 import type { KnowledgeCaseReviewAction, KnowledgeCaseReviewRecord } from '../knowledge/types.js';
 import { resolveKnowledgeWorkspaceRoot } from '../knowledge/storage-scope.js';
-import { defaultConfig } from '../config.js';
+import type { SuperHelperConfig } from '../config.js';
 import type { CaseRuntimeEventRecorder } from './event-recorder.js';
 import type { StoredCase } from '../sessions/file-memory-store.js';
 
 export interface ReviewSolvedCaseInput {
+  config: SuperHelperConfig;
   caseSession: StoredCase;
   workspaceId: string;
   workspaceRoot?: string;
@@ -35,8 +36,7 @@ export function reviewSolvedCase(input: ReviewSolvedCaseInput & { events: CaseRu
   if (!input.documentPath) {
     throw new Error('documentPath is required');
   }
-  const config = defaultConfig();
-  const workspaceRoot = input.workspaceRoot ?? resolveKnowledgeWorkspaceRoot(config, input.workspaceId);
+  const workspaceRoot = input.workspaceRoot ?? resolveKnowledgeWorkspaceRoot(input.config, input.workspaceId);
   const events = input.events;
   events.caseReviewStarted(input.caseSession, {
     documentId: input.documentPath,

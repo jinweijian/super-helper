@@ -29,6 +29,7 @@ import { listPublicAgentConfigs, loadAgentRegistry, resolveAgentConfig } from '.
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
+import { reviewSolvedCase } from '../dist/runtime/case-review-runtime.js';
 import { runKnowledgeAcceptance } from '../dist/runtime/knowledge-acceptance.js';
 import { resolveSessionStorageRoot } from '../dist/sessions/storage-scope.js';
 
@@ -1808,6 +1809,60 @@ test('case curator refuses partial or unsupported diagnostic results', () => {
     });
 
     assert.equal(hasCuratableDiagnosticResult(caseSession), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('case review runtime resolves workspace root from injected config', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+
+  try {
+    const config = baseConfig(dir);
+    config.knowledge.rootDir = join(dir, 'custom-knowledge');
+    const workspaceRoot = resolveKnowledgeWorkspaceRoot(config, 'current');
+    const casePath = join(workspaceRoot, 'knowledge', 'tickets', 'solved-cases', 'general', 'kb_case_solved_demo.md');
+    mkdirSync(join(workspaceRoot, 'knowledge', 'tickets', 'solved-cases', 'general'), { recursive: true });
+    writeFileSync(casePath, `---
+id: kb_case_solved_demo
+title: Demo solved case
+type: solved_case
+module: general
+intent: troubleshooting
+source_type: solved_case
+confidence: medium
+status: review_required
+visibility: internal
+product_versions: []
+related_terms: []
+related_repos: []
+last_verified_at: 2026-06-30
+owner: knowledge-admin
+---
+
+# Demo solved case
+`, 'utf8');
+
+    const events = {
+      caseReviewStarted() {},
+      caseReviewResult() {},
+      caseReviewFailed() {},
+    };
+    const result = reviewSolvedCase({
+      config,
+      caseSession: { id: 'case_review', workspaceId: 'current' },
+      workspaceId: 'current',
+      documentPath: 'knowledge/tickets/solved-cases/general/kb_case_solved_demo.md',
+      action: 'approve',
+      reviewer: 'tester',
+      notes: 'approved',
+      events,
+    });
+
+    assert.equal(result.record.documentId, 'kb_case_solved_demo');
+    assert.equal(result.record.reviewer, 'tester');
+    assert.equal(result.record.nextStatus, 'active');
+    assert.equal(existsSync(join(workspaceRoot, 'knowledge', 'indexes', 'dirty.flag')), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
