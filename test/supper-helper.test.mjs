@@ -2653,6 +2653,63 @@ test('presentation rejects replies that introduce unreviewed path facts', async 
   }
 });
 
+test('presentation rejects replies that introduce unsupported non-path facts', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
+    }
+    return chatResponse(JSON.stringify({
+      answerTarget: '小程序支付会话过期的原因',
+      directAnswer: '原因是接口响应缺少 sessionKeyExpiredTime 字段，并且需要重启服务才能恢复。',
+      reply: '**结论：原因是接口响应缺少 sessionKeyExpiredTime 字段，并且需要重启服务才能恢复。**\n\n证据显示序列化结果没有包含该字段。',
+      claimIds: ['claim_1'],
+      evidenceIds: ['ev_session'],
+      directAnswerClaimIds: ['claim_1'],
+    }));
+  };
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '已定位到 API 响应字段缺失。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_session', kind: 'workspace', source: 'src/gateway/session.ts', summary: '序列化结果没有包含 sessionKeyExpiredTime。', confidence: 'high' },
+            ],
+            claims: [
+              { type: 'fact', text: '接口响应缺少 sessionKeyExpiredTime 字段。', evidenceIds: ['ev_session'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+
+    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
+    const response = await agent.handleUserMessage({
+      message: '为什么小程序支付会提示会话过期？',
+      persona: 'customer',
+    });
+
+    assert.match(response.assistantMessage, /sessionKeyExpiredTime/);
+    assert.doesNotMatch(response.assistantMessage, /重启服务才能恢复/);
+    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('presentation answers support questions before explaining independent service items', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const originalFetch = globalThis.fetch;

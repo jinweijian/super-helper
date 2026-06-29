@@ -163,6 +163,7 @@ function validatePresentationOutput(
   if (directClaims.some((claim) => claim.type === 'assumption' || claim.type === 'unknown')) return invalid('Presentation direct answer used non-answer claims.');
   if (dropsExpectedDirectAnswer(result.claims, directClaims, userGoal)) return invalid('Presentation omitted the best direct answer claim.');
   if (containsUnreviewedPathFacts(output, selectedClaims, selectedEvidence)) return invalid('Presentation introduced unreviewed path facts.');
+  if (containsUnsupportedAnswerFacts(output, selectedClaims, selectedEvidence)) return invalid('Presentation introduced unsupported answer facts.');
 
   const firstParagraph = firstReplyParagraph(output.reply);
   if (!coversDirectAnswer(firstParagraph, output.directAnswer)) return invalid('Presentation first paragraph does not cover directAnswer.');
@@ -254,6 +255,98 @@ function containsUnreviewedPathFacts(
   ].join('\n');
   const allowedTokens = extractPathTokens(allowedText);
   return replyTokens.some((token) => !pathTokenAllowed(token, allowedTokens));
+}
+
+function containsUnsupportedAnswerFacts(
+  output: PresentationModelOutput,
+  selectedClaims: DiagnosticClaim[],
+  selectedEvidence: Evidence[],
+): boolean {
+  const allowedText = [
+    ...selectedClaims.map((claim) => claim.text),
+    ...selectedEvidence.flatMap((evidence) => [evidence.source, evidence.summary]),
+  ].join('\n');
+  const answerText = [
+    output.directAnswer ?? '',
+    firstReplyParagraph(output.reply ?? ''),
+  ].join('\n');
+
+  return answerFactClauses(answerText).some((clause) => !factClauseSupported(clause, allowedText));
+}
+
+function answerFactClauses(text: string): string[] {
+  return text
+    .replace(/[`*_#>]/g, '')
+    .split(/(?:\r?\n)+|[。；！？!?]|[，,]\s*(?:并且|而且|另外|此外|还|但|但是|需要|必须)|(?:并且|而且|另外|此外)/g)
+    .map((clause) => normalizeFactClause(clause))
+    .filter((clause) => clause.length >= 4 && !/^(结论|原因|说明|证据)$/.test(clause));
+}
+
+function normalizeFactClause(text: string): string {
+  return text
+    .replace(/^结论[:：]?/, '')
+    .replace(/^(原因是|证据显示|显示|说明[:：]?|因此|所以|同时|还|当前|目前)/, '')
+    .replace(/[，,：:、（）()「」“”"'‘’\s]/g, '')
+    .trim();
+}
+
+function factClauseSupported(clause: string, allowedText: string): boolean {
+  const normalizedAllowed = normalizeFactClause(allowedText);
+  const normalizedClause = normalizeFactClause(clause);
+  if (!normalizedClause) return true;
+  if (normalizedAllowed.includes(normalizedClause)) return true;
+  if (unsupportedActionPhrase(normalizedClause, normalizedAllowed)) return false;
+
+  const asciiTokens = normalizedClause.match(/[A-Za-z0-9_.{}%-]+(?:\/[A-Za-z0-9_.{}%-]+)*/g) ?? [];
+  if (asciiTokens.length > 0 && asciiTokens.every((token) => normalizedAllowed.includes(token))) {
+    const withoutAscii = normalizeFactClause(normalizedClause.replace(/[A-Za-z0-9_.{}%-]+(?:\/[A-Za-z0-9_.{}%-]+)*/g, ''));
+    return withoutAscii.length === 0 || hasChineseSupportAnchor(withoutAscii, normalizedAllowed);
+  }
+
+  return hasChineseSupportAnchor(normalizedClause, normalizedAllowed);
+}
+
+function unsupportedActionPhrase(clause: string, allowedText: string): boolean {
+  const phrases = [
+    '重启服务',
+    '重新启动',
+    '才能恢复',
+    '清理缓存',
+    '升级版本',
+    '重新部署',
+    '不会影响',
+    '会影响',
+    '可以解决',
+    '必须',
+    '需要',
+  ];
+  return phrases.some((phrase) => clause.includes(phrase) && !allowedText.includes(phrase));
+}
+
+function hasChineseSupportAnchor(clause: string, allowedText: string): boolean {
+  const chineseRuns = clause.match(/[\u4e00-\u9fa5]{2,}/g) ?? [];
+  if (chineseRuns.length === 0) return true;
+  return chineseRuns.some((run) => longestCommonSubstringLength(run, allowedText) >= supportAnchorLength(run));
+}
+
+function supportAnchorLength(text: string): number {
+  if (text.length <= 3) return text.length;
+  if (text.length <= 6) return 3;
+  return 4;
+}
+
+function longestCommonSubstringLength(left: string, right: string): number {
+  let longest = 0;
+  for (let start = 0; start < left.length; start += 1) {
+    for (let end = start + 1; end <= left.length; end += 1) {
+      const length = end - start;
+      if (length <= longest) continue;
+      if (right.includes(left.slice(start, end))) {
+        longest = length;
+      }
+    }
+  }
+  return longest;
 }
 
 function pathTokenAllowed(token: string, allowedTokens: string[]): boolean {
