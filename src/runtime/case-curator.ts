@@ -1,7 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { DiagnosticClaim, DiagnosticResult, DiagnosticRun, Evidence } from '../domain.js';
-import { dirtyFlagPath } from '../knowledge/paths.js';
+import { writeSolvedCaseDraft } from '../knowledge/solved-case-curation.js';
 import { routeKnowledgeQuestion } from '../knowledge/taxonomy.js';
 import type { StoredCase } from '../sessions/file-memory-store.js';
 
@@ -50,14 +48,11 @@ export function curateSolvedCase(input: {
   const today = new Date().toISOString().slice(0, 10);
   const compactDate = today.replaceAll('-', '');
   const documentId = `kb_case_solved_${slug(moduleId)}_${compactDate}_${slug(input.caseSession.id)}`;
-  const targetDir = join(input.workspaceRoot, 'knowledge', 'tickets', 'solved-cases', moduleId);
-  const targetPath = join(targetDir, `${documentId}.md`);
-
-  mkdirSync(targetDir, { recursive: true });
-  mkdirSync(join(input.workspaceRoot, 'knowledge', 'indexes'), { recursive: true });
-  writeFileSync(
-    targetPath,
-    buildSolvedCaseMarkdown({
+  const { path } = writeSolvedCaseDraft({
+    workspaceRoot: input.workspaceRoot,
+    documentId,
+    moduleId,
+    markdown: buildSolvedCaseMarkdown({
       documentId,
       title: input.caseSession.title,
       moduleId,
@@ -69,14 +64,12 @@ export function curateSolvedCase(input: {
       originalQuestion,
       confirmationMessage: input.confirmationMessage,
     }),
-    'utf8',
-  );
-  writeFileSync(dirtyFlagPath(input.workspaceRoot), `Solved case ${documentId} needs indexing.\n`, 'utf8');
+  });
 
   return {
     documentId,
     moduleId,
-    path: targetPath,
+    path,
     status: 'review_required',
     confidence: 'medium',
   };
@@ -257,11 +250,9 @@ function inferModuleId(
     return sourceModule;
   }
 
-  if (existsSync(join(workspaceRoot, 'knowledge'))) {
-    const route = routeKnowledgeQuestion({ workspaceRoot, question: originalQuestion });
-    if (route.moduleCandidates[0]) {
-      return route.moduleCandidates[0];
-    }
+  const route = routeKnowledgeQuestion({ workspaceRoot, question: originalQuestion });
+  if (route.moduleCandidates[0]) {
+    return route.moduleCandidates[0];
   }
 
   return 'general';

@@ -241,6 +241,14 @@ test('runtime module does not instantiate embedding or rerank providers', () => 
   );
 });
 
+test('runtime case curator does not write knowledge files directly', () => {
+  const source = read(join(srcRoot, 'runtime', 'case-curator.ts'));
+  assert.doesNotMatch(source, /from\s+['"]node:fs['"]/);
+  assert.doesNotMatch(source, /\bwriteFileSync\b/);
+  assert.doesNotMatch(source, /\bmkdirSync\b/);
+  assert.doesNotMatch(source, /\bdirtyFlagPath\b/);
+});
+
 test('diagnostic runtime is a thin composition root with focused collaborators', () => {
   const runtimePath = join(srcRoot, 'runtime', 'diagnostic-runtime.ts');
   const source = read(runtimePath);
