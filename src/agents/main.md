@@ -159,7 +159,7 @@ User message
      -> continue_diagnosis if another safe run is useful
      -> final_answer if evidence supports the conclusion
      -> escalate_to_human if risk, permission, or uncertainty is too high
-  -> Presentation selects accepted claim/evidence IDs and formats a concise reply
+  -> Presentation generates an Answer Contract reply; runtime validates direct-answer coverage and accepted IDs
   -> Diagnostic log entry
 ```
 

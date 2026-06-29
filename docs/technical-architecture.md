@@ -128,7 +128,7 @@ Gateway chat route
   -> DiagnosticWorker port
        -> bounded retry / pivot (Deep Query Correction)
   -> deterministic Result Validator / frozen Review Gate
-  -> Presenter (accepted claim/evidence IDs only)
+  -> Presentation Agent (Answer Contract) + runtime validation/fallback
   -> RuntimeEventRecorder
   -> CaseRepository
   -> optional Case Curator (solved case draft, review workflow)
@@ -142,7 +142,7 @@ Same-case async turns are serialized in the runtime so every accepted user messa
 
 Deep Query planning is module-aware. `src/runtime/deep-query-planner.ts` treats Knowledge Router `moduleCandidates` as the primary signal for artifact targets, uses code escalation signals and regex heuristics only as fallback, and filters noisy anchor terms before adding worker constraints. Runtime passes `knowledge.projectType` into the planner through `attachKnowledgeCodeEscalationContext`; missing values default to `generic`. Project types adapt likely path hints without changing the worker contract: `symfony` favors Twig templates, bundle controllers/services, and app config; `node` and `vue` favor their conventional route/service/component/config paths. The plan records `projectType` in `DiagnosticRequest.context.deepQuery` so audit logs and worker prompts can explain why a path family was suggested.
 
-Before presentation, the pure result validator enforces unique evidence IDs, existing claim references, and medium/high evidence for facts. It freezes the result and decision. A model may only select accepted claim/evidence IDs; it cannot return an outcome or author factual reply text. Worker command/cwd/stdout/stderr/stack/provider payload stay in bounded redacted diagnostic logs. A pre-result worker failure is shown only as a safe category, diagnosis state, next action, and case/run identity.
+Before presentation, the pure result validator enforces unique evidence IDs, existing claim references, and medium/high evidence for facts. It freezes the result and decision. The Presentation model may author the final Chinese reply only through the Answer Contract: `answerTarget`, `directAnswer`, `reply`, `claimIds`, `evidenceIds`, and `directAnswerClaimIds`. Runtime validates that referenced IDs are accepted, that the first reply paragraph covers `directAnswer`, and that the answer directly addresses `DiagnosticRequest.userGoal`; invalid output falls back to a minimal fact-only reply from accepted claims. The model cannot return an outcome or add facts beyond accepted claims/evidence. Worker command/cwd/stdout/stderr/stack/provider payload stay in bounded redacted diagnostic logs. A pre-result worker failure is shown only as a safe category, diagnosis state, next action, and case/run identity.
 
 ## Dashboard Onboarding
 

@@ -2250,8 +2250,12 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
 
     return chatResponse(
       JSON.stringify({
+        answerTarget: '课程任务保存失败的当前可验证判断',
+        directAnswer: '存在可验证证据。',
+        reply: '**结论：存在可验证证据。**',
         claimIds: ['claim_1'],
         evidenceIds: ['ev_01'],
+        directAnswerClaimIds: ['claim_1'],
       }),
     );
   };
@@ -2300,7 +2304,9 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
     });
 
     assert.equal(modelCalls.length, 2);
-    assert.match(modelCalls[1][0].content, /只负责.*claim\/evidence ID/);
+    assert.match(modelCalls[1][0].content, /answerTarget/);
+    assert.match(modelCalls[1][0].content, /directAnswer/);
+    assert.match(modelCalls[1][0].content, /reply 第一段必须覆盖 directAnswer/);
     assert.doesNotMatch(modelCalls[1][1].content, /claude -p|stdout|stderr/);
     assert.match(response.assistantMessage, /\*\*结论：/);
     assert.match(response.assistantMessage, /存在可验证证据/);
@@ -2389,6 +2395,322 @@ test('agent falls back to local reviewed formatting when presentation model retu
     assert.doesNotMatch(response.assistantMessage, /The `org\.create` event has no depth check/);
     assert.doesNotMatch(response.assistantMessage, /来源：run_01/);
     assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('presentation agent answers directory questions directly for case_ee3a079a customer view', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const originalFetch = globalThis.fetch;
+  const modelCalls = [];
+
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    modelCalls.push(body.messages);
+    if (modelCalls.length === 1) {
+      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
+    }
+    return chatResponse(JSON.stringify({
+      answerTarget: '本地视频文件在 edusoho 下的存放目录',
+      directAnswer: '本地视频文件存放在 edusoho/app/data/udisk/。',
+      reply: '**结论：本地视频文件存放在 edusoho/app/data/udisk/。**\n\n它下面会按 `{targetType}/{targetId}/{filename}` 分层，例如课时本地视频会在 `udisk/courselesson/{lessonId}/{filename}`。是否走这个目录取决于上传模式：默认/空 或 `local` 会落到本地；如果是 `cloud` 就不会在这个目录里。\n\n**说明：** 这不是 `web/files/` 或 `app/data/private_files/`。',
+      claimIds: ['claim_1', 'claim_2', 'claim_3', 'claim_4'],
+      evidenceIds: ['ev_config', 'ev_local', 'ev_activity', 'ev_web', 'ev_private'],
+      directAnswerClaimIds: ['claim_1'],
+    }));
+  };
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
+              { id: 'ev_local', kind: 'workspace', source: 'src/AppBundle/Extensions/DataTag/LocalFileImplementorImpl.php', summary: '本地文件实现将文件写入 udisk。', confidence: 'high' },
+              { id: 'ev_activity', kind: 'workspace', source: 'src/Biz/File/Service/Impl/UploadFileServiceImpl.php', summary: '文件 key 由 targetType、targetId 和 filename 组成。', confidence: 'high' },
+              { id: 'ev_web', kind: 'workspace', source: 'web/files', summary: 'web/files 是公共上传目录，不是本地视频默认目录。', confidence: 'medium' },
+              { id: 'ev_private', kind: 'workspace', source: 'app/data/private_files', summary: 'private_files 用于私有导出等，不是本地视频默认目录。', confidence: 'medium' },
+            ],
+            claims: [
+              { type: 'fact', text: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', evidenceIds: ['ev_config', 'ev_local'] },
+              { type: 'fact', text: 'udisk 下的文件按 {targetType}/{targetId}/{filename} 分层，例如课时本地视频落到 udisk/courselesson/{lessonId}/{filename}。', evidenceIds: ['ev_activity'] },
+              { type: 'fact', text: '是否走 local 存储由后台“系统设置 - 存储 - 上传模式 upload_mode”控制：默认/空 或 local 即落 udisk；设为 cloud 则走云存储 implementor，不在 udisk。', evidenceIds: ['ev_config'] },
+              { type: 'fact', text: 'EduSoho 中还有 web/files/（公共上传）和 app/data/private_files/（私有导出等）两个目录，但本地视频默认不在这两个目录。', evidenceIds: ['ev_web', 'ev_private'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+
+    const config = baseConfig(dir);
+    config.agent.defaultUserPersona = 'customer';
+    const agent = new DiagnosticRuntime(config, store, worker);
+    const response = await agent.handleUserMessage({
+      message: '本地视频 文件存在在 edusoho 下面的哪个目录？',
+      persona: 'customer',
+    });
+
+    assert.equal(modelCalls.length, 2);
+    assert.match(modelCalls[1][1].content, /userGoal/);
+    assert.match(modelCalls[1][1].content, /userPersona/);
+    assert.match(modelCalls[1][1].content, /acceptedClaims/);
+    assert.match(response.assistantMessage, /^(\*\*)?结论：.*app\/data\/udisk/m);
+    assert.match(response.assistantMessage, /app\/data\/udisk/);
+    assert.match(response.assistantMessage, /\{targetType\}\/\{targetId\}\/\{filename\}|udisk\/courselesson\/\{lessonId\}\/\{filename\}/);
+    assert.doesNotMatch(response.assistantMessage, /相关系统位置/);
+    assert.doesNotMatch(response.assistantMessage, /先按上面的说明/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('presentation rejects a reply whose first paragraph does not cover the direct answer', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
+    }
+    return chatResponse(JSON.stringify({
+      answerTarget: '本地视频文件在 edusoho 下的存放目录',
+      directAnswer: '本地视频文件存放在 edusoho/app/data/udisk/。',
+      reply: '**结论：本地视频文件和云视频是两个不同的存储项。**\n\n证据显示本地目录与上传模式有关。',
+      claimIds: ['claim_1', 'claim_2'],
+      evidenceIds: ['ev_config', 'ev_activity'],
+      directAnswerClaimIds: ['claim_1'],
+    }));
+  };
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
+              { id: 'ev_activity', kind: 'workspace', source: 'src/Biz/File/Service/Impl/UploadFileServiceImpl.php', summary: '文件 key 由 targetType、targetId 和 filename 组成。', confidence: 'high' },
+            ],
+            claims: [
+              { type: 'fact', text: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', evidenceIds: ['ev_config'] },
+              { type: 'fact', text: 'udisk 下的文件按 {targetType}/{targetId}/{filename} 分层，例如课时本地视频落到 udisk/courselesson/{lessonId}/{filename}。', evidenceIds: ['ev_activity'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+
+    const config = baseConfig(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+    const response = await agent.handleUserMessage({
+      message: '本地视频 文件存在在 edusoho 下面的哪个目录？',
+      persona: 'customer',
+    });
+
+    assert.equal(response.decision, 'final');
+    assert.match(response.assistantMessage, /^(\*\*)?结论：.*app\/data\/udisk/m);
+    assert.match(response.assistantMessage, /\{targetType\}\/\{targetId\}\/\{filename\}|udisk\/courselesson/);
+    assert.doesNotMatch(response.assistantMessage, /两个不同的存储项/);
+    assert.doesNotMatch(response.assistantMessage, /先按上面的说明/);
+    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('presentation rejects unaccepted direct answer claim ids', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
+    }
+    return chatResponse(JSON.stringify({
+      answerTarget: '当前系统是否支持云短信加本地视频',
+      directAnswer: '支持，云短信可以开启，同时视频上传模式可以选择本地。',
+      reply: '**结论：支持，云短信可以开启，同时视频上传模式可以选择本地。**\n\n云短信和云视频存储是两个独立设置项。',
+      claimIds: ['claim_1', 'claim_missing'],
+      evidenceIds: ['ev_sms'],
+      directAnswerClaimIds: ['claim_missing'],
+    }));
+  };
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '系统支持「使用网校云平台云短信 + 视频存本地」这种组合配置。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_sms', kind: 'workspace', source: 'SmsServiceImpl.php', summary: '云短信读取独立开关。', confidence: 'high' },
+              { id: 'ev_video', kind: 'workspace', source: 'EduCloudController.php', summary: '视频上传模式可切到 local。', confidence: 'high' },
+            ],
+            claims: [
+              { type: 'fact', text: '系统支持把云短信开关保持开启、同时将视频上传模式切到 local（视频存本地）。', evidenceIds: ['ev_sms', 'ev_video'] },
+              { type: 'fact', text: '网校系统将云短信和云视频存储分别实现为两个独立的服务项/设置项。', evidenceIds: ['ev_sms'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+
+    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
+    const response = await agent.handleUserMessage({
+      message: '我想要用网校的云平台的云短信功能，但是我视频想存本地的。当前系统支持这样吗',
+      persona: 'customer',
+    });
+
+    assert.match(response.assistantMessage, /^(\*\*)?结论：.*支持.*云短信.*视频.*本地/m);
+    assert.doesNotMatch(response.assistantMessage, /claim_missing/);
+    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('presentation rejects replies that introduce unreviewed path facts', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const originalFetch = globalThis.fetch;
+  let callCount = 0;
+
+  globalThis.fetch = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
+    }
+    return chatResponse(JSON.stringify({
+      answerTarget: '本地视频文件在 edusoho 下的存放目录',
+      directAnswer: '本地视频文件存放在 edusoho/app/data/udisk/。',
+      reply: '**结论：本地视频文件存放在 edusoho/app/data/udisk/。**\n\n另一个可能位置是 `app/secret/unreviewed-video/`。',
+      claimIds: ['claim_1'],
+      evidenceIds: ['ev_config'],
+      directAnswerClaimIds: ['claim_1'],
+    }));
+  };
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
+            ],
+            claims: [
+              { type: 'fact', text: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', evidenceIds: ['ev_config'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+
+    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
+    const response = await agent.handleUserMessage({
+      message: '本地视频 文件存在在 edusoho 下面的哪个目录？',
+      persona: 'customer',
+    });
+
+    assert.match(response.assistantMessage, /app\/data\/udisk/);
+    assert.doesNotMatch(response.assistantMessage, /app\/secret\/unreviewed-video/);
+    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('presentation answers support questions before explaining independent service items', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const originalFetch = globalThis.fetch;
+  const modelCalls = [];
+
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    modelCalls.push(body.messages);
+    if (modelCalls.length === 1) {
+      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
+    }
+    return chatResponse(JSON.stringify({
+      answerTarget: '当前系统是否支持云短信加本地视频',
+      directAnswer: '支持：可以用云短信，同时把视频上传模式设置为本地。',
+      reply: '**结论：支持：可以用云短信，同时把视频上传模式设置为本地。**\n\n原因是云短信和云视频存储是两个独立服务项/设置项。关闭云视频只会让视频回退到本地服务器，不会影响云短信开关。',
+      claimIds: ['claim_2', 'claim_1', 'claim_3'],
+      evidenceIds: ['ev_sms', 'ev_video'],
+      directAnswerClaimIds: ['claim_2'],
+    }));
+  };
+
+  try {
+    const store = new FileMemoryStore(dir);
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '系统支持「使用网校云平台云短信 + 视频存本地」这种组合配置。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_sms', kind: 'workspace', source: 'SmsServiceImpl.php', summary: '云短信读取独立开关。', confidence: 'high' },
+              { id: 'ev_video', kind: 'workspace', source: 'EduCloudController.php', summary: '视频上传模式可切到 local。', confidence: 'high' },
+            ],
+            claims: [
+              { type: 'fact', text: '网校系统将云短信和云视频存储分别实现为两个独立的服务项/设置项。', evidenceIds: ['ev_sms'] },
+              { type: 'fact', text: '系统支持把云短信开关保持开启、同时将视频上传模式切到 local（视频存本地）。', evidenceIds: ['ev_video'] },
+              { type: 'inference', text: '关闭云视频只会把视频回退到本地服务器，不会影响云短信功能继续可用。', evidenceIds: ['ev_sms', 'ev_video'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+
+    const config = baseConfig(dir);
+    config.agent.defaultUserPersona = 'customer';
+    const agent = new DiagnosticRuntime(config, store, worker);
+    const response = await agent.handleUserMessage({
+      message: '我想要用网校的云平台的云短信功能，但是我视频想存本地的。当前系统支持这样吗',
+      persona: 'customer',
+    });
+
+    assert.equal(modelCalls.length, 2);
+    assert.match(response.assistantMessage, /^\*\*结论：支持/m);
+    assert.match(response.assistantMessage, /云短信.*视频.*本地/);
+    assert.doesNotMatch(response.assistantMessage, /^\*\*结论：网校系统将云短信和云视频存储分别实现为两个独立/m);
   } finally {
     globalThis.fetch = originalFetch;
     rmSync(dir, { recursive: true, force: true });
@@ -2714,16 +3036,49 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     const supportReply = ruleBasedReviewAndFormat(reviewedResult, 'support');
     const customerReply = ruleBasedReviewAndFormat(reviewedResult, 'customer');
     assert.match(operationsReply, /\*\*结论：/);
-    assert.match(operationsReply, /系统 bug|设计使然|配置或使用问题|目前不能确认/);
-    assert.match(operationsReply, /\*\*对业务的影响：\*\*/);
-    assert.doesNotMatch(operationsReply, /支撑证据：/);
-    assert.doesNotMatch(operationsReply, /src\/player\.ts/);
-    assert.match(developerReply, /\*\*结论：/);
-    assert.match(developerReply, /\*\*定位依据：\*\*/);
-    assert.match(developerReply, /\*\*下一步排查：\*\*/);
-    assert.match(supportReply, /\*\*建议处理：\*\*/);
-    assert.match(customerReply, /\*\*你现在可以这样做：\*\*/);
-    assert.notEqual(operationsReply, developerReply);
+    assert.match(operationsReply, /倍速开关由播放器初始化配置控制/);
+    assert.equal(developerReply, operationsReply);
+    assert.equal(supportReply, operationsReply);
+    assert.equal(customerReply, operationsReply);
+    assert.doesNotMatch(customerReply, /先按上面的说明/);
+    assert.doesNotMatch(customerReply, /人工支持可以继续查看/);
+    const customerActionReply = ruleBasedReviewAndFormat({
+      status: 'concluded',
+      summary: '系统支持「使用网校云平台云短信 + 视频存本地」这种组合配置。',
+      missingInfo: [],
+      evidence: [
+        { id: 'ev_sms', kind: 'workspace', source: 'SmsServiceImpl.php', summary: '云短信读取独立开关。', confidence: 'high' },
+        { id: 'ev_video', kind: 'workspace', source: 'EduCloudController.php', summary: '视频上传模式可切到 local。', confidence: 'high' },
+      ],
+      claims: [
+        { type: 'fact', text: '网校系统将云短信和云视频存储分别实现为两个独立的服务项/设置项。', evidenceIds: ['ev_sms'] },
+        { type: 'fact', text: '系统支持把云短信开关保持开启、同时将视频上传模式切到 local（视频存本地）。', evidenceIds: ['ev_video'] },
+        { type: 'inference', text: '关闭云视频只会把视频回退到本地服务器，不会影响云短信功能继续可用。', evidenceIds: ['ev_sms', 'ev_video'] },
+      ],
+      recommendedNextAction: 'final_answer',
+    }, 'customer', '我想要用网校的云平台的云短信功能，但是我视频想存本地的。当前系统支持这样吗');
+    assert.match(customerActionReply, /\*\*结论：系统支持.*云短信.*视频.*本地/);
+    assert.doesNotMatch(customerActionReply, /\*\*结论：网校系统将云短信和云视频存储分别实现为两个独立/);
+    assert.match(customerActionReply, /\*\*补充说明：\*\*/);
+    assert.match(customerActionReply, /云短信功能继续可用|独立的服务项/);
+    assert.doesNotMatch(customerActionReply, /先按上面的说明/);
+    const directoryFallbackReply = ruleBasedReviewAndFormat({
+      status: 'concluded',
+      summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
+      missingInfo: [],
+      evidence: [
+        { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
+        { id: 'ev_activity', kind: 'workspace', source: 'src/Biz/File/Service/Impl/UploadFileServiceImpl.php', summary: '文件 key 由 targetType、targetId 和 filename 组成。', confidence: 'high' },
+      ],
+      claims: [
+        { type: 'fact', text: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', evidenceIds: ['ev_config'] },
+        { type: 'fact', text: 'udisk 下的文件按 {targetType}/{targetId}/{filename} 分层，例如课时本地视频落到 udisk/courselesson/{lessonId}/{filename}。', evidenceIds: ['ev_activity'] },
+      ],
+      recommendedNextAction: 'final_answer',
+    }, 'customer', '本地视频 文件存在在 edusoho 下面的哪个目录？');
+    assert.match(directoryFallbackReply, /app\/data\/udisk/);
+    assert.match(directoryFallbackReply, /\{targetType\}\/\{targetId\}\/\{filename\}/);
+    assert.doesNotMatch(directoryFallbackReply, /相关系统位置/);
     assert.match(
       ruleBasedReviewAndFormat({
         status: 'concluded',
@@ -2761,8 +3116,12 @@ test('model preflight cannot block an inspectable workspace question with generi
 
     return chatResponse(
       JSON.stringify({
+        answerTarget: '倍速播放问题是否可在当前工作区排查',
+        directAnswer: '问题可以通过当前 workspace 先做只读排查。',
+        reply: '**结论：问题可以通过当前 workspace 先做只读排查。**',
         claimIds: ['claim_1'],
         evidenceIds: ['ev_01'],
+        directAnswerClaimIds: ['claim_1'],
       }),
     );
   };
@@ -2848,16 +3207,24 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
     if (modelCalls.length === 2) {
       return chatResponse(
         JSON.stringify({
+          answerTarget: '视频倍速开关的继续排查方向',
+          directAnswer: '可能需要继续查播放器配置。',
+          reply: '**结论：可能需要继续查播放器配置。**',
           claimIds: ['claim_1'],
           evidenceIds: ['ev_01'],
+          directAnswerClaimIds: ['claim_1'],
         }),
       );
     }
 
     return chatResponse(
       JSON.stringify({
+        answerTarget: '视频倍速开关的位置',
+        directAnswer: '倍速开关由播放器初始化配置控制。',
+        reply: '**结论：倍速开关由播放器初始化配置控制。**',
         claimIds: ['claim_1'],
         evidenceIds: ['ev_02'],
+        directAnswerClaimIds: ['claim_1'],
       }),
     );
   };

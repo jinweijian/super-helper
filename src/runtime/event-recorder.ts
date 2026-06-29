@@ -27,8 +27,12 @@ export interface ModelPreflightParsed {
 }
 
 export interface ModelReviewParsed {
+  answerTarget?: string;
+  directAnswer?: string;
+  reply?: string;
   claimIds?: string[];
   evidenceIds?: string[];
+  directAnswerClaimIds?: string[];
 }
 
 interface AgentIdentity {
@@ -279,23 +283,23 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
   }
 
   modelReviewFailed(caseSession: StoredCase, error: string): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.outputReview, {
+    return this.recordAgent(caseSession, agentIdentities.presentation, {
       actor: 'agent',
       phase: 'model_review_failed',
-      label: '输出审核',
+      label: '美化输出',
       severity: 'warn',
-      summary: 'Agent 模型审核失败，降级到本地审核规则',
+      summary: 'Presentation 模型回复未通过校验，降级到本地事实兜底',
       detail: { error },
     });
   }
 
   modelReviewResult(caseSession: StoredCase, raw: string, parsed: ModelReviewParsed): DiagnosticLogEvent {
-    return this.recordAgent(caseSession, agentIdentities.outputReview, {
+    return this.recordAgent(caseSession, agentIdentities.presentation, {
       actor: 'agent',
       phase: 'model_review_result',
-      label: '输出审核',
+      label: '美化输出',
       severity: 'ok',
-      summary: 'Presentation 模型完成已审核 claim/evidence 排列',
+      summary: 'Presentation 模型完成 Answer Contract 回复整理',
       detail: {
         raw: redactProviderErrorMessage(raw).slice(0, 2000),
         parsed,

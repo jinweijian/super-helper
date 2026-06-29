@@ -28,7 +28,7 @@ may_produce_user_facing_text: true
 - `final_answer`
 - `escalate_to_human`
 
-模型无权返回或修改 outcome，也无权生成事实文本；可选模型阶段只能从已接受集合中选择 claim/evidence ID。
+模型无权返回或修改 outcome，也无权生成新事实。输出审核只冻结事实边界：哪些 claim/evidence 被接受、哪些缺失信息仍需暴露、当前 decision 是什么。
 
 ## Rules
 
@@ -37,6 +37,6 @@ may_produce_user_facing_text: true
 - 不得将 plausible cause 写成最终结论。
 - 需要继续排查时，可以要求 runtime 追加一轮诊断。
 - 历史经验答案也必须审核，不能因为来自历史会话就直接当作事实。
-- 审核必须保留完整 evidence，但主回复只展示答案和下一步；证据默认进入“查看关键证据”折叠区和右侧审计面板。
-- Presentation 可以按 persona 调整表达模板和重点字重，但不能改变冻结 outcome、claim 或 evidence。
+- 审核必须保留完整 evidence，但主回复只展示答案和必要补充；证据默认进入“查看关键证据”折叠区和右侧审计面板。
+- Presentation 可以基于已接受 claim/evidence 生成最终中文回复，但必须通过 Answer Contract 与 runtime 校验，不能改变冻结 outcome、claim 或 evidence。
 - worker command、cwd、stdout、stderr、stack、provider 原始 payload 和内部 prompt 只能进入脱敏且有界的诊断日志，不能进入主回复或模型 Presentation 输入。

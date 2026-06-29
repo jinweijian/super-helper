@@ -192,15 +192,16 @@ After a worker run completes, a deterministic validator and Review Gate check:
 - Should the user be asked a question before continuing?
 - Should the case be escalated to a human?
 
-Only after this review can Presentation select accepted IDs and the runtime render a user-facing answer. Presentation cannot promote a partial result or author new factual text.
+Only after this review can Presentation generate a user-facing answer through the Answer Contract. Presentation cannot promote a partial result or add factual content outside accepted claims/evidence.
 
 Concrete implementation:
 
 - `src/runtime/result-validator.ts` rejects invalid evidence references and unsupported facts and records observable validation issues.
 - `src/runtime/review-gate.ts` maps the validated result into a frozen case status and user-facing decision; model output cannot promote it.
 - `src/runtime/agent-configs.ts` resolves the `output-review` Agent config for model review prompts.
-- `src/runtime/presenter.ts` formats preflight questions and persona-aware final replies without inventing unsupported facts.
-- `src/agents/presentation.md` defines presentation constraints; the presentation step must not add unsupported facts.
+- `src/runtime/review-presentation.ts` validates Presentation Answer Contract output, including accepted IDs and direct-answer coverage.
+- `src/runtime/presenter.ts` formats preflight questions, worker failure summaries, and fact-only fallback replies without inventing unsupported facts.
+- `src/agents/presentation.md` defines presentation constraints; the presentation step must answer `userGoal` directly and must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
 - `src/runtime/diagnostic-runtime.ts` is the runtime orchestration entry; private root facades are intentionally not used.
 
