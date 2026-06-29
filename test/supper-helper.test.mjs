@@ -12,6 +12,7 @@ import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
 import { startServer } from '../dist/gateway/http-server.js';
+import { serializeSession } from '../dist/gateway/dto.js';
 import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
@@ -541,6 +542,30 @@ test('sessions API lists, creates, and loads reusable chat sessions', async () =
     if (server) {
       await server.close();
     }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('session serialization includes knowledge health only when explicitly requested', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+
+  try {
+    const config = baseConfig(dir);
+    const store = new FileMemoryStore(dir);
+    const caseSession = store.createCase({
+      tenantId: 'local',
+      userId: 'local-user',
+      workspaceId: 'current',
+      title: '轻量序列化',
+    });
+
+    const defaultSerialized = await serializeSession(caseSession, config);
+    assert.equal(Object.hasOwn(defaultSerialized, 'knowledgeHealth'), false);
+
+    const explicitSerialized = await serializeSession(caseSession, config, { includeKnowledgeHealth: true });
+    assert.equal(Object.hasOwn(explicitSerialized, 'knowledgeHealth'), true);
+    assert.equal(typeof explicitSerialized.knowledgeHealth.serviceBinding.status, 'string');
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

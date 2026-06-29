@@ -61,6 +61,10 @@ function assertNoImportPattern(files, patterns, message) {
   assert.deepEqual(offenders, [], message);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function assertAbsent(paths, message) {
   const existing = paths.filter((path) => existsSync(join(repoRoot, path)));
   assert.deepEqual(existing, [], message);
@@ -156,6 +160,41 @@ test('root deprecation re-exports match owner module symbols', async () => {
   assert.equal(oldSmoke.runModelSmokeTest, newSmoke.runModelSmokeTest);
   assert.equal(oldPreflight.preflight, newPreflight.preflight);
   assert.equal(oldStorage.FileMemoryStore, newStorage.FileMemoryStore);
+});
+
+test('production source does not import deprecated root compatibility modules', () => {
+  const files = tsFilesUnder(srcRoot).filter((path) => {
+    const relative = relativeSource(path);
+    return ![
+      'src/model.ts',
+      'src/model-smoke-test.ts',
+      'src/preflight.ts',
+      'src/storage.ts',
+    ].includes(relative);
+  });
+  const forbidden = [
+    './model.js',
+    './model',
+    '../model.js',
+    '../model',
+    './model-smoke-test.js',
+    './model-smoke-test',
+    '../model-smoke-test.js',
+    '../model-smoke-test',
+    './preflight.js',
+    './preflight',
+    '../preflight.js',
+    '../preflight',
+    './storage.js',
+    './storage',
+    '../storage.js',
+    '../storage',
+  ];
+  assertNoImportPattern(
+    files,
+    forbidden.map((specifier) => new RegExp(`from\\s+['"]${escapeRegExp(specifier)}['"]|import\\s*\\(\\s*['"]${escapeRegExp(specifier)}['"]\\s*\\)`)),
+    'production source must import owner modules instead of deprecated root compatibility modules',
+  );
 });
 
 test('retrieval CLI uses configured retrieval instead of manual BM25-only wiring', () => {
