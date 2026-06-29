@@ -202,12 +202,12 @@ Quality reports are written next to the indexes and reports directories. Severit
 
 ## Providers, Vector Artifacts, and Retrieval
 
-Embeddings and rerank are configured independently from the Agent chat model. The default config keeps both disabled and points at SiliconFlow only as the primary real provider for this implementation:
+Embeddings and rerank are configured independently from the Agent chat model. The default config enables local vector-index building and the embedding retrieval entrypoint, with SiliconFlow as the primary real provider for this implementation. If no provider key is available, the provider is unreachable, or the local vector index is missing, retrieval must degrade safely to lexical/structured retrieval and must not block the diagnostic flow. Rerank remains optional and disabled unless config explicitly enables it:
 
 ```json
 {
   "embedding": {
-    "enabled": false,
+    "enabled": true,
     "provider": "siliconflow",
     "model": "Qwen/Qwen3-Embedding-0.6B",
     "baseUrl": "https://api.siliconflow.cn/v1",

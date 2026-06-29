@@ -77,7 +77,7 @@
       "stage": "output_review",
       "configPath": "output-review.md",
       "required": true,
-      "mayProduceUserFacingText": true,
+      "mayProduceUserFacingText": false,
       "executionMode": "deterministic",
       "summary": "输出审核 Agent，负责审核证据、阻止无证据结论，并决定追问、继续、最终回答或升级。"
     },

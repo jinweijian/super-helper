@@ -2,7 +2,7 @@
 id: output-review
 role: evidence-and-output-review
 stage: output_review
-may_produce_user_facing_text: true
+may_produce_user_facing_text: false
 ---
 
 # Output Review Agent

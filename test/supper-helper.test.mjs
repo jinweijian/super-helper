@@ -3628,6 +3628,7 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
   assert.match(resolveAgentConfig('knowledge_router').content, /Knowledge Router Agent/);
   assert.match(resolveAgentConfig('evidence_judge').content, /Evidence Judge Agent/);
   assert.match(resolveAgentConfig('case_curator').content, /Case Curator Agent/);
+  assert.equal(listPublicAgentConfigs().find((agent) => agent.stage === 'output_review').mayProduceUserFacingText, false);
   assert.equal(listPublicAgentConfigs().some((agent) => agent.stage === 'presentation' && agent.mayProduceUserFacingText), true);
   assert.equal(listPublicAgentConfigs().find((agent) => agent.stage === 'presentation').executionMode, 'presentation_only');
 });
