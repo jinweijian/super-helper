@@ -17,7 +17,18 @@ export function updateModelSettings(input: {
   input.config.models.providers[providerId] = provider;
   input.config.agent.modelProvider = providerId;
   input.config.agent.useModelForPreflight = input.body.useModelForPreflight ?? true;
-  input.config.agent.useModelForEvidenceCoverage = input.body.useModelForEvidenceCoverage ?? true;
+  if ('useModelForRagAnswerability' in input.body) {
+    input.config.agent.useModelForRagAnswerability = input.body.useModelForRagAnswerability;
+  }
+  if ('useModelForEvidenceCoverage' in input.body && !('useModelForRagAnswerability' in input.body)) {
+    input.config.agent.useModelForRagAnswerability = input.body.useModelForEvidenceCoverage;
+  }
+  input.config.agent.useModelForRagAnswerability ??= true;
+  input.config.agent.useModelForEvidenceCoverage = input.config.agent.useModelForRagAnswerability;
+  if (positiveInteger(input.body.ragAnswerabilityTopN)) {
+    input.config.agent.ragAnswerabilityTopN = positiveInteger(input.body.ragAnswerabilityTopN);
+    input.config.agent.evidenceCoverageTopN = input.config.agent.ragAnswerabilityTopN;
+  }
   saveConfig(input.config);
   return publicSettings(input.config, input.secrets);
 }

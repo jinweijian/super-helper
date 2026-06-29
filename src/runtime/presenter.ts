@@ -1,15 +1,29 @@
-import type { DiagnosticClaim, DiagnosticResult, UserPersona, WorkerTrace } from '../domain.js';
+import type { AnswerContract, DiagnosticClaim, DiagnosticRequest, DiagnosticResult, UserPersona, WorkerTrace } from '../domain.js';
+import { buildAnswerContract } from './answer-contract.js';
 import { validateDiagnosticResult } from './result-validator.js';
+
+export interface ReviewFormatContext {
+  answerContract?: AnswerContract;
+  ragAnswerability?: NonNullable<NonNullable<DiagnosticRequest['context']>['knowledge']>['answerability'];
+}
 
 export function formatPreflightQuestion(question: string, missingInfo: string[]): string {
   return `我现在还不能判断原因，缺少关键信息：${missingInfo.join('、')}。\n\n${question}`;
 }
 
-export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: UserPersona, userGoal?: string): string {
+export function ruleBasedReviewAndFormat(
+  result: DiagnosticResult,
+  persona: UserPersona,
+  userGoal?: string,
+  context?: ReviewFormatContext,
+): string {
   result = validateDiagnosticResult(result).result;
   const unsupportedFacts = result.claims.filter((claim) => claim.type === 'fact' && claim.evidenceIds.length === 0);
   const supportedClaims = result.claims.filter((claim) => claim.type !== 'fact' || claim.evidenceIds.length > 0);
   const primaryClaim = supportedClaims.find((claim) => claim.type === 'fact' || claim.type === 'inference')?.text;
+  const answerContract = context?.answerContract ?? (userGoal
+    ? buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal })
+    : undefined);
   if (unsupportedFacts.length > 0 && supportedClaims.length === 0) {
     return '目前证据不足，暂不能形成结论。\n\n**仍需确认：** 缺少可验证的 medium/high confidence 证据。\n\n**下一步：** 请补充更多可验证信息，或查看诊断日志让技术支持复核。';
   }
@@ -38,12 +52,19 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
     return formatQ2Result(result, unsupportedFacts);
   }
 
-  if (
-    persona === 'operations' &&
-    isFeatureOverviewQuestion(userGoal ?? result.summary) &&
-    supportedClaims.length > 0
-  ) {
-    return operationsFeatureOverviewReply(supportedClaims, result, unsupportedFacts);
+  if (isFeatureOverviewQuestion(userGoal ?? result.summary) && supportedClaims.length > 0) {
+    return featureOverviewReply(persona, supportedClaims, result, unsupportedFacts);
+  }
+
+  if (answerContract && supportedClaims.length > 0 && shouldUseContractReply(answerContract)) {
+    return answerContractReply({
+      persona,
+      result,
+      supportedClaims,
+      unsupportedFacts,
+      answerContract,
+      ragAnswerability: context?.ragAnswerability,
+    });
   }
 
   const groundedConclusion = primaryClaim ?? '当前没有通过审核的事实结论';
@@ -55,6 +76,58 @@ export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: User
     missing: result.missingInfo.join('、'),
     unsupportedFacts,
   });
+}
+
+function shouldUseContractReply(answerContract: AnswerContract): boolean {
+  return answerContract.questionType !== 'troubleshooting_cause' &&
+    answerContract.questionType !== 'bug_or_behavior' &&
+    answerContract.questionType !== 'unknown';
+}
+
+function answerContractReply(input: {
+  persona: UserPersona;
+  result: DiagnosticResult;
+  supportedClaims: DiagnosticClaim[];
+  unsupportedFacts: DiagnosticClaim[];
+  answerContract: AnswerContract;
+  ragAnswerability?: ReviewFormatContext['ragAnswerability'];
+}): string {
+  const facts = input.supportedClaims
+    .filter((claim) => claim.type === 'fact' || claim.type === 'inference')
+    .map((claim) => redactInternalKnowledgePath(claim.text))
+    .filter(Boolean);
+  const primary = selectPrimaryContractFact(facts, input.answerContract) || redactInternalKnowledgePath(input.result.summary);
+  const lines = [
+    `**答案：${primary}**`,
+  ];
+  const remainingFacts = facts.filter((fact) => fact !== primary);
+  if (remainingFacts.length > 0) {
+    lines.push('', '**已确认：**', ...remainingFacts.map((fact, index) => `${index + 1}. ${fact}`));
+  }
+
+  const missing = input.result.missingInfo.length > 0
+    ? input.result.missingInfo
+    : input.result.status === 'concluded' || input.result.recommendedNextAction === 'final_answer'
+      ? []
+      : input.ragAnswerability?.missingElements ?? [];
+  if (missing.length > 0) {
+    lines.push('', `**仍缺：** ${missing.join('、')}`);
+  }
+  appendUnsupported(lines, input.unsupportedFacts, redactInternalKnowledgePath);
+  return lines.join('\n');
+}
+
+function selectPrimaryContractFact(facts: string[], answerContract: AnswerContract): string | undefined {
+  if (answerContract.questionType === 'operation_procedure') {
+    return facts.find((fact) => /命令|入口|步骤|可以通过|可通过|按月|月份|补齐|补上|补跑|回补|刷新/.test(fact)) ?? facts[0];
+  }
+  if (answerContract.questionType === 'configuration_location') {
+    return facts.find((fact) => /入口|路径|后台|菜单|路由|权限/.test(fact)) ?? facts[0];
+  }
+  if (answerContract.questionType === 'feature_overview' || answerContract.questionType === 'definition') {
+    return facts[0];
+  }
+  return facts[0];
 }
 
 export function formatReviewFailureFallback(
@@ -158,7 +231,8 @@ function operationsReply(
   return lines.join('\n');
 }
 
-function operationsFeatureOverviewReply(
+function featureOverviewReply(
+  persona: UserPersona,
   supportedClaims: DiagnosticClaim[],
   result: DiagnosticResult,
   unsupportedFacts: DiagnosticClaim[],
@@ -167,20 +241,38 @@ function operationsFeatureOverviewReply(
     .filter((claim) => claim.type === 'fact' || claim.type === 'inference')
     .map((claim) => redactInternalKnowledgePath(claim.text))
     .filter(Boolean);
+  const title = persona === 'customer'
+    ? '**答案：AI伴学助手主要支持这些功能：**'
+    : persona === 'developer'
+      ? '**答案：知识库可确认这些功能：**'
+      : '**答案：这个功能包括以下能力：**';
   const lines = [
-    '**答案：这个功能包括以下能力：**',
+    title,
     '',
     ...(facts.length
       ? facts.map((fact, index) => `${index + 1}. ${fact}`)
       : [`1. ${redactInternalKnowledgePath(result.summary)}`]),
     '',
-    '**运营可这样回复：** 可以按上面的功能点向用户说明；如果用户问的是某个功能是否可用，再结合页面入口、角色权限或配置状态继续确认。',
+    featureOverviewPersonaTail(persona),
   ];
   if (result.missingInfo.length > 0) {
     lines.push('', `**仍需确认：** ${result.missingInfo.join('、')}`);
   }
   appendUnsupported(lines, unsupportedFacts, redactInternalKnowledgePath);
   return lines.join('\n');
+}
+
+function featureOverviewPersonaTail(persona: UserPersona): string {
+  if (persona === 'support') {
+    return '**支持处理建议：** 可以先按上面的功能点向用户说明；如果用户反馈某一项不可用，再收集课程、角色、页面入口、截图和时间范围后升级确认。';
+  }
+  if (persona === 'customer') {
+    return '**你可以这样理解：** 它主要用于帮助规划学习、跟进学习进度，并在学习过程中提供答疑和知识点诊断支持；如果页面上看不到某项功能，可以联系人工支持确认是否已开通。';
+  }
+  if (persona === 'developer') {
+    return '**实现确认建议：** 当前问题是产品功能概览，知识库证据已足够回答；只有在追问具体入口、接口或异常时，再进入对应实现排查。';
+  }
+  return '**运营可这样回复：** 可以按上面的功能点向用户说明；如果用户问的是某个功能是否可用，再结合页面入口、角色权限或配置状态继续确认。';
 }
 
 function developerReply(
@@ -234,12 +326,13 @@ function customerReply(
   mode: ReplyMode,
   missing: string,
 ): string {
+  const safeConclusion = customerSafeConclusion(`${conclusion}\n${result.summary}`);
+  const actions = customerActionItems(safeConclusion, mode);
   const lines = [
-    `**结论：${customerSafeConclusion(conclusion)}**`,
+    `**结论：${safeConclusion}**`,
     '',
     '**你现在可以这样做：**',
-    '1. 先按上面的说明检查当前页面或操作步骤。',
-    '2. 如果仍然无法完成，请把页面、操作步骤和看到的提示发给人工支持。',
+    ...actions.map((action, index) => `${index + 1}. ${action}`),
   ];
   const note = mode === 'need_input'
     ? `还需要确认：${missing || '具体页面和提示'}。`
@@ -284,7 +377,7 @@ function operationsImpact(category: string, mode: ReplyMode): string {
 }
 
 function isFeatureOverviewQuestion(text: string): boolean {
-  return /有哪些功能|功能有哪些|功能清单|功能列表|支持哪些|能做什么|主要功能/.test(text);
+  return /有哪些功能|有什么功能|什么功能|功能有哪些|功能清单|功能列表|有哪些能力|有什么能力|支持哪些|能做什么|主要功能/.test(text);
 }
 
 function appendMissing(lines: string[], missing: string, mode: ReplyMode, label = '**仍需确认：**'): void {
@@ -310,7 +403,38 @@ function appendUnsupported(
 }
 
 function customerSafeConclusion(conclusion: string): string {
-  return conclusion.replace(/\b(src|app|packages?|node_modules|vendor)\/[^\s，。；)）]+/g, '相关系统位置');
+  const redacted = conclusion
+    .replace(/\b(src|app|packages?|node_modules|vendor)\/[^\s，。；)）]+/g, '相关系统位置')
+    .replace(/\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+\b/g, '相关系统配置')
+    .replace(/TypeError|ReferenceError|SyntaxError|Cannot read properties of undefined|undefined|null|判空/g, '系统处理异常')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/学习计划/.test(redacted) && /500|报错|异常|错误|失败|系统处理异常/.test(redacted)) {
+    return 'AI伴学助手生成学习计划时遇到了系统处理异常，所以当前可能无法正常生成学习计划。';
+  }
+  if (/500|报错|异常|错误|失败|系统处理异常|exception|error/i.test(redacted)) {
+    return '当前操作遇到了系统处理异常，可能会导致操作无法完成。';
+  }
+  return redacted;
+}
+
+function customerActionItems(conclusion: string, mode: ReplyMode): string[] {
+  if (mode === 'need_input') {
+    return [
+      '请补充当前页面、操作步骤和看到的提示。',
+      '如果不确定具体信息，可以先把截图或提示内容发给人工支持。',
+    ];
+  }
+  if (/系统处理异常|无法正常|无法完成/.test(conclusion)) {
+    return [
+      '请把页面提示、操作时间、课程或账号信息发给人工支持继续处理。',
+      '在处理完成前，可以稍后重试；如果影响学习安排，请让人工支持协助确认课程设置和处理进度。',
+    ];
+  }
+  return [
+    '先按上面的说明检查当前页面或操作步骤。',
+    '如果仍然无法完成，请把页面、操作步骤和看到的提示发给人工支持。',
+  ];
 }
 
 function redactInternalKnowledgePath(text: string): string {

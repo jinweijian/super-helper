@@ -1,4 +1,4 @@
-import type { DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
+import type { AnswerContract, DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import { validateDiagnosticResult } from './result-validator.js';
 
@@ -26,6 +26,7 @@ export function findExperienceMatch(input: {
   store: FileMemoryStore;
   currentCase: StoredCase;
   userMessage: string;
+  answerContract?: AnswerContract;
 }): ExperienceMatch | undefined {
   const normalized = normalizeQuestion(input.userMessage);
   if (normalized.length < 6) return undefined;
@@ -36,7 +37,7 @@ export function findExperienceMatch(input: {
     .filter((caseSession) => caseSession.tenantId === input.currentCase.tenantId)
     .filter((caseSession) => caseSession.userId === input.currentCase.userId)
     .filter((caseSession) => caseSession.workspaceId === input.currentCase.workspaceId)
-    .flatMap((caseSession) => pairsFromCase(caseSession, input.currentCase.userPersona, normalized))
+    .flatMap((caseSession) => pairsFromCase(caseSession, input.currentCase.userPersona, normalized, input.answerContract))
     .sort((left, right) => right.score - left.score)[0];
 }
 
@@ -44,6 +45,7 @@ export function findRejectedExperienceCandidates(input: {
   store: FileMemoryStore;
   currentCase: StoredCase;
   userMessage: string;
+  answerContract?: AnswerContract;
 }): RejectedExperienceCandidate[] {
   const normalized = normalizeQuestion(input.userMessage);
   if (normalized.length < 6) return [];
@@ -71,7 +73,7 @@ export function findRejectedExperienceCandidates(input: {
       }
       const sourceRun = findSourceRun(caseSession.runs, message.id, message.body);
       const rejectionReason = sourceRun
-        ? reusabilityIssue(sourceRun, input.currentCase.userPersona)
+        ? reusabilityIssue(sourceRun, input.currentCase.userPersona, input.answerContract)
         : 'run_not_attributable';
       if (rejectionReason) {
         candidates.push({
@@ -92,6 +94,7 @@ function pairsFromCase(
   caseSession: StoredCase,
   persona: UserPersona,
   normalizedQuestion: string,
+  answerContract?: AnswerContract,
 ): ExperienceMatch[] {
   const matches: ExperienceMatch[] = [];
   for (const message of caseSession.messages) {
@@ -103,7 +106,7 @@ function pairsFromCase(
     ));
     if (!reply) continue;
     const sourceRun = findSourceRun(caseSession.runs, message.id, message.body);
-    if (!sourceRun?.result || !isReusableRun(sourceRun, persona)) continue;
+    if (!sourceRun?.result || !isReusableRun(sourceRun, persona, answerContract)) continue;
     const evidence = sourceRun.result.evidence.slice(0, 6);
     matches.push({
       sourceCaseId: caseSession.id,
@@ -167,11 +170,11 @@ function findSourceRun(runs: DiagnosticRun[], sourceMessageId: string, question:
   return legacyMatches.length === 1 ? legacyMatches[0] : undefined;
 }
 
-function isReusableRun(run: DiagnosticRun, persona: UserPersona): boolean {
-  return reusabilityIssue(run, persona) === undefined;
+function isReusableRun(run: DiagnosticRun, persona: UserPersona, answerContract?: AnswerContract): boolean {
+  return reusabilityIssue(run, persona, answerContract) === undefined;
 }
 
-function reusabilityIssue(run: DiagnosticRun, persona: UserPersona): string | undefined {
+function reusabilityIssue(run: DiagnosticRun, persona: UserPersona, answerContract?: AnswerContract): string | undefined {
   const result = run.result;
   if (!result || run.status !== 'concluded' || result.status !== 'concluded' || result.recommendedNextAction !== 'final_answer') {
     return 'run_not_final';
@@ -183,6 +186,9 @@ function reusabilityIssue(run: DiagnosticRun, persona: UserPersona): string | un
   const validation = validateDiagnosticResult(result);
   if (validation.issues.length > 0 || validation.result.status !== 'concluded' || validation.result.recommendedNextAction !== 'final_answer') {
     return 'strict_review_failed';
+  }
+  if (answerContract && !resultCoversAnswerContract(validation.result, answerContract)) {
+    return 'answer_contract_not_covered';
   }
   return undefined;
 }
@@ -222,4 +228,42 @@ function similarity(a: string, b: string): number {
 function bigrams(value: string): Set<string> {
   if (value.length < 2) return new Set([value]);
   return new Set(Array.from({ length: value.length - 1 }, (_, index) => value.slice(index, index + 2)));
+}
+
+function resultCoversAnswerContract(result: DiagnosticResult, answerContract: AnswerContract): boolean {
+  if (answerContract.questionType === 'unknown' || answerContract.mustAnswer.length === 0) {
+    return true;
+  }
+  const evidenceById = new Map(result.evidence.map((evidence) => [evidence.id, evidence]));
+  const text = [
+    result.summary,
+    ...result.claims.map((claim) => claim.text),
+    ...result.claims.flatMap((claim) => claim.evidenceIds.map((id) => evidenceById.get(id)?.summary ?? '')),
+  ].join('\n');
+  return answerContract.mustAnswer.every((requirement) => requirementCovered(requirement.id, text));
+}
+
+function requirementCovered(requirementId: string, text: string): boolean {
+  const normalized = text.toLowerCase();
+  const patterns: Record<string, RegExp> = {
+    definition: /(是|用于|定义|指的是|属于).{0,40}(课程|功能|能力|模块|服务|场景)/,
+    capabilities: /(功能|能力|支持|包括|包含|可以|可用于|管理|查看|巡检|配置)/,
+    entry_path: /(入口|路径|后台|菜单|页面|路由|在哪|位置|设置|配置)/i,
+    permission_or_role: /(权限|角色|permission|role|admin|manage|管理员|可进入)/i,
+    configurable_items: /(可配置|配置项|基本信息|价格|封面|服务|班主任|教师|助教|课程管理|学员管理|参数)/,
+    operation_method: /(通过|执行|运行|触发|步骤|处理方式|可以|可通过|任务|脚本|命令|入口)/,
+    command_or_entry: /(命令|命令行|console|command|cli|app\/console|bin\/console|入口|路径|任务|脚本)/i,
+    scope_or_parameters: /(参数|范围|月份|时间|指定|对象|--[a-z0-9-]+|yyyy|month|scope)/i,
+    verification_or_caveat: /(验证|校验|确认|检查|注意|风险|前置|执行后|适用条件)/,
+    observed_symptom: /(现象|失败|异常|报错|无法|不生效|缺少|没有数据|500|错误)/i,
+    cause_or_likely_cause: /(原因|因为|导致|触发|根因|可能是|推断|配置|代码|数据)/,
+    next_action: /(下一步|处理|建议|验证|检查|补充|升级|修复|确认)/,
+    classification: /(bug|设计|配置|使用|操作|不能确认|归类|属于)/i,
+    basis: /(依据|证据|因为|规则|代码|日志|来源|支撑)/,
+    rule_summary: /(规则|机制|标准|限制|政策|条件).{0,40}(是|为|指|说明|要求)/,
+    applicability: /(适用|用于|面向|当|如果|场景|对象|条件)/,
+    edge_cases: /(边界|例外|限制|注意|不支持|不能|除非|未知)/,
+    direct_answer: /./,
+  };
+  return (patterns[requirementId] ?? /./).test(normalized);
 }

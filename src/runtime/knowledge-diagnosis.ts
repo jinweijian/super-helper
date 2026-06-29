@@ -18,6 +18,7 @@ import {
 import type { RetrievalTrace } from '../retrieval/types.js';
 import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
 import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
+import type { RagAnswerabilityResult } from './rag-answerability-service.js';
 
 export async function retrieveKnowledgeForRuntime(input: {
   config: SuperHelperConfig;
@@ -95,6 +96,7 @@ export function attachKnowledgeCodeEscalationContext(input: {
   judge: EvidenceJudgeResult;
   projectType?: string;
   glossaryTerms?: string[];
+  answerability?: RagAnswerabilityResult;
 }): void {
   const deepQuery = planDeepQuery({
     question: input.question,
@@ -103,6 +105,7 @@ export function attachKnowledgeCodeEscalationContext(input: {
     judge: input.judge,
     projectType: input.projectType,
     glossaryTerms: input.glossaryTerms,
+    answerability: input.answerability,
   });
   attachDeepQueryContext({
     request: input.request,
@@ -111,6 +114,22 @@ export function attachKnowledgeCodeEscalationContext(input: {
     judge: input.judge,
     deepQuery,
   });
+  if (input.answerability) {
+    input.request.context!.knowledge!.answerability = summarizeRagAnswerability(input.answerability);
+    input.request.knownFacts = Array.from(new Set([
+      ...input.request.knownFacts,
+      ...input.answerability.coveredClaims.map((claim) => `知识库可用结论：${claim.text}`),
+    ]));
+    input.request.unknowns = Array.from(new Set([
+      ...input.request.unknowns,
+      ...input.answerability.missingElements.map((item) => `知识库缺失答案要素：${item}`),
+    ]));
+    input.request.constraints = Array.from(new Set([
+      ...input.request.constraints,
+      `知识库 Answerability 判断：${input.answerability.reason || input.answerability.answerability}`,
+      `代码排查优先补齐：${input.answerability.escalationFocus || input.answerability.missingElements.join('、') || '原问题缺失答案要素'}`,
+    ]));
+  }
 }
 
 export function glossaryTermsFromDocuments(documents: KnowledgeDocument[]): string[] {
@@ -133,6 +152,7 @@ export function diagnosticResultFromKnowledge(input: {
   evidencePack: KnowledgeEvidencePack;
   judge: EvidenceJudgeResult;
   route: KnowledgeRoute;
+  answerability?: RagAnswerabilityResult;
 }): DiagnosticResult {
   const answerEvidence = input.evidencePack.results.filter((result) => result.status === 'active');
   const evidence: Evidence[] = answerEvidence.slice(0, 6).map((result) => ({
@@ -152,6 +172,15 @@ export function diagnosticResultFromKnowledge(input: {
   const summary = top
     ? `知识库命中「${top.title}」，可回答：${top.answer_span ?? top.excerpt ?? top.summary}`
     : '知识库证据足够回答当前问题。';
+
+  if (input.answerability?.answerability === 'full' && input.answerability.coveredClaims.length > 0) {
+    return diagnosticCoveredClaimsResult({
+      evidence,
+      answerability: input.answerability,
+      judge: input.judge,
+      route: input.route,
+    });
+  }
 
   if (isFeatureOverviewRoute(input.route)) {
     return diagnosticFeatureOverviewResult({
@@ -178,6 +207,69 @@ export function diagnosticResultFromKnowledge(input: {
       },
     ],
     recommendedNextAction: 'final_answer',
+  };
+}
+
+function diagnosticCoveredClaimsResult(input: {
+  evidence: Evidence[];
+  answerability: RagAnswerabilityResult;
+  judge: EvidenceJudgeResult;
+  route: KnowledgeRoute;
+}): DiagnosticResult {
+  const validEvidenceIds = new Set(input.evidence.map((item) => item.id));
+  const claims: DiagnosticClaim[] = input.answerability.coveredClaims
+    .map((claim) => ({
+      id: claim.id,
+      type: 'fact' as const,
+      text: cleanKnowledgeText(claim.text),
+      evidenceIds: claim.evidenceIds.filter((evidenceId) => validEvidenceIds.has(evidenceId)),
+    }))
+    .filter((claim, index, all) => (
+      claim.text &&
+      claim.evidenceIds.length > 0 &&
+      all.findIndex((item) => item.text === claim.text) === index
+    ));
+  const evidenceIds = claims.length > 0
+    ? Array.from(new Set(claims.flatMap((claim) => claim.evidenceIds)))
+    : input.evidence.map((item) => item.id);
+  const summary = claims.length > 0
+    ? `知识库已覆盖当前问题：${claims.map((claim) => claim.text).join('；')}`
+    : '知识库证据足够回答当前问题。';
+
+  return {
+    status: 'concluded',
+    summary,
+    missingInfo: [],
+    evidence: input.evidence,
+    claims: [
+      ...claims,
+      {
+        type: 'inference',
+        text: `RAG Answerability 判定知识证据覆盖当前问题，answer_score=${input.judge.answer_score}，模块候选：${input.route.moduleCandidates.join('、') || '未限定'}`,
+        evidenceIds,
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+}
+
+function summarizeRagAnswerability(
+  answerability: RagAnswerabilityResult,
+): NonNullable<NonNullable<DiagnosticRequest['context']>['knowledge']>['answerability'] {
+  return {
+    answerability: answerability.answerability,
+    selectedEvidenceIds: [...answerability.selectedEvidenceIds],
+    coveredClaims: answerability.coveredClaims.map((claim) => ({
+      id: claim.id,
+      text: claim.text,
+      evidenceIds: [...claim.evidenceIds],
+      coveredRequirementIds: [...claim.coveredRequirementIds],
+      usefulness: claim.usefulness,
+    })),
+    missingElements: [...answerability.missingElements],
+    shouldEscalate: answerability.shouldEscalate,
+    escalationFocus: answerability.escalationFocus,
+    reason: answerability.reason,
   };
 }
 
@@ -212,7 +304,7 @@ function diagnosticFeatureOverviewResult(input: {
 
 function isFeatureOverviewRoute(route: KnowledgeRoute): boolean {
   return route.intentCandidates.includes('feature_overview') ||
-    /有哪些功能|功能有哪些|功能清单|功能列表|支持哪些|能做什么|主要功能/.test(route.normalizedQuestion);
+    /有哪些功能|有什么功能|什么功能|功能有哪些|功能清单|功能列表|有哪些能力|有什么能力|支持哪些|能做什么|主要功能/.test(route.normalizedQuestion);
 }
 
 function featureFactText(result: KnowledgeEvidencePack['results'][number]): string {

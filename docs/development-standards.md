@@ -263,6 +263,8 @@ Preserve established phases unless a documented migration is added:
 - `model_review_result`
 - `persona_agent_result`
 - `preflight_decision`
+- `rag_answerability_result`
+- `rag_answerability_started`
 - `preflight_started`
 - `presentation_agent_result`
 - `raw_output`

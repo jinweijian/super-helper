@@ -4,12 +4,13 @@ import { resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
 import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
-import { EvidenceCoverageService } from './evidence-coverage-service.js';
+import { RagAnswerabilityService, type RagAnswerabilityResult } from './rag-answerability-service.js';
 import {
   attachKnowledgeCodeEscalationContext,
   diagnosticResultFromKnowledge,
   prepareKnowledgeDiagnosis,
 } from './knowledge-diagnosis.js';
+import type { EvidenceJudgeBlocker } from './evidence-judge.js';
 import { caseStatusFromDiagnosticResult } from './review-gate.js';
 import { ReviewPresentationService } from './review-presentation.js';
 
@@ -19,7 +20,7 @@ export class KnowledgeTurnService {
     private readonly store: FileMemoryStore,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
-    private readonly coverageService?: EvidenceCoverageService,
+    private readonly ragAnswerabilityService?: RagAnswerabilityService,
   ) {}
 
   async answer(
@@ -54,37 +55,59 @@ export class KnowledgeTurnService {
     this.events.evidenceJudgeStarted(caseSession, evidencePack);
     this.events.evidenceJudgeResult(caseSession, judge);
 
-    if (this.coverageService && this.config.agent.useModelForEvidenceCoverage !== false && judge.answerable && evidencePack.results[0]) {
-      const topScore = evidencePack.results[0].retrieval?.rerankScore ?? 0;
-      if (topScore >= 0.7) {
-        this.events.evidenceCoverageStarted(caseSession, {
-          question: userMessage,
-          evidenceIds: evidencePack.results.slice(0, 3).map((item) => item.evidence_id),
-        });
-        const coverage = await this.coverageService.evaluate({
-          question: userMessage,
-          evidence: evidencePack.results,
-        });
-        if (coverage.coverage === 'not_covered' || coverage.coverage === 'partial') {
-          judge.answerable = false;
-          judge.need_code_escalation = true;
-          judge.blockers.push('question_not_answered');
-          judge.ambiguity.push(`证据未覆盖原问题答案要素：${coverage.missingElements.join('、') || '关键要素缺失'}`);
-          judge.recommended_next_action = 'dispatch_code_diagnosis';
-          judge.confidence = 'low';
-          judge.reason = coverage.reason || '知识证据未覆盖原问题答案要素，拒绝直答。';
-        }
-        this.events.evidenceCoverageResult(caseSession, coverage);
-      }
+    let answerability: RagAnswerabilityResult | undefined;
+    const answerContract = request.context?.answerContract;
+    if (
+      this.ragAnswerabilityService &&
+      this.config.agent.useModelForRagAnswerability !== false &&
+      this.config.agent.modelProvider &&
+      answerContract &&
+      evidencePack.results[0]
+    ) {
+      this.events.ragAnswerabilityStarted(caseSession, {
+        questionType: answerContract.questionType,
+        evidenceIds: evidencePack.results.slice(0, 3).map((item) => item.evidence_id),
+      });
+      answerability = await this.ragAnswerabilityService.evaluate({
+        contract: answerContract,
+        evidence: evidencePack.results,
+      });
+      this.events.ragAnswerabilityResult(caseSession, answerability);
     }
 
-    if (!judge.answerable || judge.need_code_escalation) {
+    const ragBlocksDirectAnswer = Boolean(
+      answerability &&
+        (answerability.answerability === 'partial' ||
+          answerability.answerability === 'none' ||
+          (answerability.answerability === 'unknown' && answerability.shouldEscalate)),
+    );
+    const questionNotAnsweredBlocker: EvidenceJudgeBlocker = 'question_not_answered';
+    const finalJudge = {
+      ...judge,
+      answerable: judge.answerable && !ragBlocksDirectAnswer,
+      need_code_escalation: judge.need_code_escalation || ragBlocksDirectAnswer,
+      confidence: ragBlocksDirectAnswer ? 'low' as const : judge.confidence,
+      reason: ragBlocksDirectAnswer ? answerability?.reason || judge.reason : judge.reason,
+      blockers: ragBlocksDirectAnswer
+        ? Array.from(new Set([...judge.blockers, questionNotAnsweredBlocker]))
+        : judge.blockers,
+      ambiguity: ragBlocksDirectAnswer
+        ? Array.from(new Set([
+          ...judge.ambiguity,
+          `RAG Answerability 缺失答案要素：${answerability?.missingElements.join('、') || '关键要素缺失'}`,
+        ]))
+        : judge.ambiguity,
+      recommended_next_action: ragBlocksDirectAnswer ? 'dispatch_code_diagnosis' : judge.recommended_next_action,
+    };
+
+    if (!finalJudge.answerable || finalJudge.need_code_escalation) {
       attachKnowledgeCodeEscalationContext({
         request,
         question: userMessage,
         route,
         evidencePack,
-        judge,
+        judge: finalJudge,
+        answerability,
         projectType: this.config.knowledge.projectType,
         glossaryTerms,
       });
@@ -92,7 +115,7 @@ export class KnowledgeTurnService {
       return undefined;
     }
 
-    const result = diagnosticResultFromKnowledge({ evidencePack, judge, route });
+    const result = diagnosticResultFromKnowledge({ evidencePack, judge: finalJudge, route, answerability });
     const run: DiagnosticRun = {
       id: request.runId,
       caseId: caseSession.id,

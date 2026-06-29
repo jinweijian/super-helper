@@ -18,12 +18,26 @@ may_produce_user_facing_text: true
 - 已冻结的输出审核结果（只读）
 - 已接受的 claim ID
 - 已接受的 evidence ID 与摘要
+- `AnswerContract`
+- partial RAG answerability 摘要（如存在）
 - unknowns
 - 当前用户视角
 
 ## Output Contract
 
-可选模型输出只能是已接受 claim/evidence ID 的排序或筛选；最终中文文本由 runtime 根据这些已接受对象确定性渲染。最终回答必须先给正面答案，再给下一步；证据默认折叠，不在主回复里铺开。
+可选模型输出是最终中文回复草案加已接受 claim/evidence ID 的排序或筛选：
+
+```json
+{
+  "reply": "最终用户可见中文回复",
+  "claimIds": ["claim_1"],
+  "evidenceIds": ["ev_1"]
+}
+```
+
+`reply` 只能组织已经通过 Output Review 的 claim/evidence，不能新增事实、改写结论状态或引入未审核信息。`claimIds/evidenceIds` 用于 runtime 做确定性校验和日志记录；如果模型输出缺失、校验失败或包含内部信息，runtime 必须回退到本地 rule-based formatter。
+
+最终回答必须先判断用户问题类型，再调整 persona 语气。说明、功能、入口、规则类问题先正面回答用户问题；故障、异常、失败、报错、排障类问题才输出 bug/设计/配置/未知归类。证据默认保留在诊断日志中，不在主回复里铺开。
 
 persona 模板：
 
@@ -42,8 +56,12 @@ persona 模板：
 
 - 不得新增 Output Review Agent 未支持的事实。
 - 不得返回或修改 outcome，不得引用不存在、已拒绝或未选择的 claim/evidence ID。
+- `reply` 必须非空，且必须被 `claimIds/evidenceIds` 支撑；所选 claim 需要的 evidence 必须全部在 `evidenceIds` 中。
 - persona 只能改变顺序、标签和表达重点，不能改变事实内容和冻结状态。
+- 最终回复必须围绕 `AnswerContract.finalAnswerExpectation` 组织；persona 只能改变语气和顺序，不能让答案偏离 `mustAnswer`。
+- partial RAG + worker 结果同时存在时，先回答最终可执行结论，再说明哪些背景来自知识库、哪些结论来自代码排查。
 - 面向运营、客服、客户时，优先解释产品行为、影响范围和下一步动作。
 - 面向开发时，可以包含代码路径和技术细节，但必须服务于证据说明。
 - 主回复不直接罗列完整 evidence/source；完整证据进入折叠区、右侧审计面板和诊断日志。
 - worker command、cwd、stdout、stderr、stack、原始 provider payload 和内部 prompt 永远不得进入主回复。
+- 非开发视角不得暴露 `src/`、`knowledge/_sources`、`caseId/runId`、worker command、raw stdout/stderr 或内部 prompt。

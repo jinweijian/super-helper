@@ -91,6 +91,35 @@ test('knowledge answer and review log events reference evidence ids instead of d
   assert.equal(JSON.stringify(review.detail).includes('knowledge/faq/ai-companion/rule.md'), false);
 });
 
+test('evidence judge result log keeps a snapshot when judge is later updated', () => {
+  const { recorder, caseSession } = recorderFixture();
+  const judge = {
+    answerable: true,
+    confidence: 'high',
+    need_code_escalation: false,
+    reason: '知识证据足够。',
+    evidence: ['ev_knowledge_1'],
+    risks: [],
+    missing_info: [],
+    conflicts: [],
+    recommended_next_action: 'final_answer',
+    answer_score: 0.92,
+    blockers: [],
+    ambiguity: [],
+  };
+
+  const event = recorder.evidenceJudgeResult(caseSession, judge);
+  judge.answerable = false;
+  judge.need_code_escalation = true;
+  judge.blockers.push('question_not_answered');
+  judge.reason = '后续覆盖判断改写。';
+
+  assert.equal(event.detail.answerable, true);
+  assert.equal(event.detail.need_code_escalation, false);
+  assert.deepEqual(event.detail.blockers, []);
+  assert.equal(event.detail.reason, '知识证据足够。');
+});
+
 test('full knowledge evidence object is persisted only by knowledge search result', () => {
   const { recorder, caseSession } = recorderFixture();
   const sourcePath = 'knowledge/faq/ai-companion/rule.md';
@@ -360,6 +389,63 @@ test('deep query planning falls back to regex targets when modules are empty', (
   assert.equal(plan.likelyPaths.includes('src/**/scheduler*'), true);
 });
 
+test('deep query planning uses rag missing elements as anchor terms', () => {
+  const route = {
+    normalizedQuestion: '学员数据统计缺少6月份数据，如何补上，有没有现成命令行',
+    moduleCandidates: ['edusoho-training'],
+    intentCandidates: ['how_to'],
+    keywords: ['学员数据统计', '定时任务'],
+    sourceTypes: [],
+    codeEscalationSignals: [],
+    risks: [],
+  };
+  const evidencePack = {
+    results: [
+      {
+        evidence_id: 'ev_student_statistics_context',
+        matched_terms: ['学员数据统计', '定时任务'],
+      },
+    ],
+  };
+  const judge = {
+    answerable: false,
+    reason: '知识库只覆盖统计来源，缺少补跑方式。',
+    blockers: ['question_not_answered'],
+    need_code_escalation: true,
+    recommended_next_action: 'dispatch_code_diagnosis',
+  };
+
+  const plan = planDeepQuery({
+    question: route.normalizedQuestion,
+    route,
+    evidencePack,
+    judge,
+    projectType: 'symfony',
+    answerability: {
+      answerability: 'partial',
+      selectedEvidenceIds: ['ev_student_statistics_context'],
+      coveredClaims: [
+        {
+          id: 'rag_claim_generation_source',
+          text: '知识库确认学员数据统计由定时任务生成。',
+          evidenceIds: ['ev_student_statistics_context'],
+          coveredRequirementIds: ['generation_source'],
+          usefulness: '作为补数据背景。',
+        },
+      ],
+      missingElements: ['现成补跑命令', '6月份范围参数', '执行后验证方式'],
+      shouldEscalate: true,
+      escalationFocus: '查找学员数据统计回补命令、月份参数和验证方式。',
+      reason: '只覆盖生成背景。',
+    },
+  });
+
+  const anchors = plan.anchorTerms.join('\n');
+  assert.match(anchors, /现成补跑命令/);
+  assert.match(anchors, /回补命令/);
+  assert.match(anchors, /月份参数/);
+});
+
 test('runtime event phases are documented in development standards', () => {
   const source = readFileSync(new URL('../src/runtime/event-recorder.ts', import.meta.url), 'utf8');
   const docs = readFileSync(new URL('../docs/development-standards.md', import.meta.url), 'utf8');
@@ -420,6 +506,90 @@ test('knowledge project type config is attached to deep query context', () => {
   assert.equal(request.context.deepQuery.projectType, 'symfony');
   assert.equal(request.context.deepQuery.likelyPaths.includes('web/themes/**/*.twig'), true);
   assert.equal(request.context.deepQuery.likelyPaths.includes('src/**/*service*'), false);
+});
+
+test('knowledge code escalation context preserves partial rag answerability', () => {
+  const request = {
+    caseId: 'case_rag_partial',
+    runId: 'run_rag_partial',
+    workspaceId: 'current',
+    userGoal: '学员数据统计缺少6月份数据，如何补上，有没有现成命令行',
+    knownFacts: [],
+    unknowns: [],
+    constraints: ['read-only diagnosis'],
+    allowedMcpToolIds: [],
+  };
+  const route = {
+    normalizedQuestion: request.userGoal,
+    moduleCandidates: ['edusoho-training'],
+    intentCandidates: ['how_to'],
+    keywords: ['学员数据统计', '定时任务'],
+    sourceTypes: [],
+    codeEscalationSignals: [],
+    risks: [],
+  };
+  const evidencePack = {
+    results: [
+      {
+        evidence_id: 'ev_student_statistics_context',
+        source: 'knowledge/whitepapers/edusoho-training/student-statistics.md',
+        source_document: 'knowledge/_sources/student-statistics.md',
+        source_document_id: 'src_student_statistics',
+        source_block_ids: ['blk_student_statistics'],
+        section_path: ['学员管理', '用户数据统计'],
+        title: '用户数据统计',
+        summary: '用户数据统计用于查看学员管理中的用户统计数据。',
+        answer_span: '用户数据统计由定时任务生成。',
+        confidence: 'high',
+        status: 'active',
+        matched_terms: ['学员数据统计', '定时任务'],
+      },
+    ],
+  };
+  const judge = {
+    answerable: false,
+    confidence: 'low',
+    need_code_escalation: true,
+    reason: '知识库只覆盖统计来源，缺少补跑命令。',
+    evidence: ['ev_student_statistics_context'],
+    risks: [],
+    missing_info: ['现成补跑命令', '月份范围参数'],
+    conflicts: [],
+    recommended_next_action: 'dispatch_code_diagnosis',
+    answer_score: 0.48,
+    blockers: ['question_not_answered'],
+  };
+  const answerability = {
+    answerability: 'partial',
+    selectedEvidenceIds: ['ev_student_statistics_context'],
+    coveredClaims: [
+      {
+        id: 'rag_claim_generation_source',
+        text: '知识库确认学员数据统计由定时任务生成。',
+        evidenceIds: ['ev_student_statistics_context'],
+        coveredRequirementIds: ['generation_source'],
+        usefulness: '作为代码排查背景。',
+      },
+    ],
+    missingElements: ['现成补跑命令', '月份范围参数'],
+    shouldEscalate: true,
+    escalationFocus: '查找学员数据统计回补命令和月份参数。',
+    reason: '知识库只覆盖生成背景。',
+  };
+
+  attachKnowledgeCodeEscalationContext({
+    request,
+    question: request.userGoal,
+    route,
+    evidencePack,
+    judge,
+    projectType: 'symfony',
+    answerability,
+  });
+
+  assert.deepEqual(request.context.knowledge.answerability, answerability);
+  assert.match(request.knownFacts.join('\n'), /知识库可用结论：知识库确认学员数据统计由定时任务生成/);
+  assert.match(request.constraints.join('\n'), /查找学员数据统计回补命令和月份参数/);
 });
 
 test('operations persona final reply hides internal whitepaper source paths while developer keeps them', () => {

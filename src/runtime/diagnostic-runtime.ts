@@ -8,11 +8,11 @@ import { resolveAgentConfig } from './agent-configs.js';
 import { CaseCurationService } from './case-curation-service.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
-import { EvidenceCoverageService } from './evidence-coverage-service.js';
 import { ExperienceTurnService } from './experience-turn.js';
 import { KnowledgeTurnService } from './knowledge-turn.js';
 import { PreflightService } from './preflight-service.js';
 import { formatPreflightQuestion } from './presenter.js';
+import { RagAnswerabilityService } from './rag-answerability-service.js';
 import { ReviewPresentationService } from './review-presentation.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { CaseTurnQueue } from './turn-queue.js';
@@ -42,7 +42,7 @@ export class DiagnosticRuntime {
     const experienceAgentSpec = resolveAgentConfig('experience').content;
     const outputReviewAgentSpec = resolveAgentConfig('output_review').content;
     const presentationAgentSpec = resolveAgentConfig('presentation').content;
-    const evidenceCoverageAgentSpec = resolveAgentConfig('evidence_coverage').content;
+    const ragAnswerabilityAgentSpec = resolveAgentConfig('rag_answerability').content;
 
     this.events = new CaseRuntimeEventRecorder(store);
     this.reviewer = new ReviewPresentationService(
@@ -64,12 +64,12 @@ export class DiagnosticRuntime {
       experienceAgentSpec,
     );
     this.experienceTurn = new ExperienceTurnService(store, this.events, this.reviewer);
-    const coverageService = new EvidenceCoverageService(
+    const ragAnswerabilityService = new RagAnswerabilityService(
       model,
-      evidenceCoverageAgentSpec,
-      config.agent.evidenceCoverageTopN ?? 3,
+      ragAnswerabilityAgentSpec,
+      config.agent.ragAnswerabilityTopN ?? config.agent.evidenceCoverageTopN ?? 3,
     );
-    this.knowledgeTurn = new KnowledgeTurnService(config, store, this.events, this.reviewer, coverageService);
+    this.knowledgeTurn = new KnowledgeTurnService(config, store, this.events, this.reviewer, ragAnswerabilityService);
     this.workerDiagnosis = new WorkerDiagnosisService(store, worker, this.events, this.reviewer);
     this.caseCuration = new CaseCurationService(config, store, this.events);
   }

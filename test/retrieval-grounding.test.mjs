@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { defaultConfig } from '../dist/config.js';
+import { routeKnowledgeQuestion } from '../dist/knowledge/index.js';
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 import { diagnosticResultFromKnowledge } from '../dist/runtime/knowledge-diagnosis.js';
 import { retrieveKnowledgeWithConfiguredRetrieval } from '../dist/retrieval/configured-search.js';
@@ -258,6 +259,46 @@ test('exact-title lexical fallback stays bounded by complete grounding', () => {
   assert.equal(weak.blockers.includes('low_signal_terms'), true);
 });
 
+test('feature-overview lexical fallback accepts module FAQ without exact title wording', () => {
+  const feature = evidence({
+    evidence_id: 'ev_ai_feature_overview',
+    document_id: 'kb_ai_feature_overview',
+    parent_id: 'kb_ai_feature_overview',
+    title: 'AI伴学助手功能清单',
+    module: 'ai-companion',
+    intent: 'feature_overview',
+    source_type: 'faq',
+    matched_terms: ['ai伴学助手', '伴学助手', 'ai伴学', '功能'],
+    answer_span: 'AI伴学助手支持学习计划制定、督学提醒、学习问答、题目答疑和知识点诊断。',
+    source: 'knowledge/faq/ai-companion/feature-overview.md',
+    retrieval: { source: 'keyword', keywordScore: 3.87 },
+  });
+
+  const result = judgeKnowledgeEvidence({
+    route: route({
+      normalizedQuestion: 'ai伴学助手有哪些功能',
+      moduleCandidates: ['ai-companion'],
+      intentCandidates: ['feature_overview'],
+      keywords: ['ai伴学助手', '功能'],
+      sourceTypes: ['faq', 'whitepaper', 'module_doc'],
+    }),
+    evidencePack: {
+      query: {
+        normalized_question: 'ai伴学助手有哪些功能',
+        module_candidates: ['ai-companion'],
+        intent_candidates: ['feature_overview'],
+        keywords: ['ai伴学助手', '功能'],
+      },
+      results: [feature],
+      coverage: { searched_files: 1, matched_files: 1, filtered_out: [] },
+    },
+    question: 'AI伴学助手有哪些功能？',
+  });
+
+  assert.equal(result.answerable, true, `expected answerable, blockers=${result.blockers.join(',')}`);
+  assert.equal(result.blockers.includes('low_retrieval_confidence'), false);
+});
+
 test('knowledge feature overview aggregates multiple feature facts', () => {
   const overview = evidence({
     evidence_id: 'ev_ai_feature_overview',
@@ -353,6 +394,319 @@ test('knowledge feature overview aggregates multiple feature facts', () => {
   assert.match(facts.map((claim) => claim.text).join('\n'), /学习计划制定/);
   assert.match(facts.map((claim) => claim.text).join('\n'), /学习问答/);
   assert.equal(result.evidence.length >= 3, true);
+});
+
+test('knowledge direct answer keeps definition and feature semantics for what-is plus feature questions', () => {
+  const definition = evidence({
+    evidence_id: 'ev_class_definition',
+    document_id: 'kb_class_definition',
+    parent_id: 'kb_class_definition',
+    title: '教务',
+    module: 'edusoho-training',
+    intent: 'product_rule',
+    source_type: 'whitepaper',
+    matched_terms: ['班课'],
+    summary: '教务',
+    answer_span: '教师可以在当前模块查看并管理班课相关业务内容，班课是以班级形式按照特定的时间安排所进行的课程。',
+    source: 'knowledge/whitepapers/edusoho-training/class-definition.md',
+  });
+  const productLibrary = evidence({
+    evidence_id: 'ev_product_library',
+    document_id: 'kb_product_library',
+    parent_id: 'kb_product_library',
+    title: '产品库',
+    module: 'edusoho-training',
+    intent: 'product_rule',
+    source_type: 'whitepaper',
+    matched_terms: ['班课', '功能'],
+    summary: '产品库',
+    answer_span: '产品是相同课程内容不同班课的集合，方便教务人员实时了解产品的经营状况。',
+    source: 'knowledge/whitepapers/edusoho-training/product-library.md',
+  });
+  const classManagement = evidence({
+    evidence_id: 'ev_class_management',
+    document_id: 'kb_class_management',
+    parent_id: 'kb_class_management',
+    title: '班课管理',
+    module: 'edusoho-training',
+    intent: 'product_rule',
+    source_type: 'whitepaper',
+    matched_terms: ['班课', '管理'],
+    summary: '班课管理',
+    answer_span: '班课管理主要是班课进行日常维护管理，以及班课巡检查看当前的直播课程。',
+    source: 'knowledge/whitepapers/edusoho-training/class-management.md',
+  });
+
+  const result = diagnosticResultFromKnowledge({
+    evidencePack: {
+      query: {
+        normalized_question: '班课是什么有什么功能',
+        module_candidates: ['edusoho-training'],
+        intent_candidates: [],
+        keywords: ['班课', '什么', '功能'],
+      },
+      results: [definition, productLibrary, classManagement],
+      coverage: { searched_files: 3, matched_files: 3, filtered_out: [] },
+    },
+    route: route({
+      normalizedQuestion: '班课是什么有什么功能',
+      moduleCandidates: ['edusoho-training'],
+      intentCandidates: [],
+      keywords: ['班课', '什么', '功能'],
+      sourceTypes: ['whitepaper', 'module_doc'],
+    }),
+    judge: {
+      answerable: true,
+      confidence: 'high',
+      need_code_escalation: false,
+      reason: '知识库可回答班课定义和功能。',
+      rationale: '知识库可回答班课定义和功能。',
+      evidence: ['ev_class_definition', 'ev_product_library', 'ev_class_management'],
+      risks: [],
+      missing_info: [],
+      conflicts: [],
+      blockers: [],
+      ambiguity: [],
+      quality_issues: [],
+      recommended_next_action: 'final_answer',
+      answer_score: 0.9,
+      score_breakdown: {
+        relevance: 1,
+        coverage: 1,
+        source_authority: 1,
+        freshness: 1,
+        version_match: 1,
+        agreement: 1,
+        actionability: 1,
+        conflict_penalty: 0,
+        ambiguity_penalty: 0,
+        risk_penalty: 0,
+        quality_penalty: 0,
+      },
+    },
+  });
+
+  const factText = result.claims.filter((claim) => claim.type === 'fact').map((claim) => claim.text).join('\n');
+  assert.equal(result.claims.filter((claim) => claim.type === 'fact').length >= 3, true, JSON.stringify(result.claims));
+  assert.match(factText, /班课是以班级形式/);
+  assert.match(factText, /产品库|经营状况/);
+  assert.match(factText, /班课管理|班课巡检/);
+  assert.doesNotMatch(factText, /知识库命中/);
+});
+
+test('knowledge direct answer uses full rag answerability covered claims', () => {
+  const entryEvidence = evidence({
+    evidence_id: 'ev_class_entry',
+    document_id: 'kb_class_entry',
+    parent_id: 'kb_class_entry',
+    title: '班课配置入口',
+    module: 'edusoho-training',
+    intent: 'how_to',
+    source_type: 'faq',
+    matched_terms: ['班课', '配置', '入口'],
+    summary: '班课配置入口',
+    answer_span: '班课在后台管理 → 教务 → 参数设置中配置。',
+    source: 'knowledge/faq/edusoho-training/class-entry.md',
+  });
+  const permissionEvidence = evidence({
+    evidence_id: 'ev_class_permission',
+    document_id: 'kb_class_permission',
+    parent_id: 'kb_class_permission',
+    title: '班课权限与配置项',
+    module: 'edusoho-training',
+    intent: 'how_to',
+    source_type: 'faq',
+    matched_terms: ['班课', '权限', '配置项'],
+    summary: '班课权限与配置项',
+    answer_span: '需要具备后台教务参数设置权限；可配置基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理。',
+    source: 'knowledge/faq/edusoho-training/class-permission.md',
+  });
+
+  const result = diagnosticResultFromKnowledge({
+    evidencePack: {
+      query: {
+        normalized_question: '班课在哪配置的',
+        module_candidates: ['edusoho-training'],
+        intent_candidates: ['how_to'],
+        keywords: ['班课', '配置'],
+      },
+      results: [entryEvidence, permissionEvidence],
+      coverage: { searched_files: 2, matched_files: 2, filtered_out: [] },
+    },
+    route: route({
+      normalizedQuestion: '班课在哪配置的',
+      moduleCandidates: ['edusoho-training'],
+      intentCandidates: ['how_to'],
+      keywords: ['班课', '配置'],
+      sourceTypes: ['faq'],
+    }),
+    judge: {
+      answerable: true,
+      confidence: 'high',
+      need_code_escalation: false,
+      reason: '知识库可回答配置入口。',
+      rationale: '知识库可回答配置入口。',
+      evidence: ['ev_class_entry', 'ev_class_permission'],
+      risks: [],
+      missing_info: [],
+      conflicts: [],
+      blockers: [],
+      ambiguity: [],
+      quality_issues: [],
+      recommended_next_action: 'final_answer',
+      answer_score: 0.94,
+      score_breakdown: {
+        relevance: 1,
+        coverage: 1,
+        source_authority: 1,
+        freshness: 1,
+        version_match: 1,
+        agreement: 1,
+        actionability: 1,
+        conflict_penalty: 0,
+        ambiguity_penalty: 0,
+        risk_penalty: 0,
+        quality_penalty: 0,
+      },
+    },
+    answerability: {
+      answerability: 'full',
+      selectedEvidenceIds: ['ev_class_entry', 'ev_class_permission'],
+      coveredClaims: [
+        {
+          id: 'rag_claim_entry',
+          text: '班课配置入口是后台管理 → 教务 → 参数设置。',
+          evidenceIds: ['ev_class_entry'],
+          coveredRequirementIds: ['entry_path'],
+          usefulness: '直接回答入口路径。',
+        },
+        {
+          id: 'rag_claim_items',
+          text: '该入口需要后台教务参数设置权限，可配置基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等。',
+          evidenceIds: ['ev_class_permission'],
+          coveredRequirementIds: ['permission_or_role', 'configurable_items'],
+          usefulness: '补齐权限和可配置项。',
+        },
+      ],
+      missingElements: [],
+      shouldEscalate: false,
+      escalationFocus: '',
+      reason: '覆盖全部配置类答案要素。',
+    },
+  });
+
+  const factText = result.claims.filter((claim) => claim.type === 'fact').map((claim) => claim.text).join('\n');
+  assert.match(factText, /后台管理 → 教务 → 参数设置/);
+  assert.match(factText, /权限/);
+  assert.match(factText, /基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理/);
+  assert.doesNotMatch(factText, /知识库命中/);
+});
+
+test('knowledge judge rejects page-description evidence that does not answer statistics backfill commands', () => {
+  const workspaceRoot = tempWorkspace();
+  try {
+    const question = '学员管理的学员数据统计里面缺少6月份的数据，已经确认是定时任务没执行的问题，现在已经解决了定时任务。如何补上这个数据统计，有没有现成的命令行处理？';
+    const routed = routeKnowledgeQuestion({ workspaceRoot, question });
+
+    const result = judgeKnowledgeEvidence({
+      route: route({
+        normalizedQuestion: routed.normalizedQuestion,
+        moduleCandidates: routed.moduleCandidates,
+        intentCandidates: routed.intentCandidates,
+        keywords: ['学员管理', '学员数据统计', '定时任务', '命令行'],
+        sourceTypes: routed.sourceTypes,
+        codeEscalationSignals: routed.codeEscalationSignals,
+      }),
+      evidencePack: pack(evidence({
+        evidence_id: 'ev_student_statistics',
+        document_id: 'kb_student_statistics',
+        parent_id: 'kb_student_statistics',
+        title: '用户数据统计',
+        module: 'edusoho-training',
+        intent: 'product_rule',
+        source_type: 'whitepaper',
+        matched_terms: ['学员管理', '用户数据统计', '学员数据统计'],
+        summary: '学员管理用户数据统计说明',
+        answer_span: '用户数据统计用于查看学员管理中的用户统计数据。',
+        source: 'knowledge/whitepapers/edusoho-training/student-statistics.md',
+      })),
+      question,
+    });
+
+    assert.equal(result.answerable, false);
+    assert.equal(result.need_code_escalation, true);
+    assert.equal(result.recommended_next_action, 'dispatch_code_diagnosis');
+    assert.equal(result.blockers.includes('question_not_answered'), true);
+    assert.match(result.missing_info.join('\n'), /命令行|补统计|补跑|回补/);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('matched terms cannot satisfy answerability without answer-bearing text', () => {
+  const result = judgeKnowledgeEvidence({
+    route: route({
+      normalizedQuestion: '学员统计缺少6月份如何补上，有没有命令行处理',
+      moduleCandidates: ['edusoho-training'],
+      intentCandidates: ['how_to'],
+      keywords: ['学员统计', '6月份', '命令行'],
+      sourceTypes: ['faq', 'runbook'],
+    }),
+    evidencePack: pack(evidence({
+      evidence_id: 'ev_matched_terms_only',
+      document_id: 'kb_matched_terms_only',
+      parent_id: 'kb_matched_terms_only',
+      title: '学员统计',
+      module: 'edusoho-training',
+      intent: 'product_rule',
+      source_type: 'faq',
+      matched_terms: ['学员统计', '6月份', '命令行', '补跑'],
+      summary: '学员统计缺少数据时，可以重新生成统计数据。',
+      answer_span: '学员统计缺少数据时，可以重新生成统计数据。',
+      source: 'knowledge/faq/student/statistics.md',
+    })),
+    question: '学员统计缺少6月份如何补上，有没有命令行处理？',
+  });
+
+  assert.equal(result.answerable, false);
+  assert.equal(result.blockers.includes('question_not_answered'), true);
+});
+
+test('knowledge judge can answer statistics backfill command questions when evidence contains the procedure', () => {
+  const workspaceRoot = tempWorkspace();
+  try {
+    const question = '学员管理的学员数据统计里面缺少6月份的数据，如何补上这个数据统计，有没有现成的命令行处理？';
+    const routed = routeKnowledgeQuestion({ workspaceRoot, question });
+    const result = judgeKnowledgeEvidence({
+      route: route({
+        normalizedQuestion: routed.normalizedQuestion,
+        moduleCandidates: ['edusoho-training'],
+        keywords: ['学员管理', '学员数据统计', '命令行'],
+        sourceTypes: ['runbook', 'faq'],
+        codeEscalationSignals: routed.codeEscalationSignals,
+      }),
+      evidencePack: pack(evidence({
+        evidence_id: 'ev_student_statistics_backfill_command',
+        document_id: 'kb_student_statistics_backfill_command',
+        parent_id: 'kb_student_statistics_backfill_command',
+        title: '学员数据统计补跑命令',
+        module: 'edusoho-training',
+        intent: 'how_to',
+        source_type: 'runbook',
+        matched_terms: ['学员管理', '学员数据统计', '命令行', '补跑'],
+        summary: '学员数据统计缺失时，可使用命令行补跑指定月份统计。',
+        answer_span: '步骤1：执行 php app/console student:statistics:rebuild --month=2024-06 补跑指定月份的学员数据统计。',
+        source: 'knowledge/runbooks/edusoho-training/student-statistics-backfill.md',
+      })),
+      question,
+    });
+
+    assert.equal(result.answerable, true, `expected answerable, blockers=${result.blockers.join(',')}, reason=${result.reason}`);
+    assert.equal(result.need_code_escalation, false);
+    assert.equal(result.recommended_next_action, 'final_answer');
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 import { EvidenceCoverageService } from '../dist/runtime/evidence-coverage-service.js';

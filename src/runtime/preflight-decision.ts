@@ -1,4 +1,6 @@
 import type { CaseSession, DiagnosticRequest, HelperAgentConfig } from '../domain.js';
+import { buildAnswerContract } from './answer-contract.js';
+import { ANSWER_CONTRACT_CONSTRAINT } from './request-builder.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export interface PreflightInput {
@@ -44,6 +46,7 @@ function hasActionableSignal(text: string): boolean {
     /error|exception|traceid|stack|timeout|failed|failure/,
     /package\.json|tsconfig|readme|agent\.md|claude\.md|路由|route|router|controller|service|component|组件|配置|文件|目录|函数|类|代码|项目|workspace/,
     /哪里|在哪|如何|怎么|什么|解释|说明|查找|定位|找一下|看一下/,
+    /有哪些|有什么功能|什么功能|哪些功能|功能有哪些|功能清单|功能列表|有哪些能力|有什么能力|支持哪些|能做什么|主要功能|能力/,
     /报错|失败|异常|无法|打不开|保存|接口|日志|复现|截图|页面|服务器|数据库|慢|卡|崩/,
     /id\s*[:：=]?\s*\d+/i,
     /\/[a-z0-9_\-/?=&]+/i,
@@ -92,6 +95,10 @@ export function preflight(input: PreflightInput): PreflightDecision {
     caseSession: input.caseSession,
     latestUserMessage: input.userMessage,
   });
+  const answerContract = buildAnswerContract({
+    originalQuestion: input.userMessage,
+    resolvedQuestion: resolvedTurn.resolvedQuery,
+  });
   const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
 
   return {
@@ -112,6 +119,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
         'Handle both troubleshooting requests and general project questions.',
         'Return structured evidence, assumptions, missing information, and recommended next action.',
         'Do not make final claims without evidence.',
+        ANSWER_CONTRACT_CONSTRAINT,
       ],
       allowedMcpToolIds: input.allowedMcpToolIds ?? [],
       context: {
@@ -125,6 +133,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
         })),
         previousRuns: [],
         resolvedTurn,
+        answerContract,
       },
     },
   };

@@ -9,6 +9,8 @@ import { preflight } from '../dist/preflight.js';
 import { findExperienceMatch, findRejectedExperienceCandidates } from '../dist/runtime/experience-agent.js';
 import { decisionFromReviewOutcome } from '../dist/runtime/review-gate.js';
 import { formatReviewFailureFallback, ruleBasedReviewAndFormat } from '../dist/runtime/presenter.js';
+import { buildDiagnosticRequest } from '../dist/runtime/request-builder.js';
+import { buildAnswerContract } from '../dist/runtime/answer-contract.js';
 import { buildResolvedTurnContext, reconcileResolvedTurnContext } from '../dist/runtime/resolved-turn.js';
 import { validateDiagnosticResult } from '../dist/runtime/result-validator.js';
 import { sanitizeWorkerTrace } from '../dist/observability/worker-trace.js';
@@ -46,6 +48,31 @@ function caseSession(overrides = {}) {
     logs: [],
     ...overrides,
   };
+}
+
+function chatResponse(content) {
+  return new Response(
+    JSON.stringify({
+      choices: [{ message: { content } }],
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function modelConfig(root) {
+  const config = defaultConfig();
+  config.storage.rootDir = root;
+  config.knowledge.rootDir = join(root, 'knowledge');
+  config.agent.modelProvider = 'test';
+  config.agent.useModelForPreflight = false;
+  config.models.providers.test = {
+    type: 'openai-compatible',
+    baseUrl: 'https://api.example.test/v1',
+    apiKey: 'test-key',
+    model: 'test-model',
+    temperature: 0,
+  };
+  return config;
 }
 
 test('resolved preflight keeps unknown and hypotheses out of confirmed known facts', () => {
@@ -110,6 +137,47 @@ test('a concrete clarification is incorporated into the unresolved query', () =>
   assert.match(resolved.resolvedQuery, /课程保存为什么失败/);
   assert.match(resolved.resolvedQuery, /接口 \/course\/save 返回 500/);
   assert.equal(resolved.confirmedFacts.some((item) => item.sourceMessageId === 'msg_detail'), true);
+});
+
+test('preflight dispatches concrete feature overview questions without asking for troubleshooting details', () => {
+  const current = caseSession({
+    messages: [
+      { id: 'msg_feature', role: 'user', body: 'AI伴学助手有哪些功能？', createdAt: '2026-06-20T00:00:00Z' },
+    ],
+  });
+
+  const decision = preflight({ caseSession: current, userMessage: 'AI伴学助手有哪些功能？', agentConfig: agentConfig() });
+
+  assert.equal(decision.action, 'dispatch');
+  assert.match(decision.request.userGoal, /AI伴学助手有哪些功能/);
+});
+
+test('diagnostic request carries answer contract for request builder and local preflight dispatch', () => {
+  const current = caseSession({
+    id: 'case_answer_contract',
+    userPersona: 'operations',
+    messages: [
+      { id: 'msg_config', role: 'user', body: '班课在哪配置的', createdAt: '2026-06-20T00:00:00Z' },
+    ],
+  });
+  const config = defaultConfig();
+
+  const request = buildDiagnosticRequest({
+    caseSession: current,
+    userMessage: '班课在哪配置的',
+    unknowns: [],
+    config,
+  });
+
+  assert.equal(request.context?.answerContract?.questionType, 'configuration_location');
+  assert.equal(request.context?.answerContract?.resolvedQuestion, '班课在哪配置的');
+  assert.ok(request.constraints.some((item) => item.includes('AnswerContract')));
+
+  const decision = preflight({ caseSession: current, userMessage: '班课在哪配置的', agentConfig: agentConfig() });
+  assert.equal(decision.action, 'dispatch');
+  assert.equal(decision.request.context?.answerContract?.questionType, 'configuration_location');
+  assert.equal(decision.request.context?.answerContract?.resolvedQuestion, '班课在哪配置的');
+  assert.ok(decision.request.constraints.some((item) => item.includes('AnswerContract')));
 });
 
 test('experience binds the matching reply to its source run instead of the latest unrelated run', () => {
@@ -210,6 +278,94 @@ test('experience matching is isolated by tenant and user', () => {
   }
 });
 
+test('experience match is rejected when historical answer misses current answer contract requirements', () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-experience-contract-'));
+  try {
+    const store = new FileMemoryStore(root);
+    const prior = store.createCase({
+      tenantId: 'tenant_a',
+      userId: 'user_a',
+      workspaceId: 'current',
+      title: '历史班课配置',
+    });
+    const priorUser = store.addMessage(prior, { role: 'user', body: '班课在哪配置的' });
+    store.addMessage(prior, {
+      role: 'helper',
+      body: '班课在后台管理中配置。',
+      replyToMessageId: priorUser.id,
+    });
+    store.addRun(prior, {
+      id: 'run_entry_only',
+      caseId: prior.id,
+      status: 'concluded',
+      request: {
+        caseId: prior.id,
+        runId: 'run_entry_only',
+        workspaceId: prior.workspaceId,
+        claudeSessionId: prior.claudeSessionId,
+        userGoal: priorUser.body,
+        knownFacts: [],
+        unknowns: [],
+        constraints: [],
+        allowedMcpToolIds: [],
+        context: {
+          isFollowUp: false,
+          currentUserMessage: priorUser.body,
+          recentMessages: [],
+          previousRuns: [],
+          resolvedTurn: {
+            latestUserMessage: priorUser.body,
+            resolvedQuery: priorUser.body,
+            sourceMessageIds: [priorUser.id],
+            isFollowUp: false,
+            confirmedFacts: [],
+            userClaims: [],
+            hypotheses: [],
+            unknowns: [],
+          },
+        },
+      },
+      result: {
+        status: 'concluded',
+        summary: '历史答案只覆盖班课配置入口。',
+        missingInfo: [],
+        evidence: [{
+          id: 'ev_entry',
+          kind: 'workspace',
+          source: 'menus.yml',
+          summary: '班课在后台管理中配置。',
+          confidence: 'high',
+          validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' },
+        }],
+        claims: [{ id: 'claim_entry', type: 'fact', text: '班课在后台管理中配置。', evidenceIds: ['ev_entry'] }],
+        recommendedNextAction: 'final_answer',
+      },
+    });
+    prior.status = 'concluded';
+    store.saveCase(prior);
+    const current = caseSession({ createdAt: '', updatedAt: '' });
+    const answerContract = buildAnswerContract({ originalQuestion: '班课在哪配置的', resolvedQuestion: '班课在哪配置的' });
+
+    const match = findExperienceMatch({
+      store,
+      currentCase: current,
+      userMessage: '班课在哪配置的',
+      answerContract,
+    });
+
+    assert.equal(match, undefined);
+    const rejected = findRejectedExperienceCandidates({
+      store,
+      currentCase: current,
+      userMessage: '班课在哪配置的',
+      answerContract,
+    });
+    assert.equal(rejected[0].rejectionReason, 'answer_contract_not_covered');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('presentation cannot promote partial outcome or render nonexistent evidence claims', () => {
   const partial = {
     status: 'partial', summary: '尚未确认', missingInfo: ['日志'], evidence: [],
@@ -249,6 +405,332 @@ test('operations presentation answers feature overview without forced bug classi
   assert.match(reply, /学习计划制定/);
   assert.match(reply, /督学提醒/);
   assert.doesNotMatch(reply, /系统 bug|配置或使用问题|目前不能确认归类/);
+});
+
+test('feature overview presentation stays answer-first for support customer and developer personas', () => {
+  const result = {
+    status: 'concluded',
+    summary: 'AI伴学助手支持学习计划制定、督学提醒、学习问答、题目答疑和知识点诊断。',
+    missingInfo: [],
+    evidence: [
+      {
+        id: 'ev_feature_overview',
+        kind: 'knowledge',
+        source: 'knowledge/faq/ai-companion/feature-overview.md source=knowledge/_sources/manual/feature.md',
+        summary: 'AI伴学助手功能清单',
+        confidence: 'high',
+      },
+    ],
+    claims: [
+      { id: 'claim_plan', type: 'fact', text: '支持学习计划制定。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_reminder', type: 'fact', text: '支持督学提醒。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_qa', type: 'fact', text: '支持学习问答和题目答疑。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_diagnosis', type: 'fact', text: '支持知识点诊断。', evidenceIds: ['ev_feature_overview'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  for (const persona of ['support', 'customer', 'developer']) {
+    const reply = ruleBasedReviewAndFormat(result, persona, 'AI伴学助手有哪些功能');
+
+    assert.match(reply, /功能|能力|支持/);
+    assert.match(reply, /学习计划制定/);
+    assert.match(reply, /督学提醒/);
+    assert.match(reply, /学习问答/);
+    assert.match(reply, /题目答疑/);
+    assert.match(reply, /知识点诊断/);
+    assert.doesNotMatch(reply, /系统 bug|设计使然|配置或使用问题|目前不能确认归类/);
+    assert.doesNotMatch(reply, /caseId|runId|src\/|knowledge\/_sources|knowledge\/faq/);
+    assert.doesNotMatch(reply, /下一步排查/);
+  }
+});
+
+test('presentation combines reviewed partial RAG context and worker conclusion without fixed template drift', () => {
+  const userGoal = '学员统计缺少6月份如何补上，有没有现成命令行处理';
+  const result = {
+    status: 'concluded',
+    summary: '知识库确认统计生成背景，代码确认存在按月份补齐统计的命令。',
+    missingInfo: [],
+    evidence: [
+      { id: 'ev_rag_1', kind: 'knowledge', source: 'knowledge/faq/stat.md', summary: '学员统计由定时任务生成。', confidence: 'high' },
+      { id: 'ev_cmd_1', kind: 'workspace', source: 'src/Command/RefreshStudentStatisticsCommand.php', summary: '命令支持按月份刷新统计。', confidence: 'high' },
+    ],
+    claims: [
+      { id: 'claim_rag_1', type: 'fact', text: '学员统计由定时任务生成。', evidenceIds: ['ev_rag_1'] },
+      { id: 'claim_cmd_1', type: 'fact', text: '可以通过统计刷新命令按月份补齐学员统计。', evidenceIds: ['ev_cmd_1'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
+    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
+    ragAnswerability: {
+      answerability: 'partial',
+      selectedEvidenceIds: ['ev_rag_1'],
+      coveredClaims: [{
+        id: 'rag_claim_1',
+        text: '学员统计由定时任务生成。',
+        evidenceIds: ['ev_rag_1'],
+        coveredRequirementIds: ['generation_source'],
+        usefulness: '补数背景',
+      }],
+      missingElements: ['现成命令名称', '月份参数'],
+      shouldEscalate: true,
+      escalationFocus: '查找统计补数命令和月份参数',
+      reason: '知识库只覆盖生成背景。',
+    },
+  });
+
+  assert.match(reply, /定时任务/);
+  assert.match(reply, /命令|按月份/);
+  assert.doesNotMatch(reply, /设计使然/);
+  assert.doesNotMatch(reply, /对业务的影响：[\s\S]*你可以怎么处理：/);
+});
+
+test('case_a52adc7f class lesson overview answers definition and capabilities', () => {
+  const userGoal = '班课是什么，有什么功能';
+  const result = {
+    status: 'concluded',
+    summary: '知识库可回答班课定义和功能。',
+    missingInfo: [],
+    evidence: [
+      { id: 'ev_definition', kind: 'knowledge', source: 'knowledge/whitepapers/edusoho-training/class-definition.md', summary: '班课定义。', confidence: 'high' },
+      { id: 'ev_product_library', kind: 'knowledge', source: 'knowledge/whitepapers/edusoho-training/product-library.md', summary: '产品库说明。', confidence: 'high' },
+      { id: 'ev_class_management', kind: 'knowledge', source: 'knowledge/whitepapers/edusoho-training/class-management.md', summary: '班课管理说明。', confidence: 'high' },
+    ],
+    claims: [
+      { id: 'claim_definition', type: 'fact', text: '班课是以班级形式按照特定时间安排所进行的课程。', evidenceIds: ['ev_definition'] },
+      { id: 'claim_product_library', type: 'fact', text: '产品库用于管理相同课程内容的不同班课，并查看产品经营状况。', evidenceIds: ['ev_product_library'] },
+      { id: 'claim_class_management', type: 'fact', text: '班课管理支持日常维护管理和班课巡检。', evidenceIds: ['ev_class_management'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
+    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
+  });
+
+  assert.match(reply, /班课.*(是|课程)/);
+  assert.match(reply, /产品库|经营状况/);
+  assert.match(reply, /班课管理|班课巡检/);
+  assert.doesNotMatch(reply, /设计使然/);
+  assert.doesNotMatch(reply, /对业务的影响：[\s\S]*你可以怎么处理：/);
+});
+
+test('case_73f80bc4 class lesson config preserves entry permission and configurable items', () => {
+  const userGoal = '班课在哪配置的';
+  const result = {
+    status: 'concluded',
+    summary: '班课配置入口位于后台管理 → 教务 → 参数设置。',
+    missingInfo: [],
+    evidence: [
+      { id: 'ev_entry', kind: 'workspace', source: 'menus_admin_v2.yml', summary: '菜单路径：后台管理 → 教务 → 参数设置。', confidence: 'high' },
+      { id: 'ev_route', kind: 'workspace', source: 'routing_admin_v2.yml', summary: '路由和权限。', confidence: 'high' },
+      { id: 'ev_items', kind: 'workspace', source: 'menu.zh_CN.yml', summary: '班课配置项。', confidence: 'high' },
+    ],
+    claims: [
+      { id: 'claim_entry', type: 'fact', text: '班课配置入口是后台管理 → 教务 → 参数设置。', evidenceIds: ['ev_entry'] },
+      { id: 'claim_route', type: 'fact', text: '该入口对应路由 /multi_class/setting，权限节点是 admin_v2_multi_class_setting_manage。', evidenceIds: ['ev_route'] },
+      { id: 'claim_items', type: 'fact', text: '可配置项包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等。', evidenceIds: ['ev_items'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
+    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
+  });
+
+  assert.match(reply, /后台管理\s*→\s*教务\s*→\s*参数设置/);
+  assert.match(reply, /路由|权限/);
+  assert.match(reply, /基本信息|价格|封面|服务|班主任|教师|助教|课程管理|学员管理/);
+  assert.doesNotMatch(reply, /配置或使用问题/);
+  assert.doesNotMatch(reply, /对业务的影响：[\s\S]*你可以怎么处理：/);
+});
+
+test('case_4e905fbc statistics backfill preserves partial RAG context and command conclusion', () => {
+  const userGoal = '学员管理的学员数据统计里面缺少6月份的数据，已经确认是定时任务没执行的问题，现在已经解决了定时任务。如何补上这个数据统计。有没有现成的命令行处理';
+  const result = {
+    status: 'concluded',
+    summary: '知识库确认统计生成背景，代码确认存在补齐指定月份统计的命令。',
+    missingInfo: [],
+    evidence: [
+      { id: 'ev_rag_1', kind: 'knowledge', source: 'knowledge/whitepapers/edusoho-training/student-statistics.md', summary: '学员数据统计由定时任务生成。', confidence: 'high' },
+      { id: 'ev_cmd_1', kind: 'workspace', source: 'src/Command/RefreshStudentStatisticsCommand.php', summary: '命令支持指定月份刷新统计。', confidence: 'high' },
+    ],
+    claims: [
+      { id: 'claim_rag_1', type: 'fact', text: '学员数据统计由定时任务生成。', evidenceIds: ['ev_rag_1'] },
+      { id: 'claim_cmd_1', type: 'fact', text: '可以通过统计刷新命令补齐指定月份的学员统计。', evidenceIds: ['ev_cmd_1'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
+    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
+  });
+
+  assert.match(reply, /6月|月份|指定月份/);
+  assert.match(reply, /命令|补齐|统计刷新/);
+  assert.doesNotMatch(reply, /知识库命中.*可回答/);
+  assert.doesNotMatch(reply, /设计使然/);
+});
+
+test('customer presentation translates code-review causes without leaking internal implementation details', () => {
+  const result = {
+    status: 'concluded',
+    summary: 'AI伴学助手生成学习计划时报 500，是因为生成逻辑读取 studyPlanConfig.frequency 前没有处理空配置，触发 TypeError。',
+    missingInfo: [],
+    evidence: [
+      {
+        id: 'ev_code_null_config',
+        kind: 'workspace',
+        source: 'src/services/ai-companion/plan-generator.ts',
+        summary: 'generatePlan 在读取 studyPlanConfig.frequency 前没有判空；课程未配置学习计划规则时会触发 TypeError。',
+        confidence: 'high',
+      },
+    ],
+    claims: [
+      { id: 'claim_null_config', type: 'fact', text: '生成学习计划接口在读取 studyPlanConfig.frequency 前没有判空。', evidenceIds: ['ev_code_null_config'] },
+      { id: 'claim_500_reason', type: 'inference', text: '当课程未配置学习计划规则时，这个空配置会触发 TypeError 并导致 500。', evidenceIds: ['ev_code_null_config'] },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const reply = ruleBasedReviewAndFormat(result, 'customer', 'AI伴学助手生成学习计划时报 500');
+
+  assert.match(reply, /学习计划/);
+  assert.match(reply, /无法生成|异常|人工支持/);
+  assert.doesNotMatch(reply, /studyPlanConfig|frequency|TypeError|判空|src\//);
+});
+
+test('model presentation reply is used and preserves multiple reviewed claims', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-model-presentation-'));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => chatResponse(JSON.stringify({
+    reply: [
+      '**班课配置入口：** 后台管理 → 教务 → 参数设置。',
+      '',
+      '**路由和权限：** 路由是 /multi_class/setting，权限节点是 admin_v2_multi_class_setting_manage。',
+      '',
+      '**可配置项：** 教师端班课设置包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理和学员管理等。',
+    ].join('\n'),
+    claimIds: ['claim_1', 'claim_3'],
+    evidenceIds: ['ev_01', 'ev_02', 'ev_03', 'ev_05'],
+  }));
+  try {
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '班课配置入口位于后台管理：教务 → 参数设置。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_01', kind: 'workspace', source: 'src/AppBundle/Resources/config/menus_admin_v2.yml', summary: '菜单路径：教务 > 参数设置。', confidence: 'high' },
+              { id: 'ev_02', kind: 'workspace', source: 'src/AppBundle/Resources/config/routing_admin_v2.yml:103-108', summary: '路径 /multi_class/setting，权限 admin_v2_multi_class_setting_manage。', confidence: 'high' },
+              { id: 'ev_03', kind: 'workspace', source: 'app/Resources/translations/menu.zh_CN.yml:468', summary: '中文菜单名：参数设置。', confidence: 'high' },
+              { id: 'ev_04', kind: 'workspace', source: 'src/Biz/System/SettingModule/ClassroomSetting.php', summary: '班课配置由 ClassroomSetting 类处理。', confidence: 'medium' },
+              { id: 'ev_05', kind: 'workspace', source: 'app/Resources/translations/menu.zh_CN.yml:390-437', summary: '教师端班课设置包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等。', confidence: 'medium' },
+            ],
+            claims: [
+              { id: 'claim_1', type: 'fact', text: '班课配置入口：后台管理 → 教务 → 参数设置（路由 /multi_class/setting，权限 admin_v2_multi_class_setting_manage）', evidenceIds: ['ev_01', 'ev_02', 'ev_03'] },
+              { id: 'claim_2', type: 'fact', text: '班课业务配置由 ClassroomSetting 类处理，继承自 AbstractSetting', evidenceIds: ['ev_04'] },
+              { id: 'claim_3', type: 'fact', text: '教师端班课设置包括：基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等', evidenceIds: ['ev_05'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+    const agent = new DiagnosticRuntime(modelConfig(root), new FileMemoryStore(root), worker);
+    const response = await agent.handleUserMessage({ persona: 'operations', message: '班课在哪配置的' });
+
+    assert.match(response.assistantMessage, /后台管理 → 教务 → 参数设置/);
+    assert.match(response.assistantMessage, /\/multi_class\/setting/);
+    assert.match(response.assistantMessage, /admin_v2_multi_class_setting_manage/);
+    assert.match(response.assistantMessage, /基本信息、价格、封面、服务、班主任、教师、助教、课程管理和学员管理/);
+    assert.doesNotMatch(response.assistantMessage, /配置或使用问题|对业务的影响|你可以怎么处理/);
+    const parsed = response.caseSession.logs.find((event) => event.phase === 'model_review_result')?.detail?.parsed;
+    assert.match(parsed.reply, /班课配置入口/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('unsafe model presentation reply falls back to reviewed local formatting', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-model-presentation-safe-'));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => chatResponse(JSON.stringify({
+    reply: '请查看 src/private.ts，并把 caseId/runId 发给用户。',
+    claimIds: ['claim_1'],
+    evidenceIds: ['ev_01'],
+  }));
+  try {
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '已找到配置入口。',
+            missingInfo: [],
+            evidence: [{ id: 'ev_01', kind: 'workspace', source: 'src/private.ts', summary: '配置入口证据。', confidence: 'high' }],
+            claims: [{ id: 'claim_1', type: 'fact', text: '班课配置入口在后台教务参数设置。', evidenceIds: ['ev_01'] }],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+    const agent = new DiagnosticRuntime(modelConfig(root), new FileMemoryStore(root), worker);
+    const response = await agent.handleUserMessage({ persona: 'operations', message: '班课在哪配置的' });
+
+    assert.match(response.assistantMessage, /班课配置入口在后台教务参数设置/);
+    assert.doesNotMatch(response.assistantMessage, /src\/private|caseId|runId/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('model presentation reply must preserve every selected claim signal', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-model-presentation-complete-'));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => chatResponse(JSON.stringify({
+    reply: '班课配置入口在后台教务参数设置。',
+    claimIds: ['claim_1', 'claim_2'],
+    evidenceIds: ['ev_01', 'ev_02'],
+  }));
+  try {
+    const worker = {
+      async diagnose() {
+        return {
+          result: {
+            status: 'concluded',
+            summary: '已找到班课配置入口和可配置项。',
+            missingInfo: [],
+            evidence: [
+              { id: 'ev_01', kind: 'workspace', source: 'menus_admin_v2.yml', summary: '班课配置入口在后台教务参数设置。', confidence: 'high' },
+              { id: 'ev_02', kind: 'workspace', source: 'menu.zh_CN.yml', summary: '可配置基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理。', confidence: 'high' },
+            ],
+            claims: [
+              { id: 'claim_1', type: 'fact', text: '班课配置入口在后台教务参数设置。', evidenceIds: ['ev_01'] },
+              { id: 'claim_2', type: 'fact', text: '可配置项包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理。', evidenceIds: ['ev_02'] },
+            ],
+            recommendedNextAction: 'final_answer',
+          },
+          trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
+        };
+      },
+    };
+    const agent = new DiagnosticRuntime(modelConfig(root), new FileMemoryStore(root), worker);
+    const response = await agent.handleUserMessage({ persona: 'operations', message: '班课在哪配置的' });
+
+    assert.match(response.assistantMessage, /后台教务参数设置/);
+    assert.match(response.assistantMessage, /基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('runtime ignores a model attempt to promote a frozen partial result', async () => {

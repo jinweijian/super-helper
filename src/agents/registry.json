@@ -62,6 +62,16 @@
       "summary": "证据充分性 Agent，负责判断知识库证据是否足够，或是否需要升级到代码排查。"
     },
     {
+      "id": "rag-answerability",
+      "role": "rag-answerability-and-extraction-judge",
+      "stage": "rag_answerability",
+      "configPath": "rag-answerability.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "RAG 可回答性 Agent，负责判断知识库结果是否满足 AnswerContract，并在 partial 时萃取可保留结论和升级焦点。"
+    },
+    {
       "id": "case-curator",
       "role": "solved-case-curator",
       "stage": "case_curator",
@@ -77,7 +87,7 @@
       "stage": "output_review",
       "configPath": "output-review.md",
       "required": true,
-      "mayProduceUserFacingText": true,
+      "mayProduceUserFacingText": false,
       "executionMode": "deterministic",
       "summary": "输出审核 Agent，负责审核证据、阻止无证据结论，并决定追问、继续、最终回答或升级。"
     },

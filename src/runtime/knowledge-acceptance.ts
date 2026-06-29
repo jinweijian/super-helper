@@ -150,6 +150,7 @@ async function runDirectKnowledgeScenario(
     checks: [
       summarizeCheck('judge_answerable', 'ok', judge.answerable, judge.reason, { answerScore: judge.answer_score, blockers: judge.blockers }),
       summarizeCheck('expected_source_match', 'ok', scenario.expectedSource.test(sourceText), sourceText),
+      ...answerabilityChecks(evidencePack, judge),
     ],
   };
 }
@@ -175,6 +176,7 @@ async function runNoHitEscalationScenario(input: RunKnowledgeAcceptanceInput): P
       summarizeCheck('zero_knowledge_evidence', 'ok', evidencePack.results.length === 0, `evidence count: ${evidencePack.results.length}`),
       summarizeCheck('read_only_deep_query', 'ok', deepQuery.permission === 'read_only', deepQuery.permission),
       summarizeCheck('correction_broadening', 'ok', hasBroadening, deepQuery.correctionActions.join(',')),
+      ...answerabilityChecks(evidencePack, judge),
     ],
   };
 }
@@ -198,8 +200,33 @@ async function runImplementationEscalationScenario(input: RunKnowledgeAcceptance
     checks: [
       summarizeCheck('implementation_blocker', 'ok', judge.blockers.includes('implementation_detail'), judge.blockers.join(',')),
       summarizeCheck('read_only_deep_query', 'ok', deepQuery.permission === 'read_only', deepQuery.permission),
+      ...answerabilityChecks(evidencePack, judge),
     ],
   };
+}
+
+function answerabilityChecks(evidencePack: KnowledgeEvidencePack, judge: EvidenceJudgeResult) {
+  const retrievalHit = evidencePack.results.length > 0;
+  const answerability = judge.answerable
+    ? 'full'
+    : retrievalHit && (judge.blockers.includes('question_not_answered') || judge.missing_info.length > 0)
+      ? 'partial'
+      : 'none';
+  return [
+    summarizeCheck('answerability_status', 'info', true, answerability, {
+      answerability,
+      missingElements: judge.missing_info,
+      blockers: judge.blockers,
+    }),
+    summarizeCheck('partial_but_escalated', 'info', true, String(answerability === 'partial' && judge.need_code_escalation), {
+      answerability,
+      needCodeEscalation: judge.need_code_escalation,
+    }),
+    summarizeCheck('retrieval_hit_but_not_answerable', 'info', true, String(retrievalHit && !judge.answerable), {
+      retrievalHit,
+      answerable: judge.answerable,
+    }),
+  ];
 }
 
 async function diagnoseKnowledge(

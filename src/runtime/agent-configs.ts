@@ -9,6 +9,7 @@ export type AgentStage =
   | 'experience'
   | 'knowledge_router'
   | 'evidence_judge'
+  | 'rag_answerability'
   | 'evidence_coverage'
   | 'case_curator'
   | 'output_review'

@@ -2,6 +2,8 @@ import type { KnowledgeEvidenceResult } from '../knowledge/index.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 
+// Deprecated: use RagAnswerabilityService for new RAG quality gates. This class
+// remains for compatibility until the runtime migration is complete.
 export type EvidenceCoverage = 'covered' | 'partial' | 'not_covered' | 'unknown';
 
 export interface CoverageResult {

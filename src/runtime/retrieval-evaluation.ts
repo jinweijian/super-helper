@@ -11,6 +11,7 @@ import { judgeKnowledgeEvidence } from './evidence-judge.js';
 import { prepareKnowledgeDiagnosis } from './knowledge-diagnosis.js';
 
 export type RuntimeRetrievalExpectedBehavior = 'direct' | 'abstain' | 'escalate';
+export type RuntimeRetrievalAnswerability = 'full' | 'partial' | 'none' | 'unknown';
 
 export interface RuntimeRetrievalEvaluationQuestion {
   id: string;
@@ -48,6 +49,10 @@ export interface RuntimeRetrievalEvaluationReport {
     expectedParentId?: string;
     split?: RuntimeRetrievalEvaluationQuestion['split'];
     category?: RuntimeRetrievalEvaluationQuestion['category'];
+    retrievalHit: boolean;
+    answerability: RuntimeRetrievalAnswerability;
+    missingElements: string[];
+    coveredClaimCount: number;
     parentRank?: number;
     answerable: boolean;
     recommendedAction: string;
@@ -108,6 +113,7 @@ export async function runRuntimeRetrievalEvaluation(input: {
     const retrievalPassed = !question.expectedParentId || (parentRank !== undefined && parentRank <= 5);
     const behaviorPassed = correctDirectAnswer || correctAbstention || correctEscalation;
     const passed = retrievalPassed && behaviorPassed;
+    const answerability = deriveAnswerability(diagnosis);
 
     if (!retrievalPassed) {
       failures.push({
@@ -130,6 +136,10 @@ export async function runRuntimeRetrievalEvaluation(input: {
       expectedParentId: question.expectedParentId,
       split: question.split,
       category: question.category,
+      retrievalHit: diagnosis.evidencePack.results.length > 0,
+      answerability: answerability.answerability,
+      missingElements: answerability.missingElements,
+      coveredClaimCount: answerability.coveredClaimCount,
       parentRank,
       answerable: diagnosis.judge.answerable,
       recommendedAction: diagnosis.judge.recommended_next_action,
@@ -178,6 +188,23 @@ export async function runRuntimeRetrievalEvaluation(input: {
     writeFileSync(input.reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   }
   return report;
+}
+
+function deriveAnswerability(input: {
+  evidencePack: KnowledgeEvidencePack;
+  judge: ReturnType<typeof judgeKnowledgeEvidence>;
+}): { answerability: RuntimeRetrievalAnswerability; missingElements: string[]; coveredClaimCount: number } {
+  const coveredClaimCount = input.judge.evidence.length;
+  if (input.judge.answerable) {
+    return { answerability: 'full', missingElements: [], coveredClaimCount };
+  }
+  if (input.evidencePack.results.length === 0) {
+    return { answerability: 'none', missingElements: input.judge.missing_info, coveredClaimCount: 0 };
+  }
+  if (input.judge.blockers.includes('question_not_answered') || input.judge.missing_info.length > 0) {
+    return { answerability: 'partial', missingElements: input.judge.missing_info, coveredClaimCount: Math.max(coveredClaimCount, 1) };
+  }
+  return { answerability: 'none', missingElements: input.judge.missing_info, coveredClaimCount: 0 };
 }
 
 function providerWillRun(enabled: boolean | undefined, provider: string | undefined, secret: string | undefined): boolean {

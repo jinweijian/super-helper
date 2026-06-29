@@ -15,8 +15,10 @@ import { startServer } from '../dist/gateway/http-server.js';
 import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
+import { buildClaudeSystemPrompt, buildClaudeUserPrompt } from '../dist/workers/claude/claude-prompts.js';
 import { buildDiagnosticRequestContext } from '../dist/sessions/context-builder.js';
 import { buildDiagnosticRequest, buildFollowUpDiagnosticRequest } from '../dist/runtime/request-builder.js';
+import { buildAnswerContract } from '../dist/runtime/answer-contract.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from '../dist/runtime/preflight-gate.js';
 import {
   caseStatusFromDiagnosticResult,
@@ -31,6 +33,7 @@ import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
 import { runKnowledgeAcceptance } from '../dist/runtime/knowledge-acceptance.js';
 import { resolveSessionStorageRoot } from '../dist/sessions/storage-scope.js';
+import { updateModelSettings } from '../dist/settings/model-settings.js';
 
 function baseConfig(rootDir) {
   return {
@@ -144,7 +147,10 @@ test('app exposes a model settings and test entry', () => {
   assert.match(html, /payload = readRerankForm\(true\)[\s\S]*payload\.enabled = true/);
   assert.match(html, /上下文窗口 Tokens/);
   assert.match(html, /id="contextWindowTokens"/);
+  assert.match(html, /RAG 可回答性审核/);
+  assert.match(html, /id="useModelForRagAnswerability"/);
   assert.match(html, /contextWindowTokens: Number\(document\.getElementById\('contextWindowTokens'\)\.value/);
+  assert.match(html, /useModelForRagAnswerability: document\.getElementById\('useModelForRagAnswerability'\)\.checked/);
 });
 
 test('helper answers render concise body with collapsed evidence and claims before evidence', () => {
@@ -198,6 +204,17 @@ test('app switches sessions with lightweight fetches and background refreshes', 
   assert.match(html, /includeKnowledgeHealth=false/);
   assert.match(html, /refreshCurrentKnowledgeHealth/);
   assert.match(html, /loadSessionsInBackground/);
+});
+
+test('app supports shareable session urls that initialize and update case routing', () => {
+  const html = renderApp();
+
+  assert.match(html, /function sessionIdFromLocation/);
+  assert.match(html, /decodeURIComponent\(match\[1\]\)/);
+  assert.match(html, /'\/sessions\/' \+ encodeURIComponent\(id\)/);
+  assert.match(html, /sessionIdFromLocation\(\) \|\| localStorage\.getItem\('super-helper\.caseId'\)/);
+  assert.match(html, /function setSessionRoute/);
+  assert.match(html, /history\.pushState/);
 });
 
 test('history session list keeps its own scroll area instead of compressing items', () => {
@@ -465,6 +482,35 @@ test('settings API stores submitted keys in secrets file instead of config', asy
   }
 });
 
+test('model settings preserve rag answerability switch when form omits it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForRagAnswerability = false;
+    config.agent.useModelForEvidenceCoverage = false;
+    const secrets = {
+      has: () => false,
+      set: (key) => ({ source: 'file', key }),
+    };
+
+    updateModelSettings({
+      config,
+      secrets,
+      body: {
+        providerId: 'minimax',
+        baseUrl: 'https://api.example.test/v1',
+        model: 'MiniMax-M3',
+        useModelForPreflight: true,
+      },
+    });
+
+    assert.equal(config.agent.useModelForRagAnswerability, false);
+    assert.equal(config.agent.useModelForEvidenceCoverage, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('model client times out instead of hanging agent review forever', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) =>
@@ -536,6 +582,45 @@ test('sessions API lists, creates, and loads reusable chat sessions', async () =
     }).then((res) => res.json());
     assert.equal(blankLightweight.session.title, '轻量新会话');
     assert.equal(Object.hasOwn(blankLightweight.session, 'knowledgeHealth'), false);
+  } finally {
+    if (server) {
+      await server.close();
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('shareable session page route serves the chat app shell', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  let server;
+
+  try {
+    const config = baseConfig(dir);
+    config.server.port = 43984;
+    config.onboarding = { completedAt: new Date().toISOString() };
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    config.claude.enabled = false;
+    server = await startServer({
+      config,
+      onboarding: {
+        getState: () => ({
+          completed: true,
+          needsReview: false,
+          draft: null,
+          latestRun: null,
+          review: { required: false, pendingCount: 0, blockedCount: 0, items: [] },
+        }),
+      },
+    });
+
+    const res = await fetch('http://127.0.0.1:43984/sessions/case_share_123');
+    const html = await res.text();
+
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') || '', /text\/html/);
+    assert.match(html, /super helper/);
+    assert.match(html, /sessionIdFromLocation/);
   } finally {
     if (server) {
       await server.close();
@@ -946,6 +1031,69 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
   }
 });
 
+test('worker prompt includes answer contract and partial rag escalation focus', () => {
+  const userGoal = '学员统计缺少6月份如何补上，有没有命令行处理';
+  const request = {
+    caseId: 'case_worker_prompt_contract',
+    runId: 'run_worker_prompt_contract',
+    workspaceId: 'current',
+    claudeSessionId: 'claude_worker_prompt_contract',
+    userGoal,
+    knownFacts: [],
+    unknowns: [],
+    constraints: [],
+    allowedMcpToolIds: [],
+    userPersona: 'operations',
+    context: {
+      isFollowUp: false,
+      currentUserMessage: userGoal,
+      recentMessages: [],
+      previousRuns: [],
+      answerContract: buildAnswerContract({
+        originalQuestion: userGoal,
+        resolvedQuestion: userGoal,
+      }),
+      knowledge: {
+        evidence: [],
+        judge: {
+          answerable: false,
+          confidence: 'low',
+          need_code_escalation: true,
+          reason: 'partial RAG',
+          evidence: [],
+          risks: [],
+          missing_info: ['现成命令名称'],
+          conflicts: [],
+          recommended_next_action: 'dispatch_code_diagnosis',
+          answer_score: 0.4,
+        },
+        answerability: {
+          answerability: 'partial',
+          selectedEvidenceIds: ['ev_stat_task'],
+          coveredClaims: [{
+            id: 'rag_claim_1',
+            text: '学员统计由定时任务生成。',
+            evidenceIds: ['ev_stat_task'],
+            coveredRequirementIds: ['generation_source'],
+            usefulness: '补数排查背景',
+          }],
+          missingElements: ['现成命令名称', '月份参数'],
+          shouldEscalate: true,
+          escalationFocus: '查找统计补数命令和月份参数',
+          reason: '知识库缺命令',
+        },
+      },
+    },
+  };
+
+  const prompt = `${buildClaudeSystemPrompt()}\n${buildClaudeUserPrompt(request)}`;
+
+  assert.match(prompt, /DiagnosticRequest\.context\.answerContract/);
+  assert.match(prompt, /missing mustAnswer/);
+  assert.match(prompt, /查找统计补数命令和月份参数/);
+  assert.match(prompt, /学员统计由定时任务生成/);
+});
+
 test('Claude Code worker omits budget limit when no budget is configured', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workerPath = join(dir, 'fake-no-budget-worker.mjs');
@@ -1214,7 +1362,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
     assert.equal(response.caseSession.runs.length, 1);
     assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
     assert.match(response.assistantMessage, /AI伴学助手如何制定学习计划/);
-    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.match(response.assistantMessage, /\*\*(结论|答案)：/);
     assert.doesNotMatch(response.assistantMessage, /支撑证据/);
     assert.match(response.caseSession.runs[0].result.evidence[0].source, /knowledge\/faq\/ai-companion/);
     assert.equal(response.caseSession.logs.some((event) => event.phase === 'knowledge_search_result'), true);
@@ -1275,7 +1423,270 @@ test('runtime broadens source type filters so whitepaper evidence can answer nat
   }
 });
 
-test('runtime degrades coverage agent to noop when model provider missing', async () => {
+test('runtime carries partial RAG claims into code escalation instead of discarding them', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    const userContent = body.messages?.find((message) => message.role === 'user')?.content ?? '{}';
+    let payload = {};
+    try {
+      payload = JSON.parse(userContent);
+    } catch {
+      payload = {};
+    }
+    if (payload.answerContract && Array.isArray(payload.evidence)) {
+      const evidenceId = payload.evidence[0].id;
+      return chatResponse(JSON.stringify({
+        answerability: 'partial',
+        selectedEvidenceIds: [evidenceId],
+        coveredClaims: [{
+          id: 'rag_claim_entry',
+          text: '知识库确认学员加入课程后可以通过 AI 伴学助手制定学习计划。',
+          evidenceIds: [evidenceId],
+          coveredRequirementIds: ['operation_method'],
+          usefulness: '说明学习计划制定方式。',
+        }],
+        missingElements: ['入口路径', '验证或注意事项'],
+        shouldEscalate: true,
+        escalationFocus: '查找 AI 伴学学习计划入口和验证方式。',
+        reason: '知识库只覆盖制定方式，缺入口和验证方式。',
+      }));
+    }
+    return chatResponse('{bad json');
+  };
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '知识库确认制定方式，代码确认入口和验证方式。',
+          missingInfo: [],
+          evidence: [
+            { id: 'ev_rag_entry', kind: 'knowledge', source: 'knowledge/faq/ai-companion/how-to.md', summary: '知识库确认学习计划制定方式。', confidence: 'high' },
+            { id: 'ev_code_items', kind: 'workspace', source: 'learning-plan.ts', summary: '代码确认学习计划入口和验证方式。', confidence: 'high' },
+          ],
+          claims: [
+            { id: 'claim_rag_entry', type: 'fact', text: '知识库确认学员加入课程后可以通过 AI 伴学助手制定学习计划。', evidenceIds: ['ev_rag_entry'] },
+            { id: 'claim_code_items', type: 'fact', text: '代码确认学习计划入口会保存学习时间段、每周学习日，并可通过计划生成结果验证。', evidenceIds: ['ev_code_items'] },
+          ],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForPreflight = false;
+    config.agent.useModelForRagAnswerability = true;
+    config.agent.useModelForEvidenceCoverage = true;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
+      module: 'ai-companion',
+      intent: 'how_to',
+      title: 'AI伴学助手如何制定学习计划',
+      body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。学习计划生成后包含任务数、学习总时长、学习起止时间、每周学习日和每日学习时长。',
+      terms: ['AI伴学助手', '制定学习计划', '学习计划'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+    const response = await agent.handleUserMessage({
+      persona: 'operations',
+      message: 'AI伴学助手如何制定学习计划？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.answerability.answerability, 'partial');
+    assert.match(workerRequests[0].context.knowledge.answerability.coveredClaims[0].text, /制定学习计划/);
+    assert.match(workerRequests[0].context.knowledge.answerability.escalationFocus, /入口和验证方式/);
+    assert.match(workerRequests[0].context.deepQuery.anchorTerms.join('\n'), /入口路径|验证或注意事项|入口和验证方式/);
+    assert.match(response.assistantMessage, /制定学习计划/);
+    assert.match(response.assistantMessage, /学习时间段|每周学习日/);
+    assert.match(response.assistantMessage, /验证/);
+    assert.doesNotMatch(response.assistantMessage, /配置或使用问题|对业务的影响|你可以怎么处理/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime escalates scheduled-statistics backfill questions even with matching knowledge evidence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已升级到当前实现排查，需确认补统计命令。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code_escalated', kind: 'workspace', source: 'Grep:console command', summary: '已进入命令行和定时任务实现排查。', confidence: 'medium' }],
+          claims: [{ type: 'unknown', text: '现成补统计命令仍需当前代码证据确认。', evidenceIds: ['ev_code_escalated'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
+      module: 'edusoho-training',
+      title: '用户数据统计',
+      body: '用户数据统计用于查看学员管理中的用户统计数据，包含注册、登录、学习等运营统计信息。',
+      terms: ['学员管理', '用户数据统计', '学员数据统计', '数据统计'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+
+    const response = await agent.handleUserMessage({
+      message: '学员管理的学员数据统计里面缺少6月份的数据，已经确认是定时任务没执行的问题，现在已经解决了定时任务。如何补上这个数据统计，有没有现成的命令行处理？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.judge.need_code_escalation, true);
+    assert.equal(workerRequests[0].context.knowledge.judge.blockers.includes('question_not_answered'), true);
+    assert.equal(workerRequests[0].context.knowledge.route.codeEscalationSignals.includes('command_or_job'), false);
+    assert.equal(workerRequests[0].context.knowledge.route.codeEscalationSignals.includes('data_backfill'), false);
+    assert.equal(workerRequests[0].context.knowledge.evidence.some((item) => item.title === '用户数据统计'), true);
+    assert.equal(workerRequests[0].context.deepQuery.artifactTargets.includes('scheduler'), true);
+    assert.doesNotMatch(response.assistantMessage, /设计使然/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime runs rag answerability even when evidence judge blocks direct answer', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    const userContent = body.messages?.find((message) => message.role === 'user')?.content ?? '{}';
+    let payload = {};
+    try {
+      payload = JSON.parse(userContent);
+    } catch {
+      payload = {};
+    }
+    if (payload.answerContract && Array.isArray(payload.evidence)) {
+      const evidenceId = payload.evidence[0].id;
+      return chatResponse(JSON.stringify({
+        answerability: 'partial',
+        selectedEvidenceIds: [evidenceId],
+        coveredClaims: [{
+          id: 'rag_claim_generation_source',
+          text: '知识库确认学员数据统计用于查看运营统计数据。',
+          evidenceIds: [evidenceId],
+          coveredRequirementIds: ['generation_source'],
+          usefulness: '可作为补统计排查背景。',
+        }],
+        missingElements: ['现成补跑命令', '月份参数', '执行验证方式'],
+        shouldEscalate: true,
+        escalationFocus: '查找学员数据统计补跑命令、月份参数和执行验证方式。',
+        reason: '知识库只覆盖统计功能背景，未覆盖补跑命令。',
+      }));
+    }
+    return chatResponse('{bad json');
+  };
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已结合知识库背景升级排查补统计命令。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code_escalated', kind: 'workspace', source: 'Grep:console command', summary: '已进入命令行和定时任务实现排查。', confidence: 'medium' }],
+          claims: [{ type: 'unknown', text: '现成补统计命令仍需当前代码证据确认。', evidenceIds: ['ev_code_escalated'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForPreflight = false;
+    config.agent.useModelForRagAnswerability = true;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
+      module: 'edusoho-training',
+      title: '用户数据统计',
+      body: '用户数据统计用于查看学员管理中的用户统计数据，包含注册、登录、学习等运营统计信息。',
+      terms: ['学员管理', '用户数据统计', '学员数据统计', '数据统计'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+
+    await agent.handleUserMessage({
+      message: '学员管理的学员数据统计里面缺少6月份的数据，如何补上这个数据统计，有没有现成的命令行处理？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.judge.blockers.includes('question_not_answered'), true);
+    assert.equal(workerRequests[0].context.knowledge.answerability.answerability, 'partial');
+    assert.match(workerRequests[0].context.knowledge.answerability.coveredClaims[0].text, /运营统计数据/);
+    assert.match(workerRequests[0].context.knowledge.answerability.escalationFocus, /补跑命令/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime skips legacy coverage agent when rag answerability has no model provider', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
   const workerRequests = [];
@@ -1321,14 +1732,12 @@ test('runtime degrades coverage agent to noop when model provider missing', asyn
       workspaceId: 'current',
     });
 
-    assert.equal(workerRequests.length, 0, 'unknown coverage should NOT escalate; direct answer expected');
+    assert.equal(workerRequests.length, 0, 'missing rag answerability model should fall back to Evidence Judge direct answer');
 
     const cases = store.listCases();
-    const caseSession = cases.find((c) => c.logs?.some((log) => log.phase === 'evidence_coverage_result'));
-    assert.ok(caseSession, 'case should have evidence_coverage_result log');
-    const coverageLogs = caseSession.logs.filter((log) => log.phase === 'evidence_coverage_result');
-    assert.ok(coverageLogs.length >= 1, 'coverage agent should record an event even when model missing');
-    assert.equal(coverageLogs[0].detail.coverage, 'unknown');
+    const caseSession = cases.find((c) => c.messages.some((message) => /student:statistics:rebuild|补跑指定月份/.test(message.body)));
+    assert.ok(caseSession, 'case should have direct knowledge answer');
+    assert.equal(caseSession.logs.some((log) => log.phase === 'evidence_coverage_result'), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
@@ -2362,7 +2771,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
     assert.equal(modelCalls.length, 2);
     assert.match(modelCalls[1][0].content, /只负责.*claim\/evidence ID/);
     assert.doesNotMatch(modelCalls[1][1].content, /claude -p|stdout|stderr/);
-    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.match(response.assistantMessage, /\*\*(结论|答案)：/);
     assert.match(response.assistantMessage, /存在可验证证据/);
     assert.equal(response.decision, 'final');
     assert.equal(response.caseSession.logs.some((item) => item.actor === 'claude' && item.phase === 'raw_output'), true);
@@ -2440,7 +2849,7 @@ test('agent falls back to local reviewed formatting when presentation model retu
     });
 
     assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.match(response.assistantMessage, /\*\*(结论|答案)：/);
     assert.match(response.assistantMessage, /部门创建入口按 15 级限制展示。/);
     assert.doesNotMatch(response.assistantMessage, /org-manage\/index\.html\.twig:82/);
     assert.match(response.caseSession.runs[0].result.evidence[0].source, /org-manage\/index\.html\.twig:82/);
@@ -3199,6 +3608,7 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
     'experience',
     'knowledge_router',
     'evidence_judge',
+    'rag_answerability',
     'case_curator',
     'output_review',
     'presentation',
@@ -3209,6 +3619,7 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
   assert.match(resolveAgentConfig('experience').content, /Experience Agent/);
   assert.match(resolveAgentConfig('knowledge_router').content, /Knowledge Router Agent/);
   assert.match(resolveAgentConfig('evidence_judge').content, /Evidence Judge Agent/);
+  assert.match(resolveAgentConfig('rag_answerability').content, /RAG Answerability Agent/);
   assert.match(resolveAgentConfig('case_curator').content, /Case Curator Agent/);
   assert.equal(listPublicAgentConfigs().some((agent) => agent.stage === 'presentation' && agent.mayProduceUserFacingText), true);
   assert.equal(listPublicAgentConfigs().find((agent) => agent.stage === 'presentation').executionMode, 'presentation_only');
@@ -3256,11 +3667,15 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
           id: 'ev_prior',
           kind: 'workspace',
           source: 'src/task.ts',
-          summary: '任务保存配置入口。',
+          summary: '课程任务保存失败的现象、原因和下一步检查方式。',
           confidence: 'high',
           validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' },
         }],
-        claims: [{ type: 'fact', text: '任务保存配置可在当前工作区核验。', evidenceIds: ['ev_prior'] }],
+        claims: [
+          { type: 'fact', text: '现象是课程任务保存失败。', evidenceIds: ['ev_prior'] },
+          { type: 'fact', text: '原因是任务配置缺失会导致课程任务保存失败。', evidenceIds: ['ev_prior'] },
+          { type: 'fact', text: '下一步建议检查任务配置和接口返回。', evidenceIds: ['ev_prior'] },
+        ],
         recommendedNextAction: 'final_answer',
       },
     });

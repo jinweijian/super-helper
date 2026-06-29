@@ -2,7 +2,10 @@ import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRequest, DiagnosticResult, UserPersona } from '../domain.js';
 import { buildDiagnosticRequestContext } from '../sessions/context-builder.js';
 import type { StoredCase } from '../sessions/file-memory-store.js';
+import { buildAnswerContract } from './answer-contract.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
+
+export const ANSWER_CONTRACT_CONSTRAINT = 'Use DiagnosticRequest.context.answerContract (AnswerContract) as the shared goal contract; answer the mustAnswer items first and mark missing items as unknown.';
 
 export function buildDiagnosticRequest(input: {
   caseSession: StoredCase;
@@ -12,6 +15,10 @@ export function buildDiagnosticRequest(input: {
 }): DiagnosticRequest {
   const { caseSession, userMessage, unknowns, config } = input;
   const resolvedTurn = buildResolvedTurnContext({ caseSession, latestUserMessage: userMessage });
+  const answerContract = buildAnswerContract({
+    originalQuestion: userMessage,
+    resolvedQuestion: resolvedTurn.resolvedQuery,
+  });
   const latestRunNumber = caseSession.runs.length + 1;
   const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
 
@@ -29,12 +36,14 @@ export function buildDiagnosticRequest(input: {
       'Handle both troubleshooting requests and general project questions.',
       'Return structured evidence, assumptions, missing information, and recommended next action.',
       'Do not make final claims without evidence.',
+      ANSWER_CONTRACT_CONSTRAINT,
     ],
     allowedMcpToolIds: config.workspaces.find((workspace) => workspace.id === caseSession.workspaceId)?.mcpToolIds ?? [],
     userPersona: caseSession.userPersona,
   };
   attachCaseContext(caseSession, request);
   request.context!.resolvedTurn = resolvedTurn;
+  request.context!.answerContract = answerContract;
   return request;
 }
 
@@ -58,10 +67,15 @@ export function buildFollowUpDiagnosticRequest(input: {
       ...previousRequest.constraints,
       ...personaDiagnosticConstraints(caseSession.userPersona),
       'This is a follow-up run in the same Claude session; reuse earlier context and focus only on the missing evidence.',
+      ANSWER_CONTRACT_CONSTRAINT,
     ],
     userPersona: caseSession.userPersona,
   };
   attachCaseContext(caseSession, request);
+  request.context!.answerContract = previousRequest.context?.answerContract ?? buildAnswerContract({
+    originalQuestion: request.context!.currentUserMessage,
+    resolvedQuestion: previousRequest.userGoal,
+  });
   return request;
 }
 
@@ -78,12 +92,16 @@ export function personaDiagnosticConstraints(persona: UserPersona): string[] {
 
 export function attachCaseContext(caseSession: StoredCase, request: DiagnosticRequest): void {
   const existingResolvedTurn = request.context?.resolvedTurn;
+  const existingAnswerContract = request.context?.answerContract;
   const rawMessage = existingResolvedTurn?.latestUserMessage ?? request.context?.currentUserMessage ?? request.userGoal;
   const context = buildDiagnosticRequestContext(caseSession, rawMessage);
   context.resolvedTurn = existingResolvedTurn ?? buildResolvedTurnContext({
     caseSession,
     latestUserMessage: rawMessage,
   });
+  if (existingAnswerContract) {
+    context.answerContract = existingAnswerContract;
+  }
   request.context = context;
   if (context.isFollowUp) {
     request.constraints = Array.from(

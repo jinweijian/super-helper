@@ -18,6 +18,7 @@ import type { ValidatedDiagnosticResult } from './result-validator.js';
 import { redactProviderErrorMessage } from '../providers/redaction.js';
 import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 import { decisionFromDiagnosticResult } from './review-gate.js';
+import type { RagAnswerabilityResult } from './rag-answerability-service.js';
 
 export interface ModelPreflightParsed {
   action?: 'ask_user' | 'dispatch';
@@ -27,8 +28,9 @@ export interface ModelPreflightParsed {
 }
 
 export interface ModelReviewParsed {
-  claimIds?: string[];
-  evidenceIds?: string[];
+  reply?: unknown;
+  claimIds?: unknown;
+  evidenceIds?: unknown;
 }
 
 interface AgentIdentity {
@@ -43,6 +45,7 @@ const agentIdentities = {
   experience: { agentId: 'experience', agentRole: 'prior-session-experience-review', agentName: '经验 Agent' },
   knowledgeRouter: { agentId: 'knowledge-router', agentRole: 'knowledge-router', agentName: '知识路由 Agent' },
   evidenceJudge: { agentId: 'evidence-judge', agentRole: 'evidence-sufficiency-judge', agentName: '证据充分性 Agent' },
+  ragAnswerability: { agentId: 'rag-answerability', agentRole: 'rag-answerability-and-extraction-judge', agentName: 'RAG 可回答性 Agent' },
   evidenceCoverage: { agentId: 'evidence-coverage', agentRole: 'evidence-coverage-judge', agentName: '证据覆盖 Agent' },
   caseCurator: { agentId: 'case-curator', agentRole: 'solved-case-curator', agentName: 'Case 沉淀 Agent' },
   outputReview: { agentId: 'output-review', agentRole: 'evidence-and-output-review', agentName: '输出审核 Agent' },
@@ -296,7 +299,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       phase: 'model_review_result',
       label: '输出审核',
       severity: 'ok',
-      summary: 'Presentation 模型完成已审核 claim/evidence 排列',
+      summary: 'Presentation 模型完成已审核 claim/evidence 回复草案',
       detail: {
         raw: redactProviderErrorMessage(raw).slice(0, 2000),
         parsed,
@@ -503,7 +506,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: '证据判断',
       severity: judge.answerable ? 'ok' : 'warn',
       summary: judge.answerable ? '知识证据足够，可进入输出审核' : '知识证据不足，需要升级查询',
-      detail: judge,
+      detail: JSON.parse(JSON.stringify(judge)) as unknown,
     });
   }
 
@@ -533,6 +536,35 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
           ? '证据覆盖判断失败，降级回 Evidence Judge 结论'
           : '证据未覆盖原问题答案要素，拒绝直答',
       detail: coverage,
+    });
+  }
+
+  ragAnswerabilityStarted(caseSession: StoredCase, input: { questionType?: string; evidenceIds: string[] }): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.ragAnswerability, {
+      actor: 'agent',
+      phase: 'rag_answerability_started',
+      label: 'RAG 可回答性',
+      severity: 'ok',
+      summary: 'RAG 可回答性 Agent 开始判断知识证据是否满足 AnswerContract',
+      detail: {
+        questionType: input.questionType,
+        evidenceIds: input.evidenceIds,
+      },
+    });
+  }
+
+  ragAnswerabilityResult(caseSession: StoredCase, result: RagAnswerabilityResult): DiagnosticLogEvent {
+    return this.recordAgent(caseSession, agentIdentities.ragAnswerability, {
+      actor: 'agent',
+      phase: 'rag_answerability_result',
+      label: 'RAG 可回答性',
+      severity: result.answerability === 'full' ? 'ok' : 'warn',
+      summary: result.answerability === 'full'
+        ? 'RAG 证据覆盖当前 AnswerContract'
+        : result.answerability === 'partial'
+          ? 'RAG 证据只覆盖部分答案，需要继续升级'
+          : 'RAG 证据不足以回答当前问题',
+      detail: JSON.parse(JSON.stringify(result)) as unknown,
     });
   }
 

@@ -24,6 +24,7 @@ export class ExperienceTurnService {
       store: this.store,
       currentCase: caseSession,
       userMessage: request.userGoal,
+      answerContract: request.context?.answerContract,
     });
 
     if (!match) {
@@ -31,6 +32,7 @@ export class ExperienceTurnService {
         store: this.store,
         currentCase: caseSession,
         userMessage: request.userGoal,
+        answerContract: request.context?.answerContract,
       });
       if (rejectedCandidates.length > 0) {
         request.context ??= {

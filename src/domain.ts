@@ -42,6 +42,33 @@ export interface ContextUsage {
   available: boolean;
 }
 
+export type AnswerQuestionType =
+  | 'definition'
+  | 'feature_overview'
+  | 'configuration_location'
+  | 'operation_procedure'
+  | 'troubleshooting_cause'
+  | 'rule_explanation'
+  | 'bug_or_behavior'
+  | 'unknown';
+
+export interface AnswerRequirement {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface AnswerContract {
+  originalQuestion: string;
+  resolvedQuestion: string;
+  questionType: AnswerQuestionType;
+  userNeed: string;
+  mustAnswer: AnswerRequirement[];
+  usefulContext: AnswerRequirement[];
+  missingTolerance: 'full_required' | 'partial_allowed_with_escalation';
+  finalAnswerExpectation: string;
+}
+
 export interface WorkspaceConfig {
   id: string;
   name: string;
@@ -114,6 +141,7 @@ export interface DiagnosticRequest {
 export interface DiagnosticRequestContext {
   isFollowUp: boolean;
   currentUserMessage: string;
+  answerContract?: AnswerContract;
   recentMessages: Array<{
     id?: string;
     role: CaseMessage['role'];
@@ -139,6 +167,21 @@ export interface DiagnosticRequestContext {
     rejectionReason: string;
   }>;
   knowledge?: {
+    answerability?: {
+      answerability: 'full' | 'partial' | 'none' | 'unknown';
+      selectedEvidenceIds: string[];
+      coveredClaims: Array<{
+        id: string;
+        text: string;
+        evidenceIds: string[];
+        coveredRequirementIds: string[];
+        usefulness: string;
+      }>;
+      missingElements: string[];
+      shouldEscalate: boolean;
+      escalationFocus: string;
+      reason: string;
+    };
     route?: {
       normalizedQuestion: string;
       moduleCandidates: string[];

@@ -1926,6 +1926,7 @@ export function renderApp(): string {
           <label>Temperature<input id="temperature" type="number" step="0.1" value="0" /></label>
         </div>
         <label>上下文窗口 Tokens<input id="contextWindowTokens" type="number" value="1000000" /></label>
+        <label><input id="useModelForRagAnswerability" type="checkbox" checked /> RAG 可回答性审核</label>
         <h3 style="margin: 8px 0 0; font-size: 14px;">Embedding 模型</h3>
         <label><input id="embeddingEnabled" type="checkbox" /> 启用 Embedding</label>
         <div class="field-row">
@@ -1973,7 +1974,26 @@ export function renderApp(): string {
     </div>
   </div>
   <script>
-    let caseId = localStorage.getItem('super-helper.caseId') || '';
+    function sessionIdFromLocation() {
+      const match = window.location.pathname.match(/^\\/sessions\\/([^/]+)$/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+    function sessionRouteFor(id) {
+      return id ? '/sessions/' + encodeURIComponent(id) : '/';
+    }
+    function setSessionRoute(id, replace = false) {
+      const target = sessionRouteFor(id);
+      if (window.location.pathname === target) {
+        return;
+      }
+      const state = { caseId: id || '' };
+      if (replace) {
+        window.history.replaceState(state, '', target);
+      } else {
+        window.history.pushState(state, '', target);
+      }
+    }
+    let caseId = sessionIdFromLocation() || localStorage.getItem('super-helper.caseId') || '';
     const chat = document.getElementById('chat');
     const input = document.getElementById('input');
     const sessionList = document.getElementById('sessionList');
@@ -2008,6 +2028,7 @@ export function renderApp(): string {
       document.getElementById('maxTokens').value = provider.maxTokens || 1200;
       document.getElementById('contextWindowTokens').value = provider.contextWindowTokens || json.agent.contextWindowTokens || 200000;
       document.getElementById('temperature').value = provider.temperature ?? 0;
+      document.getElementById('useModelForRagAnswerability').checked = json.agent.useModelForRagAnswerability ?? json.agent.useModelForEvidenceCoverage ?? true;
       const embedding = json.embedding || {};
       document.getElementById('embeddingEnabled').checked = Boolean(embedding.enabled);
       document.getElementById('embeddingProvider').value = embedding.provider || 'siliconflow';
@@ -2188,6 +2209,7 @@ export function renderApp(): string {
         if (res.ok && id === caseId) {
           caseId = '';
           localStorage.removeItem('super-helper.caseId');
+          setSessionRoute('', true);
           chat.innerHTML = '';
           setCaseHeader();
           showEmptyChat();
@@ -2213,6 +2235,7 @@ export function renderApp(): string {
       }
       caseId = json.session.id;
       localStorage.setItem('super-helper.caseId', caseId);
+      setSessionRoute(caseId);
       markActiveSession(caseId);
       chat.innerHTML = '';
       for (const message of json.session.messages || []) {
@@ -2277,6 +2300,7 @@ export function renderApp(): string {
         }
         caseId = json.caseId;
         localStorage.setItem('super-helper.caseId', caseId);
+        setSessionRoute(caseId);
         setCaseHeader({ id: json.caseId, title: json.title, status: json.status, claudeSessionId: json.claudeSessionId || '', userPersona: json.persona, contextUsage: json.contextUsage });
         await loadSessions();
         await pollSessionUntilSettled(pending, json.caseId, json.userMessageId);
@@ -2567,7 +2591,8 @@ export function renderApp(): string {
         maxTokens: Number(document.getElementById('maxTokens').value || 1200),
         contextWindowTokens: Number(document.getElementById('contextWindowTokens').value || 200000),
         temperature: Number(document.getElementById('temperature').value || 0),
-        useModelForPreflight: true
+        useModelForPreflight: true,
+        useModelForRagAnswerability: document.getElementById('useModelForRagAnswerability').checked
       };
     }
 
@@ -2700,6 +2725,7 @@ export function renderApp(): string {
       const json = await res.json();
       caseId = json.session.id;
       localStorage.setItem('super-helper.caseId', caseId);
+      setSessionRoute(caseId);
       markActiveSession(caseId);
       chat.innerHTML = '';
       setCaseHeader(json.session);
@@ -3089,6 +3115,19 @@ export function renderApp(): string {
     if (sessionSearch) {
       sessionSearch.addEventListener('input', () => loadSessions());
     }
+    window.addEventListener('popstate', () => {
+      const routedCaseId = sessionIdFromLocation();
+      if (routedCaseId) {
+        openSession(routedCaseId).catch(() => {});
+        return;
+      }
+      caseId = '';
+      currentSession = null;
+      chat.innerHTML = '';
+      setCaseHeader();
+      showEmptyChat();
+      loadSessionsInBackground();
+    });
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -3103,6 +3142,7 @@ export function renderApp(): string {
         openSession(caseId).catch(() => {
           localStorage.removeItem('super-helper.caseId');
           caseId = '';
+          setSessionRoute('', true);
           setCaseHeader();
           showEmptyChat();
         });

@@ -679,6 +679,22 @@ test('knowledge router classifies concrete feature overview questions', async ()
   }
 });
 
+test('knowledge router does not hard-code business backfill wording as code escalation', async () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const route = routeKnowledgeQuestion({
+      workspaceRoot: workspace,
+      question: '学员管理的学员数据统计缺少6月份的数据，定时任务已经修好，如何补上这个统计，有没有现成的命令行处理？',
+    });
+
+    assert.equal(route.codeEscalationSignals.includes('command_or_job'), false);
+    assert.equal(route.codeEscalationSignals.includes('data_backfill'), false);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
 test('frontmatter validation reports missing required fields', async () => {
   assert.throws(
     () => parseMarkdownDocument('---\nid: kb_invalid\n---\n# Invalid\n', 'invalid.md'),
