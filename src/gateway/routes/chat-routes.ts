@@ -36,13 +36,28 @@ export async function handleChatRoutes(
   }
 
   if (body.async) {
-    const caseSession = agent.startUserTurn({
-      caseId: body.caseId,
-      message: body.message,
-      workspaceId: body.workspaceId,
-      persona: body.persona,
-    });
+    let caseSession;
+    try {
+      caseSession = agent.startUserTurn({
+        caseId: body.caseId,
+        message: body.message,
+        workspaceId: body.workspaceId,
+        persona: body.persona,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/session is archived/i.test(message)) {
+        sendJson(res, 409, { error: message });
+      } else {
+        sendJson(res, 500, { error: 'failed to accept message' });
+      }
+      return true;
+    }
     const userMessageId = caseSession.messages.at(-1)?.id;
+    if (!userMessageId) {
+      sendJson(res, 500, { error: 'failed to accept message' });
+      return true;
+    }
     sendJson(res, 202, {
       accepted: true,
       caseId: caseSession.id,
@@ -54,7 +69,7 @@ export async function handleChatRoutes(
       contextUsage: estimateCaseContextUsage(caseSession, resolveContextWindowTokens(config)),
     });
     void agent.completeUserTurn(caseSession.id, body.message).catch((error) => {
-      agent.recordTurnFailure(caseSession.id, error, userMessageId);
+      recordBackgroundTurnFailure(agent, caseSession.id, error, userMessageId);
     });
     return true;
   }
@@ -77,4 +92,22 @@ export async function handleChatRoutes(
     contextUsage: estimateCaseContextUsage(response.caseSession, resolveContextWindowTokens(config)),
   });
   return true;
+}
+
+function recordBackgroundTurnFailure(
+  agent: DiagnosticRuntime,
+  caseId: string,
+  error: unknown,
+  replyToMessageId: string,
+): void {
+  try {
+    agent.recordTurnFailure(caseId, error, replyToMessageId);
+  } catch (recordError) {
+    // The HTTP response has already been accepted; avoid turning failure recording
+    // into an unhandled rejection while preserving the original async contract.
+    console.error('background turn failure recording failed', {
+      caseId,
+      error: recordError instanceof Error ? recordError.message : String(recordError),
+    });
+  }
 }

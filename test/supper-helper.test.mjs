@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 import { DiagnosticRuntime } from '../dist/runtime/diagnostic-runtime.js';
 import { ClaudeCodeWorker } from '../dist/workers/claude/claude-code-worker.js';
@@ -13,9 +14,11 @@ import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
 import { startServer } from '../dist/gateway/http-server.js';
 import { serializeSession } from '../dist/gateway/dto.js';
+import { handleChatRoutes } from '../dist/gateway/routes/chat-routes.js';
 import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
+import { runCommand } from '../dist/workers/claude/claude-cli.js';
 import { buildDiagnosticRequestContext } from '../dist/sessions/context-builder.js';
 import { buildDiagnosticRequest, buildFollowUpDiagnosticRequest } from '../dist/runtime/request-builder.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from '../dist/runtime/preflight-gate.js';
@@ -32,6 +35,8 @@ import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
 import { reviewSolvedCase } from '../dist/runtime/case-review-runtime.js';
 import { runKnowledgeAcceptance } from '../dist/runtime/knowledge-acceptance.js';
+import { validateDiagnosticResult } from '../dist/runtime/result-validator.js';
+import { CaseRuntimeEventRecorder } from '../dist/runtime/event-recorder.js';
 import { resolveSessionStorageRoot } from '../dist/sessions/storage-scope.js';
 
 function baseConfig(rootDir) {
@@ -103,6 +108,31 @@ function chatResponse(content) {
     }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
+}
+
+function jsonRequest(path, body) {
+  const req = Readable.from([JSON.stringify(body)]);
+  req.method = 'POST';
+  req.url = path;
+  req.headers = { host: 'localhost' };
+  return req;
+}
+
+function captureJsonResponse() {
+  return {
+    statusCode: undefined,
+    headers: undefined,
+    body: undefined,
+    json: undefined,
+    writeHead(statusCode, headers) {
+      this.statusCode = statusCode;
+      this.headers = headers;
+    },
+    end(body) {
+      this.body = body;
+      this.json = body ? JSON.parse(body) : undefined;
+    },
+  };
 }
 
 async function waitFor(assertion, timeoutMs = 2000) {
@@ -929,6 +959,45 @@ console.log(JSON.stringify({ result: JSON.stringify(result) }));
     assert.equal(response.result.summary, 'retry succeeded');
     assert.equal(response.trace.exitCode, 0);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Claude command timeout force-kills children that ignore SIGTERM', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const pidPath = join(dir, 'child.pid');
+  const workerPath = join(dir, 'ignore-sigterm.mjs');
+  writeFileSync(
+    workerPath,
+    `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+process.on('SIGTERM', () => {});
+setInterval(() => {}, 1000);
+`,
+    'utf8',
+  );
+  chmodSync(workerPath, 0o755);
+
+  try {
+    const execution = await Promise.race([
+      runCommand(process.execPath, [workerPath], dir, 300),
+      new Promise((resolve) => setTimeout(() => resolve('test-timeout'), 2000)),
+    ]);
+    if (execution === 'test-timeout' && existsSync(pidPath)) {
+      process.kill(Number(readFileSync(pidPath, 'utf8')), 'SIGKILL');
+    }
+
+    assert.notEqual(execution, 'test-timeout');
+    assert.match(execution.error, /Command timed out after 300ms/);
+    assert.equal(execution.signal, 'SIGKILL');
+  } finally {
+    if (existsSync(pidPath)) {
+      try {
+        process.kill(Number(readFileSync(pidPath, 'utf8')), 0);
+        process.kill(Number(readFileSync(pidPath, 'utf8')), 'SIGKILL');
+      } catch {}
+    }
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -3460,6 +3529,138 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
   }
 });
 
+test('diagnostic validation accepts follow-up claims that cite previous run evidence', () => {
+  const previousEvidence = [
+    {
+      id: 'ev_previous',
+      kind: 'workspace',
+      source: 'src/runtime/session-lifecycle.ts:69-81',
+      summary: '上一轮已经确认 recordTurnFailure 无额外 try/catch。',
+      confidence: 'high',
+    },
+  ];
+  const result = {
+    status: 'concluded',
+    summary: '后续审查闭合缺口，可形成结论。',
+    missingInfo: [],
+    evidence: [
+      {
+        id: 'ev_current',
+        kind: 'workspace',
+        source: 'src/gateway/http-server.ts:42-49',
+        summary: '网关有顶层 try/catch。',
+        confidence: 'high',
+      },
+    ],
+    claims: [
+      {
+        id: 'claim_1',
+        type: 'fact',
+        text: '网关兜底和上一轮错误处理证据共同支持最终整改建议。',
+        evidenceIds: ['ev_current', 'ev_previous'],
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const validation = validateDiagnosticResult(result, { additionalEvidence: previousEvidence });
+
+  assert.equal(validation.result.status, 'concluded');
+  assert.deepEqual(validation.acceptedClaimIds, ['claim_1']);
+  assert.equal(validation.result.evidence.some((item) => item.id === 'ev_previous'), true);
+  assert.equal(validation.issues.some((item) => item.code === 'missing_evidence_reference'), false);
+});
+
+test('diagnostic validation keeps accepted answer claims while dropping unsupported extras', () => {
+  const result = {
+    status: 'concluded',
+    summary: '部分 claim 有证据，可以回答；无证据 claim 必须丢弃。',
+    missingInfo: [],
+    evidence: [
+      {
+        id: 'ev_supported',
+        kind: 'workspace',
+        source: 'src/gateway/routes/chat-routes.ts:56-58',
+        summary: '后台失败处理链路可被验证。',
+        confidence: 'high',
+      },
+    ],
+    claims: [
+      {
+        id: 'claim_supported',
+        type: 'fact',
+        text: '后台失败处理链路有明确代码证据。',
+        evidenceIds: ['ev_supported'],
+      },
+      {
+        id: 'claim_unsupported',
+        type: 'fact',
+        text: '这个事实没有证据，不能输出给用户。',
+        evidenceIds: ['ev_missing'],
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const validation = validateDiagnosticResult(result);
+
+  assert.equal(validation.result.status, 'concluded');
+  assert.deepEqual(validation.acceptedClaimIds, ['claim_supported']);
+  assert.deepEqual(validation.result.claims.map((item) => item.id), ['claim_supported']);
+  assert.deepEqual(validation.rejectedClaimIds, ['claim_unsupported']);
+  assert.equal(validation.result.claims.some((item) => item.text.includes('没有证据')), false);
+});
+
+test('evidence review log distinguishes knowledge direct answers from Claude Code results', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  try {
+    const store = new FileMemoryStore(dir);
+    const events = new CaseRuntimeEventRecorder(store);
+    const caseSession = store.createCase({
+      tenantId: 'local',
+      userId: 'local-user',
+      workspaceId: 'current',
+      title: 'knowledge direct answer',
+    });
+    const result = {
+      status: 'concluded',
+      summary: '知识库可以直接回答。',
+      missingInfo: [],
+      evidence: [
+        {
+          id: 'ev_knowledge',
+          kind: 'knowledge',
+          source: 'knowledge/faq/course.md',
+          summary: '课程发布后才展示加入入口。',
+          confidence: 'high',
+        },
+      ],
+      claims: [
+        {
+          id: 'claim_1',
+          type: 'fact',
+          text: '课程发布后才展示加入入口。',
+          evidenceIds: ['ev_knowledge'],
+        },
+      ],
+      recommendedNextAction: 'final_answer',
+    };
+    const run = {
+      id: 'run_01',
+      caseId: caseSession.id,
+      status: 'concluded',
+      result,
+    };
+
+    const event = events.evidenceReviewStarted(caseSession, run, result);
+
+    assert.match(event.summary, /知识库直答/);
+    assert.doesNotMatch(event.summary, /Claude Code/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('follow-up diagnostic requests carry prior assistant replies and evidence context', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workerRequests = [];
@@ -3922,6 +4123,137 @@ test('async turn failures can reply to the accepted user message', () => {
     assert.match(helper.body, /worker failed/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('async chat route does not leak unhandled rejection when failure recording throws', async () => {
+  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
+  const req = jsonRequest('/api/chat', {
+    async: true,
+    message: '后台失败也不能触发未处理拒绝',
+  });
+  const res = captureJsonResponse();
+  let recordFailureCalls = 0;
+  const unhandled = [];
+  const consoleErrors = [];
+  const originalConsoleError = console.error;
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  console.error = (...args) => {
+    consoleErrors.push(args);
+  };
+
+  try {
+    const handled = await handleChatRoutes(req, res, new URL('http://localhost/api/chat'), config, {
+      loadCase() {
+        return undefined;
+      },
+      startUserTurn() {
+        return {
+          id: 'case_async_failure',
+          claudeSessionId: 'claude_test',
+          title: 'async failure',
+          status: 'ready_for_diagnosis',
+          userPersona: 'operations',
+          messages: [{ id: 'msg_user', role: 'user', body: '后台失败也不能触发未处理拒绝' }],
+          runs: [],
+          logs: [],
+        };
+      },
+      completeUserTurn() {
+        return Promise.reject(new Error('worker failed'));
+      },
+      recordTurnFailure() {
+        recordFailureCalls += 1;
+        throw new Error('record failed');
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 202);
+    assert.equal(res.json.userMessageId, 'msg_user');
+    assert.equal(recordFailureCalls, 1);
+    assert.deepEqual(unhandled, []);
+    assert.equal(consoleErrors.length, 1);
+    assert.match(String(consoleErrors[0][0]), /background turn failure recording failed/);
+  } finally {
+    console.error = originalConsoleError;
+    process.off('unhandledRejection', onUnhandled);
+    rmSync(config.storage.rootDir, { recursive: true, force: true });
+  }
+});
+
+test('async chat route maps startUserTurn archived races to conflict response', async () => {
+  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
+  const req = jsonRequest('/api/chat', {
+    async: true,
+    caseId: 'case_archived',
+    message: '继续问',
+  });
+  const res = captureJsonResponse();
+
+  try {
+    const handled = await handleChatRoutes(req, res, new URL('http://localhost/api/chat'), config, {
+      loadCase() {
+        return undefined;
+      },
+      startUserTurn() {
+        throw new Error('session is archived and cannot continue');
+      },
+      completeUserTurn() {
+        throw new Error('not expected');
+      },
+      recordTurnFailure() {},
+    });
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 409);
+    assert.deepEqual(res.json, { error: 'session is archived and cannot continue' });
+  } finally {
+    rmSync(config.storage.rootDir, { recursive: true, force: true });
+  }
+});
+
+test('async chat route rejects accepted turns without a persisted user message id', async () => {
+  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
+  const req = jsonRequest('/api/chat', {
+    async: true,
+    message: '没有落库消息 id 不应返回 202',
+  });
+  const res = captureJsonResponse();
+  let completeCalls = 0;
+
+  try {
+    const handled = await handleChatRoutes(req, res, new URL('http://localhost/api/chat'), config, {
+      loadCase() {
+        return undefined;
+      },
+      startUserTurn() {
+        return {
+          id: 'case_missing_message_id',
+          claudeSessionId: 'claude_test',
+          title: 'missing message id',
+          status: 'ready_for_diagnosis',
+          userPersona: 'operations',
+          messages: [],
+          runs: [],
+          logs: [],
+        };
+      },
+      completeUserTurn() {
+        completeCalls += 1;
+        return Promise.resolve();
+      },
+      recordTurnFailure() {},
+    });
+
+    assert.equal(handled, true);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.json, { error: 'failed to accept message' });
+    assert.equal(completeCalls, 0);
+  } finally {
+    rmSync(config.storage.rootDir, { recursive: true, force: true });
   }
 });
 

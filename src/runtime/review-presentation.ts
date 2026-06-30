@@ -35,7 +35,9 @@ export class ReviewPresentationService {
     run: DiagnosticRun,
   ): Promise<ReviewPresentationResult> {
     this.events.evidenceReviewStarted(caseSession, run, result);
-    const validation = validateDiagnosticResult(result);
+    const validation = validateDiagnosticResult(result, {
+      additionalEvidence: additionalEvidenceFromRunContext(run),
+    });
     const validated = validation.result;
     run.result = validated;
     run.status = validated.status;
@@ -120,6 +122,10 @@ ${this.presentationAgentSpec}
     if (!validated.ok) throw new Error(validated.reason);
     return parsed.reply!.trim();
   }
+}
+
+function additionalEvidenceFromRunContext(run: DiagnosticRun): Evidence[] {
+  return run.request?.context?.previousRuns.flatMap((previousRun) => previousRun.evidence) ?? [];
 }
 
 interface PresentationModelOutput {

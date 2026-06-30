@@ -36,7 +36,7 @@ export function recordEvidenceReviewStarted(
     phase: 'evidence_review_started',
     label: '输出审核',
     severity: 'ok',
-    summary: 'Agent 开始审核 Claude Code 返回结果',
+    summary: evidenceReviewStartedSummary(run, result),
     detail: {
       runId: run.id,
       status: result.status,
@@ -48,6 +48,16 @@ export function recordEvidenceReviewStarted(
       evidenceCount: result.evidence.length,
     },
   });
+}
+
+function evidenceReviewStartedSummary(run: DiagnosticRun, result: DiagnosticResult): string {
+  if (run.workerTrace) {
+    return 'Agent 开始审核 Claude Code 返回结果';
+  }
+  if (result.evidence.length > 0 && result.evidence.every((item) => item.kind === 'knowledge')) {
+    return 'Agent 开始审核知识库直答结果';
+  }
+  return 'Agent 开始审核结构化证据结果';
 }
 
 export function recordEvidenceValidationResult(

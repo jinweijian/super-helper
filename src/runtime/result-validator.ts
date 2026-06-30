@@ -14,9 +14,16 @@ export interface ValidatedDiagnosticResult {
   rejectedClaimIds: string[];
 }
 
-export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDiagnosticResult {
+export interface ValidateDiagnosticResultOptions {
+  additionalEvidence?: Evidence[];
+}
+
+export function validateDiagnosticResult(
+  result: DiagnosticResult,
+  options: ValidateDiagnosticResultOptions = {},
+): ValidatedDiagnosticResult {
   const issues: DiagnosticValidationIssue[] = [];
-  const evidence = uniqueEvidence(result.evidence, issues);
+  const evidence = mergeReferencedAdditionalEvidence(result, options.additionalEvidence ?? [], issues);
   const evidenceById = new Map(evidence.map((item) => [item.id, item]));
   const claims: DiagnosticClaim[] = [];
   const rejectedClaimIds: string[] = [];
@@ -57,8 +64,7 @@ export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDia
     claims.push({ ...claim, id, evidenceIds: validEvidenceIds });
   });
 
-  const rejectedFacts = rejectedClaimIds.length > 0;
-  const resultCanConclude = !rejectedFacts && claims.some((claim) => (
+  const resultCanConclude = claims.some((claim) => (
     claim.type === 'fact' || claim.type === 'inference'
   ));
   const downgrade = (result.status === 'concluded' || result.recommendedNextAction === 'final_answer') && !resultCanConclude;
@@ -79,6 +85,24 @@ export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDia
     acceptedClaimIds: claims.map((claim) => claim.id!),
     rejectedClaimIds,
   };
+}
+
+function mergeReferencedAdditionalEvidence(
+  result: DiagnosticResult,
+  additionalEvidence: Evidence[],
+  issues: DiagnosticValidationIssue[],
+): Evidence[] {
+  const evidence = uniqueEvidence(result.evidence, issues);
+  const evidenceById = new Set(evidence.map((item) => item.id));
+  const referencedIds = new Set(result.claims.flatMap((claim) => claim.evidenceIds));
+  for (const item of additionalEvidence) {
+    if (!referencedIds.has(item.id) || evidenceById.has(item.id)) {
+      continue;
+    }
+    evidence.push(item);
+    evidenceById.add(item.id);
+  }
+  return evidence;
 }
 
 function uniqueEvidence(evidence: Evidence[], issues: DiagnosticValidationIssue[]): Evidence[] {

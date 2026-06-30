@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
 const MAX_OUTPUT_BUFFER = 1024 * 1024 * 5;
+const FORCE_KILL_GRACE_MS = 250;
 
 export interface CommandExecution {
   stdout: string;
@@ -19,11 +20,18 @@ export function runCommand(command: string, args: string[], cwd: string, timeout
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let timeoutSignal: string | undefined;
+    let forceKillTimer: NodeJS.Timeout | undefined;
 
     const timer = timeoutMs > 0
       ? setTimeout(() => {
           timedOut = true;
+          timeoutSignal = 'SIGTERM';
           child.kill('SIGTERM');
+          forceKillTimer = setTimeout(() => {
+            timeoutSignal = 'SIGKILL';
+            child.kill('SIGKILL');
+          }, FORCE_KILL_GRACE_MS);
         }, timeoutMs)
       : undefined;
 
@@ -37,17 +45,23 @@ export function runCommand(command: string, args: string[], cwd: string, timeout
       if (timer) {
         clearTimeout(timer);
       }
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
       resolve({ stdout, stderr, error: error.message });
     });
     child.on('close', (code, signal) => {
       if (timer) {
         clearTimeout(timer);
       }
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
       resolve({
         stdout,
         stderr,
         exitCode: code ?? undefined,
-        signal: signal ?? (timedOut ? 'SIGTERM' : undefined),
+        signal: signal ?? (timedOut ? timeoutSignal : undefined),
         error: timedOut ? `Command timed out after ${timeoutMs}ms` : code && code !== 0 ? `Command exited with code ${code}` : undefined,
       });
     });
