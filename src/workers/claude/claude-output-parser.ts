@@ -1,4 +1,5 @@
 import type { ClaudeWorkerResponse, DiagnosticRequest, DiagnosticResult } from '../../domain.js';
+import { answerGoalText, primaryAnswerItems } from '../../runtime/answer-goal.js';
 import type { CommandExecution } from './claude-cli.js';
 
 export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): DiagnosticResult {
@@ -21,8 +22,10 @@ export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): D
         claims: [
           {
             type: 'unknown',
+            role: 'unknown',
             text: `Claude Code did not complete the requested analysis: ${outer.subtype}.`,
             evidenceIds: ['ev_worker_result_subtype'],
+            answers: [],
           },
         ],
         recommendedNextAction: 'continue_diagnosis',
@@ -48,8 +51,10 @@ export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): D
       claims: [
         {
           type: 'unknown',
+          role: 'unknown',
           text: 'Worker output needs manual review before it can become a conclusion.',
           evidenceIds: ['ev_raw_worker_output'],
+          answers: [],
         },
       ],
       recommendedNextAction: 'escalate_to_human',
@@ -74,8 +79,10 @@ export function mockDiagnosticResult(request: DiagnosticRequest, reason: string)
     claims: [
       {
         type: 'assumption',
+        role: 'supporting_context',
         text: '当前只能说明 helper agent 已经完成预检，尚不能最终定位问题。',
         evidenceIds: ['ev_preflight'],
+        answers: [],
       },
     ],
     recommendedNextAction: request.unknowns.length > 0 ? 'ask_user' : 'continue_diagnosis',
@@ -111,13 +118,17 @@ export function failedExecutionDiagnosticResult(request: DiagnosticRequest, exec
     claims: [
       {
         type: 'fact',
+        role: 'supporting_context',
         text: 'Claude Code 没有完成模型推理或只读工具调用，因此本轮没有产生可用于回答用户问题的代码证据。',
         evidenceIds: ['ev_claude_cli_failure'],
+        answers: [],
       },
       {
         type: 'unknown',
-        text: `仍无法回答：${request.userGoal}`,
+        role: 'unknown',
+        text: `仍无法回答：${answerGoalText(request.answerGoal)}`,
         evidenceIds: ['ev_claude_cli_failure'],
+        answers: primaryAnswerItems(request.answerGoal),
       },
     ],
     recommendedNextAction: 'escalate_to_human',

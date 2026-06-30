@@ -66,7 +66,12 @@ export class KnowledgeTurnService {
       return undefined;
     }
 
-    const result = diagnosticResultFromKnowledge({ evidencePack, judge, route });
+    const result = diagnosticResultFromKnowledge({
+      evidencePack,
+      judge,
+      route,
+      answerGoal: request.answerGoal,
+    });
     const run: DiagnosticRun = {
       id: request.runId,
       caseId: caseSession.id,

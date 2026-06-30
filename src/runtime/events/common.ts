@@ -39,7 +39,7 @@ export function diagnosticRequestLogDetail(
     caseId: request.caseId,
     runId: request.runId,
     workspaceId: request.workspaceId,
-    userGoal: request.userGoal,
+    answerGoal: request.answerGoal,
     knownFacts: request.knownFacts,
     unknowns: request.unknowns,
     constraints: request.constraints,

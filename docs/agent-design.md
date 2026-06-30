@@ -124,7 +124,14 @@ Concrete implementation:
   "caseId": "case_7f29",
   "runId": "run_03",
   "workspaceId": "workspace_current_project",
-  "userGoal": "Diagnose why course task save returns 500",
+  "answerGoal": {
+    "rawUserQuestion": "课程任务保存返回 500 是什么问题？",
+    "resolvedQuestion": "课程任务保存返回 500 是什么问题？",
+    "answerObject": "课程任务保存返回 500 的原因",
+    "mustAnswerItems": ["课程任务保存返回 500 的原因"],
+    "diagnosticObjective": "只读排查课程任务保存返回 500 的可验证原因",
+    "sourceMessageIds": ["msg_01"]
+  },
   "knownFacts": [
     "User reports save failure",
     "Network returns 500",
@@ -171,8 +178,10 @@ Concrete implementation:
   "claims": [
     {
       "type": "inference",
-      "text": "The problem may be data/config related",
-      "evidenceIds": ["ev_01"]
+      "role": "supporting_context",
+      "text": "已定位课程任务保存入口，但当前证据只能说明需要继续查看 traceId 或服务器错误日志，不能确认根因。",
+      "evidenceIds": ["ev_01"],
+      "answers": []
     }
   ],
   "recommendedNextAction": "ask_user"
@@ -197,11 +206,12 @@ Only after this review can Presentation generate a user-facing answer through th
 Concrete implementation:
 
 - `src/runtime/result-validator.ts` rejects invalid evidence references and unsupported facts and records observable validation issues.
+- `src/runtime/result-validator.ts` requires every claim to declare `role` and `answers`; `final_answer` must have accepted `primary_answer` coverage for `answerGoal.mustAnswerItems`.
 - `src/runtime/review-gate.ts` maps the validated result into a frozen case status and user-facing decision; model output cannot promote it.
 - `src/runtime/agent-configs.ts` resolves the `output-review` Agent config for model review prompts.
-- `src/runtime/review-presentation.ts` validates Presentation Answer Contract output, including accepted IDs and direct-answer coverage.
+- `src/runtime/review-presentation.ts` validates Presentation Answer Contract output, including accepted IDs, frozen primary answer IDs, selected-claim evidence binding, first-paragraph coverage, and unsupported facts across the full visible reply.
 - `src/runtime/presenter.ts` formats preflight questions, worker failure summaries, and fact-only fallback replies without inventing unsupported facts.
-- `src/agents/presentation.md` defines presentation constraints; the presentation step must answer `userGoal` directly and must not add unsupported facts.
+- `src/agents/presentation.md` defines presentation constraints; the presentation step must express the frozen `primary_answer` for `answerGoal` and must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
 - `src/runtime/diagnostic-runtime.ts` is the runtime orchestration entry; private root facades are intentionally not used.
 

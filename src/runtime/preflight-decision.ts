@@ -1,4 +1,5 @@
 import type { CaseSession, DiagnosticRequest, HelperAgentConfig } from '../domain.js';
+import { buildAnswerGoal } from './answer-goal.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export interface PreflightInput {
@@ -93,6 +94,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
     latestUserMessage: input.userMessage,
   });
   const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
+  const answerGoal = buildAnswerGoal({ resolvedTurn });
 
   return {
     action: 'dispatch',
@@ -101,7 +103,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
       runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
       workspaceId: input.caseSession.workspaceId,
       claudeSessionId: input.caseSession.claudeSessionId,
-      userGoal: resolvedTurn.resolvedQuery,
+      answerGoal,
       knownFacts,
       unknowns: Array.from(new Set([
         ...(shouldContinueWithUnknown ? missingInfo : []),

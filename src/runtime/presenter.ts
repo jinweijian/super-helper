@@ -1,18 +1,29 @@
-import type { DiagnosticClaim, DiagnosticResult, UserPersona, WorkerTrace } from '../domain.js';
+import type { AnswerGoal, DiagnosticClaim, DiagnosticResult, UserPersona, WorkerTrace } from '../domain.js';
 import { validateDiagnosticResult } from './result-validator.js';
 
 export function formatPreflightQuestion(question: string, missingInfo: string[]): string {
   return `我现在还不能判断原因，缺少关键信息：${missingInfo.join('、')}。\n\n${question}`;
 }
 
-export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: UserPersona, userGoal?: string): string {
-  return formatSafeFallbackReply(result, userGoal, persona);
+export function ruleBasedReviewAndFormat(result: DiagnosticResult, persona: UserPersona, answerGoal?: AnswerGoal): string {
+  return formatSafeFallbackReply(result, answerGoal, persona);
 }
 
-export function formatSafeFallbackReply(result: DiagnosticResult, userGoal?: string, persona: UserPersona = 'operations'): string {
-  result = validateDiagnosticResult(result).result;
+export function formatSafeFallbackReply(
+  result: DiagnosticResult,
+  answerGoal?: AnswerGoal,
+  persona: UserPersona = 'operations',
+  primaryAnswerClaimIds?: string[],
+): string {
+  const validation = validateDiagnosticResult(result, { answerGoal });
+  result = validation.result;
   const supportedClaims = supportedAnswerClaims(result.claims);
   const unsupportedFacts = result.claims.filter((claim) => claim.type === 'fact' && claim.evidenceIds.length === 0);
+
+  const frozenPrimaryIds = primaryAnswerClaimIds ?? validation.primaryAnswerClaimIds;
+  const directClaim = frozenPrimaryIds
+    .map((id) => supportedClaims.find((claim) => claim.id === id))
+    .find(Boolean);
 
   if (supportedClaims.length === 0) {
     const missing = result.missingInfo.length > 0
@@ -25,7 +36,6 @@ export function formatSafeFallbackReply(result: DiagnosticResult, userGoal?: str
     ].join('\n');
   }
 
-  const directClaim = selectDirectAnswerClaim(supportedClaims, userGoal);
   const directAnswer = ensureChinesePeriod(sanitizeFallbackText(directClaim?.text ?? result.summary, persona));
   const lines = [`**结论：${directAnswer}**`];
   const supplements = supportedClaims
@@ -51,7 +61,7 @@ export function formatSafeFallbackReply(result: DiagnosticResult, userGoal?: str
 export function formatReviewFailureFallback(
   result: DiagnosticResult,
   _persona: UserPersona,
-  userGoal: string | undefined,
+  answerGoal: AnswerGoal | undefined,
   trace: WorkerTrace | undefined,
   _reviewError: string,
   identity?: { caseId: string; runId: string },
@@ -60,7 +70,7 @@ export function formatReviewFailureFallback(
     return formatWorkerFailureResult(result, trace, identity);
   }
 
-  return formatSafeFallbackReply(result, userGoal, _persona);
+  return formatSafeFallbackReply(result, answerGoal, _persona);
 }
 
 export function personaName(persona: UserPersona): string {
@@ -99,42 +109,13 @@ export function personaGuide(persona: UserPersona): Record<string, string> {
   return guides[persona] ?? guides.operations;
 }
 
-export function selectDirectAnswerClaim(claims: DiagnosticClaim[], userGoal?: string): DiagnosticClaim | undefined {
-  const eligibleClaims = supportedAnswerClaims(claims);
-  if (eligibleClaims.length === 0) return undefined;
-
-  const scored = eligibleClaims
-    .map((claim, index) => ({ claim, score: directAnswerScore(claim.text, userGoal), index }))
-    .sort((a, b) => b.score - a.score || a.index - b.index);
-  return scored[0]?.claim;
-}
-
-export function isSupportQuestion(text?: string): boolean {
-  return Boolean(text && /支不支持|是否支持|支持.*吗|能不能|能否|是否可以|可以.*吗|可不可以|行不行|是否能够|能.*吗/.test(text));
-}
-
-export function isDirectoryQuestion(text?: string): boolean {
-  return Boolean(text && /哪里|在哪|哪个目录|目录|路径|存放|存在|保存|位置/.test(text));
-}
-
 function supportedAnswerClaims(claims: DiagnosticClaim[]): DiagnosticClaim[] {
   return claims.filter((claim) => (
-    (claim.type === 'fact' || claim.type === 'inference') && claim.evidenceIds.length > 0
+    (claim.type === 'fact' || claim.type === 'inference') &&
+    claim.evidenceIds.length > 0 &&
+    claim.role !== 'process_note' &&
+    claim.role !== 'evidence_locator'
   ));
-}
-
-function directAnswerScore(text: string, userGoal?: string): number {
-  let score = 0;
-  if (isSupportQuestion(userGoal)) {
-    if (/^(当前系统|系统|网校系统|该功能|当前版本)?(支持|不支持|可以|不能|无法|目前不能确认)/.test(text)) score += 8;
-    if (/(支持|不支持|可以|不能|无法|继续可用|不影响)/.test(text)) score += 4;
-  }
-  if (isDirectoryQuestion(userGoal)) {
-    if (extractPathTokens(text).length > 0) score += 8;
-    if (/目录|路径|存放|根目录|udisk|文件/.test(text)) score += 4;
-  }
-  if (/^(结论|当前|系统|网校|本地|该功能)/.test(text)) score += 1;
-  return score;
 }
 
 function extractPathTokens(text: string): string[] {

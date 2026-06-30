@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticRequest, DiagnosticResult, Evidence, UserPersona } from '../domain.js';
+import type { AnswerGoal, DiagnosticRequest, DiagnosticResult, Evidence, UserPersona } from '../domain.js';
 import {
   discoverKnowledgeDocuments,
   knowledgeRoot,
@@ -133,6 +133,7 @@ export function diagnosticResultFromKnowledge(input: {
   evidencePack: KnowledgeEvidencePack;
   judge: EvidenceJudgeResult;
   route: KnowledgeRoute;
+  answerGoal: AnswerGoal;
 }): DiagnosticResult {
   const answerEvidence = input.evidencePack.results.filter((result) => result.status === 'active');
   const evidence: Evidence[] = answerEvidence.slice(0, 6).map((result) => ({
@@ -152,6 +153,9 @@ export function diagnosticResultFromKnowledge(input: {
   const summary = top
     ? `知识库命中「${top.title}」，可回答：${top.answer_span ?? top.excerpt ?? top.summary}`
     : '知识库证据足够回答当前问题。';
+  const directAnswer = top
+    ? `${top.answer_span ?? top.excerpt ?? top.summary}`
+    : summary;
 
   return {
     status: 'concluded',
@@ -161,13 +165,17 @@ export function diagnosticResultFromKnowledge(input: {
     claims: [
       {
         type: 'fact',
-        text: summary,
-        evidenceIds: evidence.map((item) => item.id),
+        role: 'primary_answer',
+        text: directAnswer,
+        evidenceIds: evidence.slice(0, 1).map((item) => item.id),
+        answers: input.answerGoal.mustAnswerItems,
       },
       {
         type: 'inference',
+        role: 'process_note',
         text: `Evidence Judge 判定知识证据可直接回答，answer_score=${input.judge.answer_score}，模块候选：${input.route.moduleCandidates.join('、') || '未限定'}`,
         evidenceIds: evidence.map((item) => item.id),
+        answers: [],
       },
     ],
     recommendedNextAction: 'final_answer',

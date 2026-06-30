@@ -126,7 +126,7 @@ export class DiagnosticRuntime {
 
     const knowledgeResponse = await this.knowledgeTurn.answer(
       caseSession,
-      decision.request.userGoal,
+      decision.request.answerGoal.resolvedQuestion,
       replyToMessageId,
       decision.request,
     );

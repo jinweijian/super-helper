@@ -88,8 +88,10 @@ function staleRunResult(run: DiagnosticRun, ageMs: number, staleAfterMs: number)
     claims: [
       {
         type: 'unknown',
+        role: 'unknown',
         text: '无法确认本轮诊断已经得到有效证据。',
         evidenceIds: [evidenceId],
+        answers: [],
       },
     ],
     recommendedNextAction: 'continue_diagnosis',

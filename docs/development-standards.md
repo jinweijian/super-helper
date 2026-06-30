@@ -206,11 +206,18 @@ Product Agent configs live in `src/agents/`:
 
 Every final answer must pass evidence review:
 
+- `DiagnosticRequest.answerGoal` is the only authoritative target for the user-visible answer.
+- `answerGoal.diagnosticObjective` is internal investigation intent only and must not become `directAnswer`, a conclusion headline, or fallback wording.
+- Every `DiagnosticClaim` must include `role` and `answers`; outputs missing either field fail closed or downgrade instead of being repaired by compatibility code.
+- `final_answer` requires an accepted `primary_answer` whose `answers` cover every `answerGoal.mustAnswerItems` entry.
+- `process_note`, `evidence_locator`, and internal audit summaries are log/audit material, not user-facing conclusion material.
 - Facts require evidence IDs.
 - Inferences must be labeled as inferences.
 - Assumptions must be labeled as assumptions.
 - Unknowns must stay visible.
 - Unsupported fact-only conclusions must be blocked, downgraded, or converted into follow-up questions.
+- Presentation must express frozen primary answer claim IDs; it must not choose the main answer with phrase lists or question-type enumerations.
+- Presentation may only cite evidence IDs referenced by selected accepted claims, and the full visible reply must stay inside accepted claims/evidence/missingInfo. Validating only the first paragraph is not sufficient.
 
 Claude Code output is not user-facing until the runtime review step accepts it.
 

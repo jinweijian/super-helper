@@ -159,11 +159,11 @@ User message
      -> continue_diagnosis if another safe run is useful
      -> final_answer if evidence supports the conclusion
      -> escalate_to_human if risk, permission, or uncertainty is too high
-  -> Presentation generates an Answer Contract reply; runtime validates direct-answer coverage and accepted IDs
+  -> Presentation expresses the frozen primary answer; runtime validates accepted IDs and AnswerGoal coverage
   -> Diagnostic log entry
 ```
 
-`ResolvedTurnContext.resolvedQuery` is the single effective query for Preflight dispatch, Experience, Knowledge Router, Retrieval, Deep Query, `DiagnosticRequest.userGoal`, and Worker. The raw latest message remains unchanged for UI and audit. A user hypothesis is never promoted to a confirmed fact, and an answer such as `不清楚` restores the unresolved prior question instead of replacing it.
+`ResolvedTurnContext.resolvedQuery` feeds `DiagnosticRequest.answerGoal.resolvedQuestion`. `answerGoal.rawUserQuestion` preserves the user's actual wording for UI/audit, while `answerGoal.diagnosticObjective` carries internal investigation intent. Preflight, Experience, Knowledge Router, Retrieval, Deep Query, Worker, Review, and Presentation must read `answerGoal` as the authoritative target. A user hypothesis is never promoted to a confirmed fact, and an answer such as `不清楚` restores the unresolved prior question instead of replacing it.
 
 ## Preflight Gate
 
@@ -253,7 +253,14 @@ Return one of these shapes:
     "caseId": "case_7f29",
     "runId": "run_03",
     "workspaceId": "workspace_current_project",
-    "userGoal": "Diagnose why course task save returns 500",
+    "answerGoal": {
+      "rawUserQuestion": "课程任务保存返回 500 是什么问题？",
+      "resolvedQuestion": "课程任务保存返回 500 是什么问题？",
+      "answerObject": "课程任务保存返回 500 的原因",
+      "mustAnswerItems": ["课程任务保存返回 500 的原因"],
+      "diagnosticObjective": "只读排查课程任务保存返回 500 的可验证原因",
+      "sourceMessageIds": ["msg_01"]
+    },
     "knownFacts": [
       "课程任务保存失败",
       "接口 /course/823/task/9912/update 返回 500",
@@ -279,7 +286,14 @@ Return one of these shapes:
   "caseId": "case_7f29",
   "runId": "run_03",
   "workspaceId": "workspace_current_project",
-  "userGoal": "Diagnose why the save action returns 500",
+  "answerGoal": {
+    "rawUserQuestion": "课程任务保存返回 500 是什么问题？",
+    "resolvedQuestion": "课程任务保存返回 500 是什么问题？",
+    "answerObject": "课程任务保存返回 500 的原因",
+    "mustAnswerItems": ["课程任务保存返回 500 的原因"],
+    "diagnosticObjective": "只读排查课程任务保存返回 500 的可验证原因",
+    "sourceMessageIds": ["msg_01"]
+  },
   "knownFacts": [
     "The user reports a save failure",
     "Network response is 500",
@@ -320,7 +334,7 @@ Use workspace instructions such as CLAUDE.md only to inspect this project.
 Use only allowed tools and allowed MCP servers.
 Default to read-only inspection.
 Return structured JSON with status, missingInfo, evidence, claims, and recommendedNextAction.
-Every claim must reference evidence or be labeled as an assumption.
+Every claim must declare `role` and `answers`, and must reference evidence or be labeled as an assumption.
 ```
 
 ### Worker Scope
@@ -361,8 +375,10 @@ Claude Code Worker must return this structure:
   "claims": [
     {
       "type": "fact | inference | assumption | unknown",
+      "role": "primary_answer | supporting_context | evidence_locator | process_note | next_action | unknown",
       "text": "claim text",
-      "evidenceIds": ["ev_01"]
+      "evidenceIds": ["ev_01"],
+      "answers": ["which answerGoal.mustAnswerItems this claim answers"]
     }
   ],
   "recommendedNextAction": "ask_user | continue_diagnosis | final_answer | escalate_to_human"
@@ -387,9 +403,20 @@ Before replying to the user, review the `DiagnosticResult`.
 - `inference` should cite evidence and explain the reasoning path.
 - `assumption` must be clearly labeled as not verified.
 - `unknown` must not be hidden.
+- Every claim must declare `role` and `answers`; missing role/answers fails closed or downgrades the run.
+- `final_answer` requires accepted `primary_answer` coverage for every `answerGoal.mustAnswerItems` entry.
+- `process_note`, `evidence_locator`, and internal audit summaries are never first-paragraph conclusions.
 - If a worker returns unsupported `fact`, reject it.
 - If evidence conflicts, say the evidence conflicts and ask for the next highest-impact data point.
 - If the worker timed out or failed, do not pretend diagnosis succeeded.
+
+### Presentation Review Rules
+
+- Presentation expresses frozen `primary_answer` claim IDs; it does not choose the main answer.
+- `directAnswerClaimIds` must be the same unique set as the runtime-provided frozen primary answer IDs.
+- `evidenceIds` must be referenced by selected accepted claims; unrelated evidence cannot be used to authorize extra facts.
+- The full visible `reply`, not only the first paragraph, must stay within accepted claims/evidence/missingInfo.
+- Do not use Chinese question-phrase lists or generic action-word lists to decide answer priority. Use `answerGoal.mustAnswerItems` and frozen primary claims.
 
 ### Review Outcomes
 
@@ -410,6 +437,8 @@ Choose exactly one:
 - Mention only the evidence that helps the user decide what to do.
 - Avoid internal implementation details unless the user asks.
 - Do not say "已经确定" unless evidence is strong.
+- The templates below are fallback shapes, not mandatory skeletons. If a short natural answer better addresses the user's real question, use that first and add sections only when they improve clarity.
+- Do not use process narration as the conclusion when concrete requested items are available; answer with those items first.
 
 ### Follow-Up Question Template
 
@@ -717,8 +746,10 @@ Worker output:
   "claims": [
     {
       "type": "fact",
+      "role": "primary_answer",
       "text": "This is caused by a database field mismatch",
-      "evidenceIds": []
+      "evidenceIds": [],
+      "answers": ["课程任务保存返回 500 的原因"]
     }
   ]
 }

@@ -97,12 +97,21 @@ export interface CaseMessage {
   replyToMessageId?: string;
 }
 
+export interface AnswerGoal {
+  rawUserQuestion: string;
+  resolvedQuestion: string;
+  answerObject: string;
+  mustAnswerItems: string[];
+  diagnosticObjective: string;
+  sourceMessageIds: string[];
+}
+
 export interface DiagnosticRequest {
   caseId: string;
   runId: string;
   workspaceId: string;
   claudeSessionId: string;
-  userGoal: string;
+  answerGoal: AnswerGoal;
   knownFacts: string[];
   unknowns: string[];
   constraints: string[];
@@ -123,7 +132,7 @@ export interface DiagnosticRequestContext {
   previousRuns: Array<{
     runId: string;
     status: DiagnosticRunStatus;
-    userGoal?: string;
+    answerGoal?: AnswerGoal;
     summary?: string;
     missingInfo: string[];
     evidence: Evidence[];
@@ -274,11 +283,21 @@ export interface Evidence {
   };
 }
 
+export type DiagnosticClaimRole =
+  | 'primary_answer'
+  | 'supporting_context'
+  | 'evidence_locator'
+  | 'process_note'
+  | 'next_action'
+  | 'unknown';
+
 export interface DiagnosticClaim {
   id?: string;
   type: ClaimType;
+  role: DiagnosticClaimRole;
   text: string;
   evidenceIds: string[];
+  answers: string[];
 }
 
 export interface DiagnosticResult {

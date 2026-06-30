@@ -2,6 +2,7 @@ import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRequest, DiagnosticResult, UserPersona } from '../domain.js';
 import { buildDiagnosticRequestContext } from '../sessions/context-builder.js';
 import type { StoredCase } from '../sessions/file-memory-store.js';
+import { buildAnswerGoal } from './answer-goal.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export function buildDiagnosticRequest(input: {
@@ -14,13 +15,14 @@ export function buildDiagnosticRequest(input: {
   const resolvedTurn = buildResolvedTurnContext({ caseSession, latestUserMessage: userMessage });
   const latestRunNumber = caseSession.runs.length + 1;
   const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
+  const answerGoal = buildAnswerGoal({ resolvedTurn });
 
   const request: DiagnosticRequest = {
     caseId: caseSession.id,
     runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
     workspaceId: caseSession.workspaceId,
     claudeSessionId: caseSession.claudeSessionId,
-    userGoal: resolvedTurn.resolvedQuery,
+    answerGoal,
     knownFacts,
     unknowns: Array.from(new Set([...unknowns, ...resolvedTurn.unknowns.map((item) => item.text)])),
     constraints: [
@@ -46,12 +48,20 @@ export function buildFollowUpDiagnosticRequest(input: {
   const { caseSession, previousRequest, previousResult } = input;
   const latestRunNumber = caseSession.runs.length + 1;
   const evidenceSummaries = previousResult.evidence.map((item) => `${item.id}: ${item.summary} (${item.source})`);
-  const claimSummaries = previousResult.claims.map((claim) => `${claim.type}: ${claim.text}`);
+  const claimSummaries = previousResult.claims.map((claim) => `${claim.type}/${claim.role}: ${claim.text}`);
+  const resolvedTurn = previousRequest.context?.resolvedTurn ?? buildResolvedTurnContext({
+    caseSession,
+    latestUserMessage: previousRequest.answerGoal.rawUserQuestion,
+  });
+  const answerGoal = buildAnswerGoal({
+    resolvedTurn,
+    previousMissingInfo: previousResult.missingInfo,
+  });
 
   const request: DiagnosticRequest = {
     ...previousRequest,
     runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
-    userGoal: `继续追查上一轮未完成的问题：${previousRequest.userGoal}`,
+    answerGoal,
     knownFacts: Array.from(new Set([...previousRequest.knownFacts, previousResult.summary, ...evidenceSummaries, ...claimSummaries])),
     unknowns: previousResult.missingInfo,
     constraints: [
@@ -78,7 +88,7 @@ export function personaDiagnosticConstraints(persona: UserPersona): string[] {
 
 export function attachCaseContext(caseSession: StoredCase, request: DiagnosticRequest): void {
   const existingResolvedTurn = request.context?.resolvedTurn;
-  const rawMessage = existingResolvedTurn?.latestUserMessage ?? request.context?.currentUserMessage ?? request.userGoal;
+  const rawMessage = existingResolvedTurn?.latestUserMessage ?? request.context?.currentUserMessage ?? request.answerGoal.rawUserQuestion;
   const context = buildDiagnosticRequestContext(caseSession, rawMessage);
   context.resolvedTurn = existingResolvedTurn ?? buildResolvedTurnContext({
     caseSession,
@@ -90,7 +100,7 @@ export function attachCaseContext(caseSession: StoredCase, request: DiagnosticRe
       new Set([
         ...request.constraints,
         'Resolve follow-up references such as "刚刚", "上一轮", "这个设置", "那个页面", or "the previous answer" using DiagnosticRequest.context.recentMessages and DiagnosticRequest.context.previousRuns.',
-        'Answer the latest userGoal first. Do not repeat a previous answer unless it is needed to ground the follow-up.',
+        'Answer DiagnosticRequest.answerGoal first. Use diagnosticObjective only to guide inspection, never as the user-facing conclusion.',
       ]),
     );
   }

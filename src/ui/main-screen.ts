@@ -2063,7 +2063,7 @@ export function renderApp(): string {
       }
       chat.innerHTML = '<div class="empty-workspace" id="emptyChat">'
         + '<div class="empty-card"><strong>准备开始一次诊断</strong><p>把问题、现象或排查目标发过来。super helper 会先整理上下文，再决定追问、查知识库或调用只读诊断工具。</p><div class="empty-route"><span><b>理解问题</b>提取对象和未知项</span><span><b>知识路由</b>定位模块和意图</span><span><b>检索证据</b>查 FAQ 与 Runbook</span><span><b>证据判断</b>区分事实和推断</span><span><b>生成答复</b>给出下一步</span></div></div>'
-        + '<div class="empty-sample"><span>示例：学员管理统计缺少 6 月数据，定时任务已恢复，怎么补数据？</span><span>发送后展示稳定进度，不再用跳动文案等待。</span></div>'
+        + '<div class="empty-sample"><span>示例：后台-运营-APP发现页是空白的，显示不出来，这是什么问题？</span><span>示例：老师反馈视频被盗，应该从哪些学习数据排查？</span></div>'
         + '</div>';
     }
 

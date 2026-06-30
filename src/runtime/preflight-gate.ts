@@ -57,7 +57,7 @@ export function summarizePreflightDecision(decision: PreflightDecision): Record<
 
   return {
     action: 'dispatch',
-    userGoal: decision.request.userGoal,
+    answerGoal: decision.request.answerGoal,
     knownFacts: decision.request.knownFacts,
     unknowns: decision.request.unknowns,
     allowedMcpToolIds: decision.request.allowedMcpToolIds,

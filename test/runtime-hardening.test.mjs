@@ -28,6 +28,21 @@ function recorderFixture() {
   return { recorder: new CaseRuntimeEventRecorder(repository), caseSession };
 }
 
+function testAnswerGoal(question, answerObject = question) {
+  return {
+    rawUserQuestion: question,
+    resolvedQuestion: question,
+    answerObject,
+    mustAnswerItems: [answerObject],
+    diagnosticObjective: `围绕当前用户问题进行只读诊断：${question}`,
+    sourceMessageIds: ['msg_test'],
+  };
+}
+
+function primaryClaim(text, evidenceIds, answers, type = 'fact') {
+  return { type, role: 'primary_answer', text, evidenceIds, answers };
+}
+
 test('model preflight raw output is redacted and bounded before persistence', () => {
   const { recorder, caseSession } = recorderFixture();
   const raw = `Let me analyze the situation carefully. apiKey: sk-secret-123 ${'chain-of-thought '.repeat(240)}`;
@@ -77,7 +92,7 @@ test('knowledge answer and review log events reference evidence ids instead of d
         confidence: 'high',
       },
     ],
-    claims: [{ type: 'fact', text: '规则已发布。', evidenceIds: ['ev_knowledge_1'] }],
+    claims: [primaryClaim('规则已发布。', ['ev_knowledge_1'], ['AI伴学助手规则'])],
     recommendedNextAction: 'final_answer',
   };
   const run = { id: 'run_1' };
@@ -137,14 +152,14 @@ test('full knowledge evidence object is persisted only by knowledge search resul
         confidence: 'high',
       },
     ],
-    claims: [{ type: 'fact', text: '规则已发布。', evidenceIds: ['ev_kb_ai_companion_rule'] }],
+    claims: [primaryClaim('规则已发布。', ['ev_kb_ai_companion_rule'], ['AI伴学助手规则'])],
     recommendedNextAction: 'final_answer',
   };
   const request = {
     caseId: caseSession.id,
     runId: 'run_1',
     workspaceId: 'current',
-    userGoal: 'AI伴学助手规则是什么',
+    answerGoal: testAnswerGoal('AI伴学助手规则是什么', 'AI伴学助手规则'),
     knownFacts: [],
     unknowns: [],
     constraints: [],
@@ -212,7 +227,7 @@ test('log blocks resolve evidence ids from the knowledge search dictionary', () 
         confidence: 'high',
       },
     ],
-    claims: [{ type: 'fact', text: '规则已发布。', evidenceIds: ['ev_kb_ai_companion_rule'] }],
+    claims: [primaryClaim('规则已发布。', ['ev_kb_ai_companion_rule'], ['AI伴学助手规则'])],
     recommendedNextAction: 'final_answer',
   });
 
@@ -378,14 +393,14 @@ test('knowledge project type config is attached to deep query context', () => {
     caseId: 'case_project_type',
     runId: 'run_project_type',
     workspaceId: 'current',
-    userGoal: '营销主题分类挂件在哪里关闭',
+    answerGoal: testAnswerGoal('营销主题分类挂件在哪里关闭', '营销主题分类挂件关闭位置'),
     knownFacts: [],
     unknowns: [],
     constraints: ['read-only diagnosis'],
     allowedMcpToolIds: [],
   };
   const route = {
-    normalizedQuestion: request.userGoal,
+    normalizedQuestion: request.answerGoal.resolvedQuestion,
     moduleCandidates: ['marketing-theme'],
     intentCandidates: [],
     keywords: ['营销', '主题', '挂件'],
@@ -410,7 +425,7 @@ test('knowledge project type config is attached to deep query context', () => {
 
   attachKnowledgeCodeEscalationContext({
     request,
-    question: request.userGoal,
+    question: request.answerGoal.resolvedQuestion,
     route,
     evidencePack,
     judge,
@@ -439,16 +454,15 @@ test('operations persona final reply hides internal whitepaper source paths whil
     claims: [
       {
         id: 'claim_whitepaper_source',
-        type: 'fact',
-        text: '规则来自 knowledge/_sources/whitepapers/ai-companion.docx 的审核资料。',
-        evidenceIds: ['ev_whitepaper_source'],
+        ...primaryClaim('规则来自 knowledge/_sources/whitepapers/ai-companion.docx 的审核资料。', ['ev_whitepaper_source'], ['AI伴学助手规则来源']),
       },
     ],
     recommendedNextAction: 'final_answer',
   };
 
-  const operationsReply = ruleBasedReviewAndFormat(result, 'operations');
-  const developerReply = ruleBasedReviewAndFormat(result, 'developer');
+  const answerGoal = testAnswerGoal('AI伴学助手规则来源是什么？', 'AI伴学助手规则来源');
+  const operationsReply = ruleBasedReviewAndFormat(result, 'operations', answerGoal);
+  const developerReply = ruleBasedReviewAndFormat(result, 'developer', answerGoal);
 
   assert.doesNotMatch(operationsReply, /knowledge\/_sources\/whitepapers\//);
   assert.match(operationsReply, /原始白皮书资料|业务资料/);

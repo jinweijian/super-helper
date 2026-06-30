@@ -48,6 +48,39 @@ function caseSession(overrides = {}) {
   };
 }
 
+function testAnswerGoal(question, answerObject = question) {
+  return {
+    rawUserQuestion: question,
+    resolvedQuestion: question,
+    answerObject,
+    mustAnswerItems: [answerObject],
+    diagnosticObjective: `围绕当前用户问题进行只读诊断：${question}`,
+    sourceMessageIds: ['msg_test'],
+  };
+}
+
+function diagnosticRequest(caseSession, runId, question, answerObject = question) {
+  return {
+    caseId: caseSession.id,
+    runId,
+    workspaceId: 'current',
+    claudeSessionId: caseSession.claudeSessionId,
+    answerGoal: testAnswerGoal(question, answerObject),
+    knownFacts: [],
+    unknowns: [],
+    constraints: [],
+    allowedMcpToolIds: [],
+  };
+}
+
+function primaryClaim(text, evidenceIds, answers, type = 'fact') {
+  return { type, role: 'primary_answer', text, evidenceIds, answers };
+}
+
+function unknownClaim(text, evidenceIds = []) {
+  return { type: 'unknown', role: 'unknown', text, evidenceIds, answers: [] };
+}
+
 test('resolved preflight keeps unknown and hypotheses out of confirmed known facts', () => {
   const current = caseSession({
     messages: [
@@ -58,7 +91,7 @@ test('resolved preflight keeps unknown and hypotheses out of confirmed known fac
   });
   const unknown = preflight({ caseSession: current, userMessage: '不清楚', agentConfig: agentConfig() });
   assert.equal(unknown.action, 'dispatch');
-  assert.equal(unknown.request.userGoal, '课程发布后学员为什么看不到入口？');
+  assert.equal(unknown.request.answerGoal.resolvedQuestion, '课程发布后学员为什么看不到入口？');
   assert.equal(unknown.request.knownFacts.includes('不清楚'), false);
   assert.equal(unknown.request.context?.resolvedTurn?.unknowns.some((item) => item.text === '不清楚'), true);
 
@@ -121,22 +154,22 @@ test('experience binds the matching reply to its source run instead of the lates
     store.addMessage(source, { role: 'helper', body: '第一条已验证回复', replyToMessageId: firstUser.id });
     store.addRun(source, {
       id: 'run_first', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_first', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: firstUser.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: diagnosticRequest(source, 'run_first', firstUser.body, '课程发布后入口不可见原因'),
       result: {
         status: 'concluded', summary: '第一条', missingInfo: [],
         evidence: [{ id: 'ev_first', kind: 'workspace', source: 'first.ts', summary: '第一条证据', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '第一条事实', evidenceIds: ['ev_first'] }], recommendedNextAction: 'final_answer',
+        claims: [primaryClaim('第一条事实', ['ev_first'], ['课程发布后入口不可见原因'])], recommendedNextAction: 'final_answer',
       },
     });
     const secondUser = store.addMessage(source, { role: 'user', body: '完全不同的账单问题是什么？' });
     store.addMessage(source, { role: 'helper', body: '第二条回复', replyToMessageId: secondUser.id });
     store.addRun(source, {
       id: 'run_latest', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_latest', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: secondUser.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: diagnosticRequest(source, 'run_latest', secondUser.body, '账单问题原因'),
       result: {
         status: 'concluded', summary: '第二条', missingInfo: [],
         evidence: [{ id: 'ev_latest', kind: 'workspace', source: 'latest.ts', summary: '错误的最新证据', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '第二条事实', evidenceIds: ['ev_latest'] }], recommendedNextAction: 'final_answer',
+        claims: [primaryClaim('第二条事实', ['ev_latest'], ['账单问题原因'])], recommendedNextAction: 'final_answer',
       },
     });
     source.status = 'concluded';
@@ -164,11 +197,11 @@ test('experience records stale or invisible same-scope history as rejected conte
     store.addMessage(source, { role: 'helper', body: '历史回复', replyToMessageId: user.id });
     store.addRun(source, {
       id: 'run_stale', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_stale', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: diagnosticRequest(source, 'run_stale', user.body, '课程发布后入口不可见原因'),
       result: {
         status: 'concluded', summary: '历史结论', missingInfo: [],
         evidence: [{ id: 'ev_stale', kind: 'knowledge', source: 'faq.md', summary: '旧知识', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: '2020-01-01T00:00:00Z', quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '历史事实', evidenceIds: ['ev_stale'] }], recommendedNextAction: 'final_answer',
+        claims: [primaryClaim('历史事实', ['ev_stale'], ['课程发布后入口不可见原因'])], recommendedNextAction: 'final_answer',
       },
     });
     source.status = 'concluded';
@@ -198,8 +231,8 @@ test('experience matching is isolated by tenant and user', () => {
     store.addMessage(source, { role: 'helper', body: '跨租户回复', replyToMessageId: user.id });
     store.addRun(source, {
       id: 'run_other', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_other', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
-      result: { status: 'concluded', summary: 'other', missingInfo: [], evidence: [{ id: 'ev_other', kind: 'workspace', source: 'other', summary: 'other', confidence: 'high' }], claims: [{ type: 'fact', text: 'other', evidenceIds: ['ev_other'] }], recommendedNextAction: 'final_answer' },
+      request: diagnosticRequest(source, 'run_other', user.body, '课程发布后入口不可见原因'),
+      result: { status: 'concluded', summary: 'other', missingInfo: [], evidence: [{ id: 'ev_other', kind: 'workspace', source: 'other', summary: 'other', confidence: 'high' }], claims: [primaryClaim('other', ['ev_other'], ['课程发布后入口不可见原因'])], recommendedNextAction: 'final_answer' },
     });
     source.status = 'concluded';
     store.saveCase(source);
@@ -213,7 +246,7 @@ test('experience matching is isolated by tenant and user', () => {
 test('presentation cannot promote partial outcome or render nonexistent evidence claims', () => {
   const partial = {
     status: 'partial', summary: '尚未确认', missingInfo: ['日志'], evidence: [],
-    claims: [{ type: 'fact', text: '不存在证据的事实', evidenceIds: ['ev_missing'] }],
+    claims: [primaryClaim('不存在证据的事实', ['ev_missing'], ['日志'])],
     recommendedNextAction: 'ask_user',
   };
   assert.equal(decisionFromReviewOutcome('final_answer', partial), 'ask_user');
@@ -236,12 +269,12 @@ test('runtime ignores a model attempt to promote a frozen partial result', async
       type: 'openai-compatible', baseUrl: 'https://api.example.test/v1', apiKey: 'test-key', model: 'test-model', temperature: 0,
     };
     const worker = {
-      async diagnose() {
+      async diagnose(request) {
         return {
           result: {
             status: 'partial', summary: 'worker 未确认', missingInfo: ['服务日志'],
             evidence: [{ id: 'ev_partial', kind: 'workspace', source: 'src/router.ts', summary: '只定位到入口', confidence: 'medium' }],
-            claims: [{ type: 'inference', text: '目前只能确认请求经过该入口。', evidenceIds: ['ev_partial'] }],
+            claims: [primaryClaim('目前只能确认请求经过该入口。', ['ev_partial'], request.answerGoal.mustAnswerItems, 'inference')],
             recommendedNextAction: 'ask_user',
           },
           trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"partial"}', stderr: '', exitCode: 0 },
@@ -270,10 +303,10 @@ test('deterministic validation rejects duplicate, missing, and low-confidence fa
       { id: 'ev_unknown', kind: 'unknown', source: 'unknown', summary: '未知来源', confidence: 'high' },
     ],
     claims: [
-      { id: 'claim_low', type: 'fact', text: '低置信度事实', evidenceIds: ['ev_low'] },
-      { id: 'claim_missing', type: 'fact', text: '不存在证据', evidenceIds: ['ev_missing'] },
-      { id: 'claim_unknown', type: 'fact', text: '未知来源事实', evidenceIds: ['ev_unknown'] },
-      { id: 'claim_invalid', type: 'invented', text: '非法类型', evidenceIds: ['ev_unknown'] },
+      { id: 'claim_low', ...primaryClaim('低置信度事实', ['ev_low'], ['不应直接形成结论']) },
+      { id: 'claim_missing', ...primaryClaim('不存在证据', ['ev_missing'], ['不应直接形成结论']) },
+      { id: 'claim_unknown', ...primaryClaim('未知来源事实', ['ev_unknown'], ['不应直接形成结论']) },
+      { id: 'claim_invalid', type: 'invented', role: 'primary_answer', text: '非法类型', evidenceIds: ['ev_unknown'], answers: ['不应直接形成结论'] },
     ],
     recommendedNextAction: 'final_answer',
   });
@@ -290,7 +323,7 @@ test('worker failure fallback never copies raw stdout stderr or secrets into mai
   const result = {
     status: 'partial', summary: 'worker failed', missingInfo: [], evidence: [], claims: [], recommendedNextAction: 'escalate_to_human',
   };
-  const reply = formatReviewFailureFallback(result, 'operations', 'test', {
+  const reply = formatReviewFailureFallback(result, 'operations', undefined, {
     command: 'claude --secret', cwd: '/private/workspace', stdout: 'raw stdout sk-secret-123456', stderr: 'Authorization: Bearer token-secret',
     exitCode: 1, error: 'stack internal', startedAt: '', finishedAt: '',
   }, 'model also failed');
@@ -329,11 +362,11 @@ test('safety preflight blocks a matching historical write request before Experie
     store.addMessage(source, { role: 'helper', body: '历史写操作回复', replyToMessageId: user.id });
     store.addRun(source, {
       id: 'run_write', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_write', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: diagnosticRequest(source, 'run_write', user.body, '生产课程数据删除请求'),
       result: {
         status: 'concluded', summary: '历史写操作', missingInfo: [],
         evidence: [{ id: 'ev_write', kind: 'workspace', source: 'admin.ts', summary: '写操作入口', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '存在写操作入口', evidenceIds: ['ev_write'] }], recommendedNextAction: 'final_answer',
+        claims: [primaryClaim('存在写操作入口', ['ev_write'], ['生产课程数据删除请求'])], recommendedNextAction: 'final_answer',
       },
     });
     source.status = 'concluded';
@@ -369,7 +402,7 @@ test('sync first turn and async unknown follow-up share one resolved query acros
             summary: '已完成只读排查。',
             missingInfo: [],
             evidence: [{ id: `ev_${requests.length}`, kind: 'workspace', source: 'src/example.ts', summary: '当前工作区证据。', confidence: 'high' }],
-            claims: [{ type: 'fact', text: '当前工作区可继续核验该问题。', evidenceIds: [`ev_${requests.length}`] }],
+            claims: [primaryClaim('当前工作区可继续核验该问题。', [`ev_${requests.length}`], request.answerGoal.mustAnswerItems)],
             recommendedNextAction: 'final_answer',
           },
           trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
@@ -383,7 +416,7 @@ test('sync first turn and async unknown follow-up share one resolved query acros
     const second = await agent.completeUserTurn(accepted.id, '不清楚');
 
     assert.equal(requests.length, 2);
-    assert.equal(requests[1].userGoal, originalQuestion);
+    assert.equal(requests[1].answerGoal.resolvedQuestion, originalQuestion);
     assert.equal(requests[1].context.resolvedTurn.resolvedQuery, originalQuestion);
     assert.equal(requests[1].context.resolvedTurn.latestUserMessage, '不清楚');
     assert.equal(requests[1].unknowns.includes('不清楚'), true);
@@ -392,7 +425,7 @@ test('sync first turn and async unknown follow-up share one resolved query acros
     const phase = (name) => second.caseSession.logs.find((event) => event.phase === name && event.createdAt >= accepted.updatedAt);
     assert.equal(phase('experience_started').detail.message, originalQuestion);
     assert.equal(phase('knowledge_router_started').detail.message, originalQuestion);
-    assert.equal(phase('diagnostic_request').detail.userGoal, originalQuestion);
+    assert.equal(phase('diagnostic_request').detail.answerGoal.resolvedQuestion, originalQuestion);
     assert.ok(second.caseSession.logs.findIndex((event) => event.phase === 'preflight_started') < second.caseSession.logs.findIndex((event) => event.phase === 'experience_started'));
   } finally {
     rmSync(root, { recursive: true, force: true });

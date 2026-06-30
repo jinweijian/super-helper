@@ -1,5 +1,6 @@
 import type { DiagnosticRequest } from '../domain.js';
 import type { KnowledgeEvidencePack, KnowledgeRoute } from '../knowledge/index.js';
+import { answerGoalText } from './answer-goal.js';
 import type { EvidenceJudgeResult } from './evidence-judge.js';
 import { correctionActionsFor } from './query-correction.js';
 
@@ -79,7 +80,7 @@ export function attachDeepQueryContext(input: {
 }): void {
   input.request.context ??= {
     isFollowUp: false,
-    currentUserMessage: input.request.userGoal,
+    currentUserMessage: input.request.answerGoal.rawUserQuestion,
     recentMessages: [],
     previousRuns: [],
   };
@@ -123,7 +124,7 @@ export function attachDeepQueryContext(input: {
     ...input.request.constraints,
     '知识库证据不足或问题依赖当前实现，请执行带线索的只读静态调查。',
     `优先检查 artifact targets: ${input.deepQuery.artifactTargets.join(', ') || 'general workspace evidence'}.`,
-    `优先使用 anchor terms: ${input.deepQuery.anchorTerms.join(', ') || input.request.userGoal}.`,
+    `优先使用 anchor terms: ${input.deepQuery.anchorTerms.join(', ') || answerGoalText(input.request.answerGoal)}.`,
     ...input.deepQuery.avoidAssumptions,
   ]));
 }

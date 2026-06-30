@@ -42,7 +42,7 @@ export function curateSolvedCase(input: {
     throw new Error('当前 case 没有可沉淀的已结论证据结果');
   }
 
-  const originalQuestion = originalUserQuestion(input.caseSession) ?? run.request?.userGoal ?? input.caseSession.title;
+  const originalQuestion = originalUserQuestion(input.caseSession) ?? run.request?.answerGoal.resolvedQuestion ?? input.caseSession.title;
   const moduleId = inferModuleId(input.workspaceRoot, input.caseSession, run, originalQuestion);
   const intent = inferIntent(run);
   const today = new Date().toISOString().slice(0, 10);
@@ -138,7 +138,7 @@ ${blockQuote(input.originalQuestion)}
 
 ## 归一化问题
 
-${blockQuote(input.run.request?.userGoal ?? input.originalQuestion)}
+${blockQuote(input.run.request?.answerGoal.resolvedQuestion ?? input.originalQuestion)}
 
 ## 模块与意图
 
@@ -287,6 +287,7 @@ function supportedClaims(
 ): string[] {
   return claims
     .filter((claim) => claim.type === type)
+    .filter((claim) => reusableSolvedCaseClaimRole(claim.role))
     .filter((claim) => claim.evidenceIds.length > 0 && claim.evidenceIds.every((id) => evidenceIds.has(id)))
     .map((claim) => `${claim.text}（证据：${claim.evidenceIds.join('、')}）`);
 }
@@ -295,9 +296,14 @@ function hasEvidenceBackedClaim(result: DiagnosticResult): boolean {
   const evidenceIds = new Set(result.evidence.map((item) => item.id));
   return result.claims.some((claim) => (
     claim.type !== 'unknown' &&
+    reusableSolvedCaseClaimRole(claim.role) &&
     claim.evidenceIds.length > 0 &&
     claim.evidenceIds.every((id) => evidenceIds.has(id))
   ));
+}
+
+function reusableSolvedCaseClaimRole(role: DiagnosticClaim['role']): boolean {
+  return role === 'primary_answer' || role === 'supporting_context' || role === 'next_action';
 }
 
 function formatEvidence(evidence: Evidence[]): string {
@@ -316,7 +322,7 @@ function formatRuns(runs: DiagnosticRun[]): string {
     return '- 暂无诊断 run。';
   }
   return runs.map((run) => {
-    const goal = run.request?.userGoal ? ` - ${run.request.userGoal}` : '';
+    const goal = run.request?.answerGoal ? ` - ${run.request.answerGoal.resolvedQuestion}` : '';
     const summary = run.result?.summary ? `\n  - summary: ${run.result.summary}` : '';
     return `- ${run.id} (${run.status})${goal}${summary}`;
   }).join('\n');

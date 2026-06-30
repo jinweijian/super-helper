@@ -1,6 +1,7 @@
 import type { DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import { validateDiagnosticResult } from './result-validator.js';
+import { primaryAnswerItems } from './answer-goal.js';
 
 export interface ExperienceMatch {
   sourceCaseId: string;
@@ -137,14 +138,18 @@ function pairsFromCase(
           {
             id: 'claim_history_reply',
             type: 'inference',
+            role: 'primary_answer',
             text: reply.body,
             evidenceIds: evidence.map((item) => item.id),
+            answers: sourceRun.request ? primaryAnswerItems(sourceRun.request.answerGoal) : [message.body],
           },
           {
             id: 'claim_history_match',
             type: 'fact',
+            role: 'supporting_context',
             text: `历史会话 ${caseSession.id} 的 run ${sourceRun.id} 已回答高度相同的问题。`,
             evidenceIds: ['ev_history_match'],
+            answers: [],
           },
         ],
         recommendedNextAction: 'final_answer',
@@ -162,7 +167,7 @@ function findSourceRun(runs: DiagnosticRun[], sourceMessageId: string, question:
   if (attributed.length === 1) return attributed[0];
   if (attributed.length > 1) return undefined;
   const legacyMatches = runs.filter((run) => (
-    run.result && run.request && similarity(normalized, normalizeQuestion(run.request.userGoal)) >= 0.92
+    run.result && run.request && similarity(normalized, normalizeQuestion(run.request.answerGoal.resolvedQuestion)) >= 0.92
   ));
   return legacyMatches.length === 1 ? legacyMatches[0] : undefined;
 }

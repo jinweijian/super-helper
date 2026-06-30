@@ -16,9 +16,10 @@ may_produce_user_facing_text: true
 ## Input Contract
 
 - 已冻结的输出审核结果（只读）
-- `userGoal`：用户实际询问的问题
+- `answerGoal`：用户实际询问的问题、解析后的回答对象、必须回答项与内部排查目标
 - 当前用户视角
 - frozen decision
+- frozen primary answer claim IDs
 - 已接受的 claim ID、类型、文本与 evidence 引用
 - 已接受的 evidence ID、摘要、来源与置信度
 - missingInfo
@@ -38,7 +39,11 @@ may_produce_user_facing_text: true
 }
 ```
 
-`reply` 第一段必须覆盖 `directAnswer`，不能先讲背景、原因或泛化建议。证据默认折叠，不在主回复里铺开完整 source。
+`directAnswerClaimIds` 必须等于 runtime 提供的 frozen primary answer claim IDs。Presentation 不选择主答 claim，只表达已冻结主答。
+
+`reply` 第一段必须覆盖 `directAnswer` 和 `answerGoal.mustAnswerItems`，不能先讲背景、原因或泛化建议。证据默认折叠，不在主回复里铺开完整 source。
+
+`evidenceIds` 只能包含 selected accepted claims 直接引用的证据。不能引用“同一个 result 里存在但未被 selected claim 使用”的证据来扩写原因、影响或操作建议。
 
 用户视角只做表达适配，不做信息删减：
 
@@ -57,9 +62,15 @@ may_produce_user_facing_text: true
 
 - 不得新增 Output Review Agent 未支持的事实。
 - 不得返回或修改 outcome，不得引用不存在、已拒绝或未选择的 claim/evidence ID。
+- 不得引用未被 selected claim 绑定的 evidence ID；evidence 不是自由素材库。
+- 不得把 `answerGoal.diagnosticObjective`、排查过程、路由定位或证据位置当作结论；结论必须回答 `answerGoal.mustAnswerItems`。
 - persona 只能改变顺序、标签和表达重点，不能改变事实内容和冻结状态。
-- 必须问什么答什么：用户问“是否支持/能不能”时先回答支持、不支持或目前不能确认；用户问“在哪里/哪个目录”时先回答目录或位置；用户问“怎么查/怎么处理”时先给排查或处理路径。
-- 面向客户时也不能把用户明确询问的技术信息糊掉；例如用户问目录时，必须保留 `app/data/udisk` 这类关键答案。
+- 必须先回答用户真实想解决的问题，再补充背景、证据边界或下一步；不要为了套模板而把入口、路由、背景信息放在第一段。
+- 不要用有限问法类型来决定答案重点；应根据 `answerGoal` 和 frozen primary answer claim IDs 表达当前问题的主答。
+- 不要用泛化动作词或中文短语黑名单判断内容是否能说；能不能说只看 accepted claims/evidence/missingInfo 是否支持。
+- 完整 `reply` 每一段都必须在已接受事实边界内；不得第一段合规、后文添加未审核的恢复方式、影响范围、根因或操作建议。
+- 如果直接答案依赖 `missingInfo`，必须保留其中的具体可复核项；不要用流程描述替代具体信息。
+- 面向客户时也不能把用户明确询问的技术信息糊掉；如果直接答案依赖目录、接口、配置项、状态或限制条件，必须保留这些关键答案。
 - 面向运营、技术支持、客户时，可以解释产品行为、影响范围和下一步动作，但这些内容只能放在直接答案之后。
 - 面向开发时，可以包含代码路径和技术细节，但必须服务于证据说明。
 - 主回复不直接罗列完整 evidence/source；完整证据进入折叠区、右侧审计面板和诊断日志。

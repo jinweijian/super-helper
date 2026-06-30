@@ -1,7 +1,18 @@
-import type { DiagnosticClaim, DiagnosticResult, Evidence } from '../domain.js';
+import type { AnswerGoal, DiagnosticClaim, DiagnosticClaimRole, DiagnosticResult, Evidence } from '../domain.js';
+import { primaryAnswerClaimIds } from './answer-goal-validator.js';
 
 export interface DiagnosticValidationIssue {
-  code: 'duplicate_evidence_id' | 'missing_evidence_reference' | 'low_confidence_fact' | 'invalid_claim_type' | 'unsupported_claim';
+  code:
+    | 'duplicate_evidence_id'
+    | 'missing_evidence_reference'
+    | 'low_confidence_fact'
+    | 'invalid_claim_type'
+    | 'missing_claim_role'
+    | 'invalid_claim_role'
+    | 'missing_claim_answers'
+    | 'missing_primary_answer'
+    | 'primary_answer_misses_goal'
+    | 'unsupported_claim';
   claimId?: string;
   evidenceId?: string;
   message: string;
@@ -12,10 +23,12 @@ export interface ValidatedDiagnosticResult {
   issues: DiagnosticValidationIssue[];
   acceptedClaimIds: string[];
   rejectedClaimIds: string[];
+  primaryAnswerClaimIds: string[];
 }
 
 export interface ValidateDiagnosticResultOptions {
   additionalEvidence?: Evidence[];
+  answerGoal?: AnswerGoal;
 }
 
 export function validateDiagnosticResult(
@@ -32,6 +45,26 @@ export function validateDiagnosticResult(
     const id = claim.id ?? `claim_${index + 1}`;
     if (!['fact', 'inference', 'assumption', 'unknown'].includes(claim.type)) {
       issues.push({ code: 'invalid_claim_type', claimId: id, message: `Claim ${id} has an invalid claim type.` });
+      issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
+      rejectedClaimIds.push(id);
+      return;
+    }
+    if (!isValidClaimRole(claim.role)) {
+      issues.push({
+        code: claim.role ? 'invalid_claim_role' : 'missing_claim_role',
+        claimId: id,
+        message: `Claim ${id} is missing a valid answer role.`,
+      });
+      issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
+      rejectedClaimIds.push(id);
+      return;
+    }
+    if (!Array.isArray(claim.answers)) {
+      issues.push({
+        code: 'missing_claim_answers',
+        claimId: id,
+        message: `Claim ${id} must declare which AnswerGoal items it answers.`,
+      });
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
       rejectedClaimIds.push(id);
       return;
@@ -61,13 +94,21 @@ export function validateDiagnosticResult(
       rejectedClaimIds.push(id);
       return;
     }
-    claims.push({ ...claim, id, evidenceIds: validEvidenceIds });
+    claims.push({ ...claim, id, evidenceIds: validEvidenceIds, answers: Array.from(new Set(claim.answers)) });
   });
 
   const resultCanConclude = claims.some((claim) => (
     claim.type === 'fact' || claim.type === 'inference'
   ));
-  const downgrade = (result.status === 'concluded' || result.recommendedNextAction === 'final_answer') && !resultCanConclude;
+  const primaryAnswerIds = primaryAnswerClaimIds(claims, options.answerGoal);
+  const missesPrimary = Boolean(options.answerGoal) && primaryAnswerIds.length === 0;
+  if (missesPrimary && (result.status === 'concluded' || result.recommendedNextAction === 'final_answer')) {
+    issues.push({
+      code: claims.some((claim) => claim.role === 'primary_answer') ? 'primary_answer_misses_goal' : 'missing_primary_answer',
+      message: 'Final answers must include an accepted primary_answer claim covering the current AnswerGoal.',
+    });
+  }
+  const downgrade = (result.status === 'concluded' || result.recommendedNextAction === 'final_answer') && (!resultCanConclude || missesPrimary);
   const validated: DiagnosticResult = {
     ...result,
     status: downgrade ? 'partial' : result.status,
@@ -84,7 +125,21 @@ export function validateDiagnosticResult(
     issues,
     acceptedClaimIds: claims.map((claim) => claim.id!),
     rejectedClaimIds,
+    primaryAnswerClaimIds: primaryAnswerIds,
   };
+}
+
+const VALID_CLAIM_ROLES = new Set<DiagnosticClaimRole>([
+  'primary_answer',
+  'supporting_context',
+  'evidence_locator',
+  'process_note',
+  'next_action',
+  'unknown',
+]);
+
+function isValidClaimRole(value: unknown): value is DiagnosticClaimRole {
+  return typeof value === 'string' && VALID_CLAIM_ROLES.has(value as DiagnosticClaimRole);
 }
 
 function mergeReferencedAdditionalEvidence(
