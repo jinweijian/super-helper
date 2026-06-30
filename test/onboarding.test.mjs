@@ -15,6 +15,7 @@ import {
   createOnboardingRun,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
+  recoverOnboardingConfigFromCompletedRun,
   runOnboardingKnowledgePipeline,
   testOnboardingProviders,
   validateOnboardingDraft,
@@ -116,6 +117,80 @@ test('legacy inline keys migrate to file SecretRefs without leaking plaintext', 
     assert.equal(migrated.models.providers.default.apiKeyRef.key, 'providers.agent.default');
     assert.doesNotMatch(readFileSync(join(root, 'config.json'), 'utf8'), /legacy-secret/);
     assert.equal(secrets.resolve(migrated.models.providers.default.apiKeyRef), 'legacy-secret');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('completion recovery rebuilds config from the completed run draft', () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-workspace-'));
+  try {
+    const config = defaultConfig();
+    config.storage.rootDir = root;
+    config.knowledge.rootDir = join(root, 'knowledge');
+    const drafts = new FileOnboardingDraftRepository(root);
+    const draft = drafts.save(onboardingDraftFixture({
+      workspace: { name: 'EduSoho', rootPath: workspaceRoot },
+      knowledge: { rootDir: join(root, 'existing-knowledge') },
+      server: { bindMode: 'loopback', port: 44319 },
+    }));
+    writeFileSync(drafts.path, `${JSON.stringify({
+      ...draft,
+      updatedAt: '2026-06-29T09:48:35.892Z',
+    }, null, 2)}\n`);
+    const runs = new FileOnboardingRunRepository(root);
+    runs.save({
+      id: 'run_completed',
+      status: 'completed',
+      draftRevision: draft.revision,
+      overallProgress: 100,
+      stages: [],
+      counters: {},
+      startedAt: '2026-06-29T09:48:05.826Z',
+      updatedAt: '2026-06-29T09:48:58.868Z',
+      completedAt: '2026-06-29T09:48:58.868Z',
+    });
+
+    const recovery = recoverOnboardingConfigFromCompletedRun({ config, drafts, runs });
+
+    assert.equal(recovery.recovered, true);
+    assert.equal(recovery.config.onboarding.completedAt, '2026-06-29T09:48:58.868Z');
+    assert.equal(recovery.config.onboarding.lastRunId, 'run_completed');
+    assert.equal(recovery.config.workspaces[0].rootPath, workspaceRoot);
+    assert.equal(recovery.config.knowledge.rootDir, join(root, 'existing-knowledge'));
+    assert.equal(recovery.config.server.port, 44319);
+  } finally {
+    rmSync(workspaceRoot, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('completion recovery refuses a draft edited after the completed run', () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));
+  try {
+    const config = defaultConfig();
+    config.storage.rootDir = root;
+    const drafts = new FileOnboardingDraftRepository(root);
+    const draft = drafts.save(onboardingDraftFixture());
+    const runs = new FileOnboardingRunRepository(root);
+    runs.save({
+      id: 'run_completed',
+      status: 'completed',
+      draftRevision: draft.revision,
+      overallProgress: 100,
+      stages: [],
+      counters: {},
+      startedAt: '2020-01-01T00:00:00.000Z',
+      updatedAt: '2020-01-01T00:00:01.000Z',
+      completedAt: '2020-01-01T00:00:01.000Z',
+    });
+
+    const recovery = recoverOnboardingConfigFromCompletedRun({ config, drafts, runs });
+
+    assert.equal(recovery.recovered, false);
+    assert.equal(recovery.reason, 'draft_newer_than_run');
+    assert.equal(recovery.config.onboarding.completedAt, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

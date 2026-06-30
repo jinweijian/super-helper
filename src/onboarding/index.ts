@@ -1,5 +1,9 @@
 export { writeJsonAtomic } from './atomic-json.js';
-export { commitOnboardingConfig } from './config-commit.js';
+export { buildOnboardingConfig, commitOnboardingConfig } from './config-commit.js';
+export {
+  recoverOnboardingConfigFromCompletedRun,
+} from './completion-recovery.js';
+export type { OnboardingCompletionRecoveryResult } from './completion-recovery.js';
 export { FileOnboardingDraftRepository } from './draft-repository.js';
 export { runOnboardingKnowledgePipeline } from './knowledge-pipeline.js';
 export type {

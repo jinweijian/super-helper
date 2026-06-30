@@ -205,9 +205,7 @@ export function ensureConfig(homeDir = DEFAULT_HOME): SuperHelperConfig {
     return config;
   }
 
-  const config = loadConfig(path);
-  saveConfig(config);
-  return config;
+  return loadConfig(path);
 }
 
 export function loadConfig(path = configPath()): SuperHelperConfig {

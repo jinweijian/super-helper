@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   configPath,
+  configForPersistence,
   defaultConfig,
   ensureConfig,
   loadConfig,
@@ -9,9 +10,12 @@ import {
   type SuperHelperConfig,
 } from '../config.js';
 import {
+  FileOnboardingDraftRepository,
+  FileOnboardingRunRepository,
   FileSecretsRepository,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
+  recoverOnboardingConfigFromCompletedRun,
 } from '../onboarding/index.js';
 import { startServer } from '../gateway/http-server.js';
 import { hasFlag, readNumberOption, readOption } from './args.js';
@@ -137,15 +141,29 @@ function loadServerConfig(input: {
     return config;
   }
 
-  const config = loadConfig(path);
+  let config = loadConfig(path);
+  const recovery = recoverOnboardingConfigFromCompletedRun({
+    config,
+    drafts: new FileOnboardingDraftRepository(config.storage.rootDir),
+    runs: new FileOnboardingRunRepository(config.storage.rootDir),
+    path,
+    persist: !input.dryRun,
+  });
+  config = recovery.config;
   if (input.dryRun) {
     return config;
   }
 
   const secrets = new FileSecretsRepository(config.storage.rootDir);
   const migrated = migrateLegacyConfigSecrets(config, secrets);
-  saveConfig(migrated);
+  if (persistedConfigChanged(config, migrated)) {
+    saveConfig(migrated, path);
+  }
   return materializeConfigSecrets(migrated, secrets);
+}
+
+function persistedConfigChanged(before: SuperHelperConfig, after: SuperHelperConfig): boolean {
+  return JSON.stringify(configForPersistence(before)) !== JSON.stringify(configForPersistence(after));
 }
 
 function applyServerOverrides(config: SuperHelperConfig, argv: string[]): void {

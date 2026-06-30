@@ -3,8 +3,7 @@ import { readOption } from './args.js';
 
 export function runInitCommand(): void {
   const path = configPath();
-  const config = ensureConfig();
-  saveConfig(config);
+  ensureConfig();
   console.log(`super helper config ready at ${path}`);
 }
 

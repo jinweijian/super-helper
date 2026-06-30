@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -8,7 +8,7 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 import { DiagnosticRuntime } from '../dist/runtime/diagnostic-runtime.js';
 import { ClaudeCodeWorker } from '../dist/workers/claude/claude-code-worker.js';
-import { loadConfig, saveConfig } from '../dist/config.js';
+import { ensureConfig, loadConfig, saveConfig } from '../dist/config.js';
 import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
@@ -96,6 +96,34 @@ test('saveConfig replaces config atomically and leaves no temp file', () => {
     assert.notEqual(first, second);
     assert.equal(JSON.parse(second).server.port, 4555);
     assert.equal(existsSync(`${target}.tmp`), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ensureConfig reads existing config without rewriting it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const target = join(dir, 'config.json');
+  try {
+    const config = baseConfig(dir);
+    config.onboarding = {
+      version: 1,
+      completedAt: '2026-06-29T09:48:58.868Z',
+      lastRunId: 'run_completed',
+    };
+    saveConfig(config, target);
+    const oldDate = new Date('2020-01-01T00:00:00.000Z');
+    utimesSync(target, oldDate, oldDate);
+    const before = {
+      content: readFileSync(target, 'utf8'),
+      mtimeMs: statSync(target).mtimeMs,
+    };
+
+    const loaded = ensureConfig(dir);
+
+    assert.equal(loaded.onboarding.completedAt, '2026-06-29T09:48:58.868Z');
+    assert.equal(readFileSync(target, 'utf8'), before.content);
+    assert.equal(statSync(target).mtimeMs, before.mtimeMs);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
