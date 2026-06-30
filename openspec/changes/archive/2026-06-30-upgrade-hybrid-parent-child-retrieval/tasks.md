@@ -38,3 +38,13 @@
 - [x] 6.1 Audit that runtime really uses new child/BM25/hybrid paths, filters run before vector ranking, parent provenance survives final evidence, old artifacts cannot fake eligibility, and no business logic moved into knowledge/providers/CLI/runtime wrong layers; feed gaps back into artifacts.
 - [ ] 6.2 Prove holdout direct precision 100%, no-hit abstention 100%, must-escalate 100%, Recall@5 >= 90%, and MRR >= 0.80; unmet metrics keep this change incomplete.
 - [x] 6.3 Run `openspec validate upgrade-hybrid-parent-child-retrieval --strict`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm test`; record fresh output and remaining manual-review/real-provider status.
+
+## 7. Follow-Up Tasks (Deferred)
+
+Tasks 4.3, 4.4, 4.5, 5.2, and 6.2 are deferred to a follow-up change because they require real source data, real SiliconFlow credentials, explicit human review, and live holdout evaluation that this change does not have access to. The code, unit tests, and offline fake acceptance for the hybrid retrieval and parent-child index are complete in tasks 1.1–3.5 and 5.1/5.3, and task 6.1 has audited module boundaries. The follow-up change will rerun the real source extract/normalize/v2 slice/strict audit flow, drive the AI Companion and EduSoho publish/reindex/vector/eval batches, run the real SiliconFlow smoke/vector/rerank/holdout evaluation, and prove the holdout metrics gate.
+
+- [ ] FU.1 Rerun real source extract/normalize/v2 slice/strict audit/deterministic repair and generate the AI Companion review queue (was 4.3).
+- [ ] FU.2 After explicit reviewed clean slices exist, publish/reindex/vectorize/evaluate AI Companion as an independent batch; otherwise record the human-review blocker and keep it investigation-only (was 4.4).
+- [ ] FU.3 Repeat the reviewed publish/reindex/vector/eval flow for EduSoho only after the AI Companion batch gate passes; failed batches must not affect previously eligible modules (was 4.5).
+- [ ] FU.4 Run real SiliconFlow smoke/vector/rerank/holdout evaluation with explicit credentials; reports must redact keys, raw vectors, complete documents, and provider payloads (was 5.2).
+- [ ] FU.5 Prove holdout direct precision 100%, no-hit abstention 100%, must-escalate 100%, Recall@5 >= 90%, and MRR >= 0.80; unmet metrics keep the follow-up change incomplete (was 6.2).

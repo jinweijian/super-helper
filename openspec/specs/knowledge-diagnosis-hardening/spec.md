@@ -372,3 +372,244 @@ New context, validation, and registry metadata SHALL be additive, bounded, and i
 #### Scenario: Same workspace contains different users
 - **WHEN** Experience or context building runs
 - **THEN** messages, runs, evidence, and conclusions from another user or tenant are not included
+
+### Requirement: Pipeline gap closure guardrails
+The system SHALL close the implementation gaps found after the first hardening implementation review.
+
+#### Scenario: Init does not bypass review by default
+- **WHEN** `knowledge init` imports source documents without an explicit legacy publish flag
+- **THEN** it writes intake, extract, normalize, draft, audit, and ingest reports but does not convert unchecked draft slices into active formal knowledge documents
+
+#### Scenario: Legacy publish is explicit and visible
+- **WHEN** a user chooses a compatibility option that publishes without human review
+- **THEN** the command output and ingest report mark the run as legacy compatibility publish and include the quality report path and unresolved issue counts
+
+#### Scenario: Review approval does not equal active publication
+- **WHEN** `knowledge review --action approve` runs for draft slices
+- **THEN** the draft frontmatter records an approved pipeline state and review metadata, but active searchable Markdown is only created by `knowledge publish`
+
+#### Scenario: Quality OK requires audit evidence
+- **WHEN** a draft or published slice has `quality_status: ok`
+- **THEN** the latest quality report for that document or source contains no blocking issue for that status, and the publish report records the audit used
+
+#### Scenario: Source quality report is generated from real artifacts
+- **WHEN** extraction and normalization have produced reports
+- **THEN** `knowledge audit` writes `knowledge/reports/source-quality-report.json` by reading those reports and converting parser, table/list, heading, duplicate, and provenance warnings into structured issues
+
+#### Scenario: Chunk quality audits derived chunks
+- **WHEN** `knowledge audit` runs after `knowledge update`
+- **THEN** it reads `knowledge/indexes/chunks.jsonl`, counts inspected chunks, reports orphan chunks whose parent does not exist, and reports active parent slices that produce no chunk
+
+#### Scenario: Oversized slices are split
+- **WHEN** normalized blocks for one section exceed the configured parent slice character limit
+- **THEN** the slicer creates multiple ordered draft slice files using heading, list, table, or paragraph boundaries; it only emits a manual split warning when no safe boundary exists
+
+#### Scenario: Evidence score remains calibrated
+- **WHEN** Evidence Judge computes `answer_score`
+- **THEN** component weights produce a score in `[0, 1]` without relying on post-hoc clamping of an over-summed score, and tests prove weak/generic evidence remains below the direct-answer threshold
+
+#### Scenario: Deep Query pivot runs in runtime
+- **WHEN** the first code escalation returns partial or insufficient evidence and a deterministic pivot is available
+- **THEN** runtime dispatches at most one additional read-only diagnostic request with pivoted artifact targets, records retry events, and stops on max attempts, high risk, worker failure, no new pivot, or user-required context
+
+#### Scenario: Acceptance includes behavior scenarios
+- **WHEN** `accept knowledge` runs in mock-worker mode
+- **THEN** it executes config checks plus whitepaper direct-answer, no-hit escalation, implementation-detail escalation, and solved-case curation smoke scenarios, and writes pass/fail details for each scenario
+
+### Requirement: Knowledge-first runtime uses retrieval service boundary
+The knowledge-first runtime SHALL consume knowledge evidence through the retrieval service instead of owning retrieval strategy selection or provider construction.
+
+#### Scenario: Runtime searches knowledge
+- **WHEN** a user question reaches the knowledge-first diagnosis stage
+- **THEN** runtime calls the retrieval service with the question, route candidates, persona visibility, workspace context, and retrieval limit
+
+#### Scenario: Runtime receives retrieval evidence
+- **WHEN** retrieval returns candidates
+- **THEN** runtime converts the retrieval result into the existing knowledge evidence pack shape before Evidence Judge evaluates answerability
+
+#### Scenario: Runtime escalates with retrieval context
+- **WHEN** Evidence Judge blocks direct answer or requires code escalation
+- **THEN** runtime attaches retrieval evidence and trace context to `DiagnosticRequest.context` without exposing provider internals in the user-facing reply
+
+### Requirement: Runtime does not instantiate retrieval providers
+The runtime SHALL NOT directly create embedding providers, rerank providers, or vendor adapters.
+
+#### Scenario: Embedding recall is enabled
+- **WHEN** embedding recall is available for a workspace
+- **THEN** provider creation happens behind retrieval strategy setup and not inside `DiagnosticRuntime`
+
+#### Scenario: Rerank is enabled
+- **WHEN** rerank is available for fused candidates
+- **THEN** rerank provider creation happens behind retrieval rerank service and not inside `DiagnosticRuntime`
+
+### Requirement: Existing knowledge diagnosis behavior remains compatible
+The retrieval refactor SHALL preserve existing Evidence Judge and presentation behavior while changing the retrieval implementation boundary.
+
+#### Scenario: Knowledge direct answer remains reviewed
+- **WHEN** retrieval evidence is answerable
+- **THEN** the result still passes Evidence Judge, Output Review, and Presentation before becoming user-visible
+
+#### Scenario: Knowledge absent fallback remains
+- **WHEN** the active workspace has no usable knowledge directory or retrieval returns no evidence
+- **THEN** runtime preserves the existing Experience -> Preflight -> DiagnosticWorker -> Review -> Presentation flow
+
+#### Scenario: Restricted evidence remains hidden
+- **WHEN** retrieval finds evidence that is not visible to the current persona
+- **THEN** that evidence cannot be used as a direct user-facing answer and the existing restricted-evidence behavior remains intact
+
+### Requirement: Evidence Judge consumes complete retrieval grounding
+The Evidence Judge SHALL base knowledge direct-answer decisions on canonical parent metadata, quality, provenance, freshness, answer span, retrieval trace, and typed blockers rather than matched-term count alone.
+
+#### Scenario: Retrieval migration drops metadata
+- **WHEN** a retrieval strategy returns a chunk without the parent metadata required by the Judge
+- **THEN** the evidence is incomplete, direct answer is blocked, and the missing fields are observable
+
+#### Scenario: Quality report marks an active document error
+- **WHEN** the canonical quality report marks the top active parent as error
+- **THEN** the Judge blocks direct answer even if BM25, embedding, or rerank ranks it first
+
+### Requirement: Runtime knowledge observability includes retrieval trace
+Knowledge lifecycle logs SHALL include the configured retrieval trace and the strict eligibility rationale used for the final route decision.
+
+#### Scenario: Embedding disabled
+- **WHEN** a runtime turn searches knowledge with embedding disabled
+- **THEN** logs show BM25 ran, embedding skipped with a safe reason, rerank status, final candidates, and Judge blockers
+
+#### Scenario: Evidence is escalated
+- **WHEN** strict eligibility blocks direct answer
+- **THEN** the code escalation context preserves evidence IDs, answer spans when present, quality/provenance gaps, strategy scores, and the reason for escalation
+
+### Requirement: Retrieval hardening preserves compatibility
+The retrieval grounding change SHALL preserve existing public HTTP responses, existing case JSON readability, default offline behavior, and old knowledge artifact readability.
+
+#### Scenario: Old case is loaded
+- **WHEN** a persisted case lacks new retrieval trace or grounding fields
+- **THEN** it loads without migration and missing fields are treated as unknown
+
+#### Scenario: Default test suite runs
+- **WHEN** `pnpm test` runs without real provider credentials
+- **THEN** no paid network request occurs and fake/fixture paths provide deterministic coverage
+
+### Requirement: Configured retrieval reranks parent-level candidates
+The configured retrieval pipeline SHALL deduplicate fused child candidates to one representative per parent before rerank, pass at most the configured rerank Top N candidates to the provider, and return at most 8 final evidence results.
+
+#### Scenario: Multiple children share a parent
+- **GIVEN** BM25 or embedding recall returns multiple children for the same parent
+- **WHEN** configured retrieval prepares rerank input
+- **THEN** it keeps one representative candidate for that parent, preserves child hit metadata, and does not spend multiple rerank slots on the same parent
+
+#### Scenario: Default rerank budget is used
+- **GIVEN** a fresh config has no explicit rerank Top N override
+- **WHEN** configured retrieval creates the reranker
+- **THEN** the default Top N is 8 and aligns with the final evidence limit
+
+#### Scenario: Setup or settings UI persists rerank defaults
+- **GIVEN** a user submits setup or settings without editing rerank Top N
+- **WHEN** the UI serializes the rerank config
+- **THEN** it submits 8, not the historical value 2
+
+### Requirement: Rerank score fusion is normalized within the candidate batch
+The rerank service SHALL compute final scores from batch-local normalized rerank scores and batch-local normalized RRF scores, with rerank weighted at 0.7 and RRF weighted at 0.3.
+
+#### Scenario: Rerank scores vary
+- **GIVEN** rerank returns different scores for candidates that already have RRF final scores
+- **WHEN** final scores are calculated
+- **THEN** final scores are in the `[0,1]` range and rerank ordering dominates ties or weaker RRF differences
+
+#### Scenario: Rerank scores are all equal
+- **GIVEN** all returned rerank scores are equal
+- **WHEN** final scores are calculated
+- **THEN** the system falls back to RRF ordering instead of inventing rerank separation
+
+#### Scenario: Rerank fails
+- **GIVEN** rerank throws, times out, lacks credentials, or returns malformed candidate IDs
+- **WHEN** retrieval completes
+- **THEN** fused candidates remain available, the trace records a redacted failure or skip reason, and no provider secret or raw request text is exposed
+
+### Requirement: Default semantic recall degrades safely without credentials
+The system SHALL default to `knowledge.buildVectorIndex=true` and `embedding.enabled=true`, while keeping no-key and no-network paths usable through explicit skip/degrade behavior.
+
+#### Scenario: Retrieval runs without embedding credentials
+- **GIVEN** embedding is enabled by default and no materialized API key exists
+- **WHEN** configured retrieval runs
+- **THEN** BM25 still runs, embedding is skipped with a safe trace reason, and no network request is attempted
+
+#### Scenario: Onboarding runs without embedding credentials
+- **GIVEN** setup defaults enable vector build and embedding but the user has not supplied an embedding key
+- **WHEN** onboarding validates, tests providers, plans vector build, and runs the knowledge pipeline
+- **THEN** embedding credentials are not a blocking validation error, provider smoke is skipped as `missing_credentials`, vector build is skipped, and keyword/BM25 indexing can still complete
+
+#### Scenario: Existing config explicitly disables embedding
+- **GIVEN** an existing config sets `embedding.enabled=false` or `knowledge.buildVectorIndex=false`
+- **WHEN** config is loaded
+- **THEN** the explicit false value is preserved and defaults do not silently re-enable the provider
+
+### Requirement: Query normalization and alias expansion are shared by recall strategies
+Configured retrieval SHALL normalize the user query once at the retrieval service boundary and pass the same normalized query to recall strategies while preserving the original query for rerank.
+
+#### Scenario: Fullwidth and traditional query text is used
+- **GIVEN** the user query includes fullwidth ASCII, fullwidth spaces, common traditional Chinese characters, redundant whitespace, or boundary punctuation
+- **WHEN** retrieval normalizes the query
+- **THEN** recall receives the normalized text, boundary punctuation is stripped, and rerank receives the original user text
+
+#### Scenario: Alias text needs normalization
+- **GIVEN** taxonomy aliases contain fullwidth or traditional Chinese text
+- **WHEN** a normalized query contains the normalized alias
+- **THEN** the normalized alias term is added to `expandedTerms` and BM25 tokenization uses both the normalized query and expanded terms
+
+#### Scenario: No alias matches
+- **GIVEN** no taxonomy alias appears in the normalized query
+- **WHEN** retrieval runs
+- **THEN** no unrelated expanded term is added and the original query remains available for trace/evidence context
+
+### Requirement: Parent-child chunking remains configurable and versioned
+The knowledge chunk builder SHALL expose chunking parameters through configuration, split long answer-bearing blocks by sentence/window when possible, and version new artifacts as `parent-child-v3`.
+
+#### Scenario: Chunking options are omitted
+- **GIVEN** no custom chunking config is provided
+- **WHEN** knowledge chunks are built
+- **THEN** defaults are `maxChars=800`, `overlapStrategy=sentence`, `overlapChars=120`, and `minChars=80`
+
+#### Scenario: Long block has sentence boundaries
+- **GIVEN** a single source block exceeds `maxChars` but contains Chinese or English sentence boundaries
+- **WHEN** chunking runs
+- **THEN** it creates bounded overlapping windows instead of marking the entire block as manual-split-only
+
+#### Scenario: Long block has no safe split point
+- **GIVEN** a single source block exceeds `maxChars` and has no sentence boundary
+- **WHEN** chunking runs
+- **THEN** the block is preserved with `manual_split_required` so no answer-bearing text is silently dropped
+
+#### Scenario: Chunk strategy version changes
+- **GIVEN** chunks are rebuilt with `parent-child-v3` and `artifact_version=3`
+- **WHEN** vector compatibility is checked against v2 vector artifacts
+- **THEN** compatibility reports `rebuild-required` for source chunk mismatch and v2 chunks are treated as legacy
+
+### Requirement: Knowledge indexing distinguishes parent evidence from child recall
+The knowledge processing pipeline SHALL build provenance-complete child recall artifacts from reviewed published parents while retaining parents as the final evidence unit.
+
+#### Scenario: Published parent is indexed
+- **WHEN** an approved parent is published and index update runs
+- **THEN** every child maps to the parent and source blocks, and evidence expansion can recover an answer span and canonical source
+
+#### Scenario: Legacy artifact is encountered
+- **WHEN** a legacy parent or chunk lacks v2 metadata
+- **THEN** compatibility reading succeeds but strict direct-answer eligibility remains false
+
+### Requirement: Quality and evaluation govern hybrid release
+Knowledge quality reports and production retrieval evaluation SHALL jointly govern whether a parent/module batch can support direct answer.
+
+#### Scenario: Retrieval metrics pass but quality fails
+- **WHEN** expected parents rank correctly but one top parent has blocking quality or provenance issues
+- **THEN** the batch remains ineligible for direct answer
+
+#### Scenario: Quality passes but retrieval metrics fail
+- **WHEN** parents are quality-clean but holdout recall or ranking misses the required threshold
+- **THEN** the batch remains ineligible and the failure is attributed to retrieval
+
+### Requirement: Hybrid migration preserves existing boundaries
+Knowledge SHALL own artifact building and local metadata, retrieval SHALL own tokenization/scoring/fusion/rerank orchestration, providers SHALL own vendor protocols, and runtime SHALL own direct-answer decisions.
+
+#### Scenario: Boundary audit runs
+- **WHEN** implementation is reviewed
+- **THEN** no knowledge module imports provider adapters, no provider imports knowledge, no runtime implements scoring/vendor mapping, and no CLI duplicates the business flow

@@ -1,0 +1,264 @@
+## Purpose
+
+Define the provider-neutral embedding adapter contract, the embedding configuration that stays independent from Agent chat model providers, the vector metadata and compatibility rules that govern local vector artifacts, the explicit vector build path, embedding CLI checks, and the execution guardrails that keep embedding changes auditable and offline-testable.
+
+## Requirements
+
+### Requirement: Embedding provider abstraction
+The system SHALL provide a provider-neutral embedding interface for converting documents and queries into vectors.
+
+#### Scenario: Document embedding
+- **WHEN** a caller submits one or more document inputs to an embedding provider
+- **THEN** the provider returns one vector result per accepted input with stable input id, provider id, model, dimensions, distance metric, vector values, and usage metadata
+
+#### Scenario: Query embedding
+- **WHEN** a caller submits a query input to an embedding provider
+- **THEN** the provider returns exactly one query vector result with provider id, model, dimensions, distance metric, vector values, and usage metadata
+
+#### Scenario: Query and document APIs remain separate
+- **WHEN** a provider supports different task types or input types for queries and documents
+- **THEN** the system preserves separate document and query embedding methods instead of forcing both through one generic method
+
+#### Scenario: Provider errors are normalized
+- **WHEN** a provider request fails because of missing credentials, timeout, rate limit, invalid request, server error, or malformed response
+- **THEN** the system raises a normalized embedding provider error with provider id, retryable flag, safe message, and no secret values
+
+### Requirement: Embedding configuration
+The system SHALL configure embedding providers independently from Agent chat model providers.
+
+#### Scenario: Embedding disabled by default
+- **WHEN** a new config is created
+- **THEN** embedding is disabled unless the user explicitly enables it
+
+#### Scenario: Agent model provider remains independent
+- **WHEN** the Agent uses one model provider and embedding uses another provider
+- **THEN** the system treats them as independent configurations and does not infer embedding settings from Agent model settings
+
+#### Scenario: SiliconFlow configured as primary provider
+- **WHEN** embedding config selects provider `siliconflow`
+- **AND** current official SiliconFlow embedding API documentation has been verified and recorded
+- **THEN** the system can create a SiliconFlow embedding provider from configured model, base URL or endpoint, API key or API key environment variable, dimensions, distance metric, batch size, and timeout
+
+#### Scenario: SiliconFlow request shape follows official docs
+- **WHEN** the SiliconFlow provider embeds documents or a query
+- **THEN** it calls `POST /embeddings` with bearer-token auth, configured model, text input, optional dimensions when configured, parses `data[].embedding`, validates dimensions, and normalizes errors without exposing secrets
+
+#### Scenario: Future provider extensions are not silently implemented
+- **WHEN** embedding config selects a provider that is not implemented in this change, such as `gemini`, `qwen`, or `minimax`
+- **THEN** the system fails with a clear unsupported-provider or docs-required error instead of silently using another provider
+
+#### Scenario: Rerank remains a documented future extension
+- **WHEN** a user wants SiliconFlow rerank support
+- **THEN** the README explains how a future rerank adapter can use the SiliconFlow rerank endpoint, but this change does not wire rerank into retrieval ranking
+
+#### Scenario: Rerank model connectivity check
+- **WHEN** rerank config selects provider `siliconflow`
+- **AND** the user explicitly runs the rerank test command or settings test action
+- **THEN** the system calls the SiliconFlow rerank endpoint with harmless test text, verifies that ranked scores are returned, and reports provider/model/top score without printing API keys, request headers, raw documents, or secrets
+
+#### Scenario: Missing credentials blocked
+- **WHEN** embedding is enabled but neither API key nor API key environment variable resolves to a secret
+- **THEN** provider creation or provider smoke test fails with a safe missing-credentials error
+
+### Requirement: Embedding provider registry
+The system SHALL create embedding providers through a registry or factory rather than importing provider classes directly from knowledge indexing code.
+
+#### Scenario: Known provider created
+- **WHEN** the embedding factory receives a supported provider id and valid config
+- **THEN** it returns a provider implementation matching that id
+
+#### Scenario: Unknown provider rejected
+- **WHEN** the embedding factory receives an unknown provider id
+- **THEN** it fails with a safe unsupported-provider error
+
+#### Scenario: Fake provider available for tests
+- **WHEN** tests need deterministic embedding behavior
+- **THEN** the factory or test helpers can create a fake embedding provider without network access
+
+### Requirement: Vector metadata contract
+The system SHALL record embedding provider metadata with every generated vector and vector index.
+
+#### Scenario: Vector record metadata
+- **WHEN** a chunk is embedded
+- **THEN** the vector record includes vector id, document id, chunk id, source, text hash, provider id, model, dimensions, distance metric, vector values, and creation timestamp
+
+#### Scenario: Vector manifest metadata
+- **WHEN** a vector index is built
+- **THEN** the vector manifest includes provider id, model, dimensions, distance metric, source chunk manifest hash, vector count, skipped count, and generation timestamp
+
+#### Scenario: Text hash changes trigger re-embedding
+- **WHEN** a chunk text hash differs from the hash stored in the vector record
+- **THEN** the system treats the existing vector as stale and requires re-embedding for that chunk
+
+#### Scenario: Vector artifacts are rebuildable
+- **WHEN** vector index files are deleted
+- **THEN** the system can rebuild them from knowledge chunks and source configuration without losing canonical knowledge content
+
+### Requirement: Embedding configuration compatibility
+The system SHALL prevent mixing incompatible vectors in the same vector index.
+
+#### Scenario: Compatible query
+- **WHEN** the vector manifest provider id, model, dimensions, and distance metric match the active embedding config
+- **THEN** query vectors may be compared with document vectors from that index
+
+#### Scenario: Provider mismatch blocked
+- **WHEN** the vector manifest provider id differs from the active embedding config provider id
+- **THEN** the system refuses to use that vector index and reports that a rebuild is required
+
+#### Scenario: Model mismatch blocked
+- **WHEN** the vector manifest model differs from the active embedding config model
+- **THEN** the system refuses to use that vector index and reports that a rebuild is required
+
+#### Scenario: Dimension mismatch blocked
+- **WHEN** a provider returns a vector whose length differs from the configured or manifest dimensions
+- **THEN** the system rejects the vector result and records a dimension mismatch error
+
+#### Scenario: Distance mismatch blocked
+- **WHEN** the vector manifest distance metric differs from the active embedding config distance metric
+- **THEN** the system refuses to use that vector index and reports that a rebuild is required
+
+### Requirement: Knowledge vector build
+The system SHALL build vector artifacts from existing knowledge chunks only when explicitly requested.
+
+#### Scenario: Explicit vector build
+- **WHEN** the user runs the vector build command with embedding enabled
+- **THEN** the system reads `knowledge/indexes/chunks.jsonl`, embeds eligible chunks, writes `knowledge/indexes/vectors.jsonl`, and writes `knowledge/indexes/vector-manifest.json`
+
+#### Scenario: Default knowledge update avoids remote embedding
+- **WHEN** the user runs the normal knowledge update command without an explicit vector build flag or command
+- **THEN** the system does not call a remote embedding provider
+
+#### Scenario: Restricted knowledge skipped
+- **WHEN** a chunk belongs to restricted knowledge that is not allowed for remote embedding
+- **THEN** the vector build skips that chunk and records the skip reason without sending the text to the provider
+
+#### Scenario: Partial provider failure reported
+- **WHEN** some batches fail during vector build
+- **THEN** the system writes a structured failure summary and does not present the vector index as fully healthy
+
+### Requirement: Embedding CLI checks
+The system SHALL provide repeatable local commands for validating embedding configuration and provider connectivity without exposing secrets.
+
+#### Scenario: Provider smoke test
+- **WHEN** the user runs an embedding provider smoke test command
+- **THEN** the system embeds a short harmless test string, verifies vector dimensions, prints provider/model/dimensions, and does not print API keys or raw credentials
+
+#### Scenario: Disabled embedding check
+- **WHEN** the user runs embedding diagnostics while embedding is disabled
+- **THEN** the system reports that embedding is disabled and does not call any remote provider
+
+#### Scenario: Redacted errors
+- **WHEN** a provider smoke test fails
+- **THEN** the CLI prints a safe error message with status and provider id but without request headers, API keys, cookies, tokens, or full sensitive payloads
+
+### Requirement: Embedding observability and reports
+The system SHALL record embedding build outcomes in local reports without exposing sensitive data.
+
+#### Scenario: Build report written
+- **WHEN** a vector build command completes
+- **THEN** the system writes a report containing provider id, model, dimensions, vector count, skipped count, failed count, duration, and artifact paths
+
+#### Scenario: No raw source text in reports
+- **WHEN** embedding reports or logs are written
+- **THEN** they omit raw chunk text and include only ids, counts, hashes, safe summaries, and redacted errors
+
+#### Scenario: Usage metadata recorded safely
+- **WHEN** the provider returns usage information
+- **THEN** the system records aggregate usage counts when available without storing provider secrets or raw request bodies
+
+### Requirement: Testability without network
+The system SHALL verify embedding behavior in normal tests without depending on remote providers.
+
+#### Scenario: Unit tests use fake provider
+- **WHEN** normal test commands run
+- **THEN** embedding provider tests use fake provider or fake fetch responses and do not require network access or API keys
+
+#### Scenario: Real provider tests are opt-in
+- **WHEN** a test or command would call MiniMax, Gemini, or Qwen over the network
+- **THEN** it runs only through an explicit smoke or acceptance command and never as part of default `pnpm test`
+
+### Requirement: Execution guardrails and completion evidence
+The implementation SHALL include auditable execution evidence that prevents checklist-only or mock-only completion.
+
+#### Scenario: Provider official docs are checked before provider-specific coding
+- **WHEN** an implementer starts SiliconFlow request/response adapter code
+- **THEN** implementation notes record the official provider documentation URL, access date, endpoint, auth shape, request fields, response vector path, dimensions behavior, and batch limits
+
+#### Scenario: Third-party provider references are not authoritative
+- **WHEN** a provider behavior is documented only in third-party SDK docs, community examples, prior memory, or old code
+- **THEN** the implementation treats that information as non-authoritative and does not use it to unlock real provider network calls
+
+#### Scenario: Non-scoped providers stay out of implementation
+- **WHEN** official docs exist for Gemini, Qwen, MiniMax, or rerank but the user has not selected that provider for this round
+- **THEN** the implementer documents extension guidance and does not claim those providers are implemented
+
+#### Scenario: Red-green evidence exists for new behavior
+- **WHEN** a new provider, metadata helper, vector builder, CLI command, redaction rule, or compatibility check is implemented
+- **THEN** implementation notes or test history show that a focused regression test failed before the implementation and passed after it
+
+#### Scenario: Superpowers or equivalent discipline is used
+- **WHEN** the execution environment provides Superpowers skills
+- **THEN** the implementer uses `test-driven-development`, `systematic-debugging`, and `verification-before-completion` for this change
+- **AND** when those skills are unavailable, the implementer records equivalent red/green, root-cause, and fresh-verification evidence
+
+#### Scenario: Completion cannot rely on file existence
+- **WHEN** a task creates a file, interface, CLI command, provider class, vector artifact, or report
+- **THEN** the task is not considered complete until behavior tests prove the public contract, error path, security behavior, and artifact metadata
+
+#### Scenario: Fake smoke and vector fixture evidence are required
+- **WHEN** implementation is ready for review
+- **THEN** fake-provider or fake-fetch smoke output and a fixture vector build report are recorded with provider, model, dimensions, distance, vector count, skipped count, failed count, and artifact paths
+
+#### Scenario: Real provider smoke status is explicit
+- **WHEN** SiliconFlow real credentials are available
+- **THEN** implementation notes include a sanitized smoke result with provider, model, dimensions, duration, and ok/fail only
+
+#### Scenario: Diff boundary audit is required
+- **WHEN** implementation is marked complete
+- **THEN** the final review records that provider network code stayed in `src/embedding/`, vector artifact code stayed in `src/knowledge/`, CLI stayed transport/argument parsing only, and no runtime/gateway/agent business decision was added
+
+#### Scenario: Anti-fake-complete rethink updates artifacts
+- **WHEN** the implementer performs the completion audit
+- **THEN** the audit identifies how the change could be falsely completed through file/class existence, mock-only tests, stale artifacts, old caches, missing real docs, skipped retrieval validation, leaked secrets, or module-boundary violations
+- **AND** any discovered gap is added back to design, specs, tasks, or implementation notes before the change is marked complete
+
+#### Scenario: Fresh verification transcript is required
+- **WHEN** an implementer marks this change complete
+- **THEN** implementation notes include fresh output summaries for `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm test`, focused embedding tests, focused vector tests, fake smoke, and fake vector build
+
+#### Scenario: Stage checkpoints are recorded before task completion
+- **WHEN** an implementer completes provider, vector, CLI, documentation, or verification stages
+- **THEN** implementation notes record the stage, the RED test or failing fixture observed first, the GREEN command, the files changed, and any skipped or deferred behavior before related task checkboxes are marked complete
+
+#### Scenario: Documentation boundary conflicts are resolved
+- **WHEN** vector artifact generation is added to `src/knowledge/` and provider logic is added to `src/embedding/`
+- **THEN** project architecture docs are updated so `src/knowledge/` owns local vector artifacts and compatibility checks but not provider API calls, retrieval ranking, Evidence Judge decisions, runtime orchestration, HTTP routes, or final replies
+
+### Requirement: End-to-end fake embedding acceptance
+The implementation SHALL prove the embedding adapter and knowledge vector artifact path works through a repeatable fake provider fixture before real provider smoke tests are considered.
+
+#### Scenario: Fake provider spine builds vector artifacts
+- **GIVEN** a fixture knowledge workspace has `knowledge/indexes/chunks.jsonl`
+- **AND** embedding config selects provider `fake` with explicit model, dimensions, and distance metric
+- **WHEN** the vector build path runs through the provider factory, fake provider, and knowledge vector builder
+- **THEN** it writes `vectors.jsonl`, `vector-manifest.json`, and a vector build report with provider, model, dimensions, distance, text hash, source ids, vector count, skipped count, failed count, and artifact paths
+
+#### Scenario: Restricted fixture text is not sent to provider
+- **GIVEN** the fixture includes one eligible chunk and one restricted chunk
+- **WHEN** the vector build path runs with the default remote-embedding privacy policy
+- **THEN** only the eligible chunk text is submitted to the provider
+- **AND** the restricted chunk is represented in the build report by id/hash/count/reason only, without raw text
+
+#### Scenario: Fake spine compatibility catches stale indexes
+- **GIVEN** a vector manifest produced by the fake provider fixture
+- **WHEN** active embedding config changes provider, model, dimensions, or distance
+- **THEN** compatibility checking refuses to use the old vector index and reports rebuild-required with the specific mismatch field
+
+#### Scenario: Disabled embedding preserves keyword-only behavior
+- **WHEN** `embedding.enabled` is false
+- **THEN** normal knowledge update, normal runtime startup, and default tests do not create a remote provider, do not call remote embedding APIs, and preserve existing keyword-only knowledge behavior
+
+#### Scenario: Fake acceptance cannot be substituted for real provider acceptance
+- **WHEN** only fake provider or fake fetch tests have run
+- **THEN** implementation notes may claim fake acceptance only
+- **AND** real MiniMax or Gemini smoke status must remain explicitly "not run" unless a sanitized opt-in command was actually executed with current official docs and credentials
