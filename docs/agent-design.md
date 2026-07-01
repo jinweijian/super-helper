@@ -2,18 +2,18 @@
 
 ## Role
 
-`super helper Agent` is the middle person, AnswerContract owner, and reviewer between the user and diagnostic tools.
+`super helper Agent` is the middle person, AnswerGoal owner, and reviewer between the user and diagnostic tools.
 
 The authoritative product Agent configs live in `src/agents/`, not root `AGENT.md`.
 
 Current configured Agents:
 
-- `main.md`: 主 Agent，负责用户回合、AnswerContract 所有权、协同调度与最终回复责任。
+- `main.md`: 主 Agent，负责用户回合、AnswerGoal 所有权、协同调度与最终回复责任。
 - `input-review.md`: 输入审核与 Preflight Gate。
 - `experience.md`: 经验 Agent，负责复用历史会话答案。
 - `knowledge-router.md`: 知识路由 Agent，负责识别模块、意图、关键词和代码升级信号。
 - `evidence-judge.md`: 证据充分性 Agent，负责判断知识库证据是否足够或是否需要升级到代码。
-- `rag-answerability.md`: RAG 可回答性与有效信息萃取 Agent，负责判断知识库结果是否满足 AnswerContract，并在 partial 时输出可保留 claim 和升级焦点。
+- `rag-answerability.md`: RAG 可回答性与有效信息萃取 Agent，负责判断知识库结果是否满足 AnswerGoal，并在 partial 时输出可保留 claim 和升级焦点。
 - `case-curator.md`: Case 沉淀 Agent，负责用户确认解决后的 solved case 草稿生成。
 - `output-review.md`: 输出审核 Agent，负责证据审核。
 - `presentation.md`: 美化输出 Agent，负责用户视角表达。
@@ -28,7 +28,7 @@ Claude Code is a tool. It must not directly reply to the user in the MVP.
 
 ## Preflight Gate
 
-Every user message first gets a runtime-owned `ResolvedTurnContext` and `AnswerContract`, then goes through a `Preflight Gate`.
+Every user message first gets a runtime-owned `ResolvedTurnContext` and `AnswerGoal`, then goes through a `Preflight Gate`.
 
 Concrete implementation:
 
@@ -98,23 +98,23 @@ Runtime behavior:
 - Solved case drafts are written with `status: review_required` and require explicit approval before becoming `active` knowledge.
 - 功能概览类问题（例如“某功能有哪些能力”“支持哪些功能”）由 Knowledge Router 标记为 `feature_overview`。当知识证据满足直答资格时，runtime 应聚合多条功能 evidence/claim 直接回答；这类问题不应因为运营 persona 被强制定性为 bug、配置问题或设计使然。
 - 补数据、补统计、补跑、重跑、定时任务、队列、脚本或命令行处理不能只按关键词强制升级，也不能只按字段命中直答。Evidence Judge 必须基于原问题抽取答案需求，并检查 evidence 是否覆盖补跑步骤、命令名称、参数或适用条件；只有页面/功能说明时必须拒绝知识直答。
-- Evidence Judge 之后叠加 RAG Answerability Agent（model_assisted）：它拿 `AnswerContract + evidence` 判断 `full | partial | none | unknown`。`full` 才允许知识库直答；`partial` 必须萃取可用 coveredClaims 并带着 missingElements/escalationFocus 升级代码诊断；`none/unknown` 在需要强答案形态时保守升级。该机制防止“相关但不回答”的高分证据误导直答（如 case_4e905fbc）。
+- Evidence Judge 之后叠加 RAG Answerability Agent（model_assisted）：它拿 `AnswerGoal + evidence` 判断 `full | partial | none | unknown`。`full` 才允许知识库直答；`partial` 必须萃取可用 coveredClaims 并带着 missingElements/escalationFocus 升级代码诊断；`none/unknown` 在需要强答案形态时保守升级。该机制防止“相关但不回答”的高分证据误导直答（如 case_4e905fbc）。
 
 目标工作流：
 
 ```text
 User message
   -> Build ResolvedTurnContext
-  -> Build AnswerContract
+  -> Build AnswerGoal
   -> Preflight Gate
-  -> Experience against AnswerContract
+  -> Experience against AnswerGoal
   -> Knowledge Router / Retrieval
   -> RAG Answerability Agent
      -> full direct knowledge answer
      -> partial extracted knowledge + code escalation
      -> none code escalation
-  -> Claude Code Worker fills missing AnswerContract items
-  -> Output Review verifies merged claims against AnswerContract
+  -> Claude Code Worker fills missing AnswerGoal items
+  -> Output Review verifies merged claims against AnswerGoal
   -> Presentation answers original question from reviewed claims
 ```
 
@@ -136,7 +136,7 @@ The Agent sends Claude Code a structured request, not raw user chat.
 
 Concrete implementation:
 
-- `src/runtime/request-builder.ts` builds first-run and follow-up `DiagnosticRequest` objects and attaches `AnswerContract`.
+- `src/runtime/request-builder.ts` builds first-run and follow-up `DiagnosticRequest` objects and attaches `AnswerGoal`.
 - `src/sessions/context-builder.ts` attaches recent messages and prior run evidence under `DiagnosticRequest.context`.
 - `src/domain.ts` defines the request, context, evidence, claim, run, and case session types.
 - `src/runtime/resolved-turn.ts` derives one bounded effective query plus source-bound facts, user claims, hypotheses, and unknowns. Raw chat remains unchanged in the case.
@@ -193,8 +193,10 @@ Concrete implementation:
   "claims": [
     {
       "type": "inference",
+      "role": "primary_answer",
       "text": "The problem may be data/config related",
-      "evidenceIds": ["ev_01"]
+      "evidenceIds": ["ev_01"],
+      "answers": ["cause_or_likely_cause"]
     }
   ],
   "recommendedNextAction": "ask_user"
@@ -211,7 +213,7 @@ After a worker run completes, a deterministic validator and Review Gate check:
 - Are assumptions clearly labeled?
 - Are unknowns exposed?
 - Is the recommended next action safe?
-- Does the final claim set cover `AnswerContract.mustAnswer`, or are uncovered items still visible as unknown/missing?
+- Does the final claim set cover `answerGoal.mustAnswerItems`, or are uncovered items still visible as unknown/missing?
 - Should the user be asked a question before continuing?
 - Should the case be escalated to a human?
 
@@ -220,10 +222,11 @@ Only after this review can Presentation generate the user-facing answer from acc
 Concrete implementation:
 
 - `src/runtime/result-validator.ts` rejects invalid evidence references and unsupported facts and records observable validation issues.
+- `src/runtime/review-presentation.ts` validates Presentation output contract data, including accepted IDs, frozen primary answer IDs, selected-claim evidence binding, first-paragraph coverage, and unsupported facts across the full visible reply.
 - `src/runtime/review-gate.ts` maps the validated result into a frozen case status and user-facing decision; model output cannot promote it.
 - `src/runtime/agent-configs.ts` resolves the `output-review` Agent config for model review prompts.
-- `src/runtime/presenter.ts` formats preflight questions and persona-aware final replies without inventing unsupported facts.
-- `src/agents/presentation.md` defines presentation constraints; the presentation step must not add unsupported facts.
+- `src/runtime/presenter.ts` formats preflight questions, worker failure summaries, and reviewed fallback replies without inventing unsupported facts. If a result is partial but has accepted fact/inference claims, the fallback leads with `初步判断` and keeps the evidence gap visible instead of hiding the accepted judgment behind a generic downgrade summary.
+- `src/agents/presentation.md` defines presentation constraints; the presentation step must express the frozen `primary_answer` for `answerGoal` and must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
 - `src/runtime/diagnostic-runtime.ts` is the runtime orchestration entry; private root facades are intentionally not used.
 - Presentation 的运营模板按问题类型分流：排障/异常类问题保留“系统 bug / 设计使然 / 配置或使用问题 / 目前不能确认”的分类；功能、规则、入口、操作说明类问题先回答用户问题，再给运营可转述动作。

@@ -211,6 +211,9 @@ Every final answer must pass evidence review:
 - Assumptions must be labeled as assumptions.
 - Unknowns must stay visible.
 - Unsupported fact-only conclusions must be blocked, downgraded, or converted into follow-up questions.
+- Presentation must express frozen primary answer claim IDs; it must not choose the main answer with phrase lists or question-type enumerations.
+- Presentation may only cite evidence IDs referenced by selected accepted claims, and the full visible reply must stay inside accepted claims/evidence/missingInfo. Validating only the first paragraph is not sufficient.
+- When evidence is insufficient but accepted fact/inference claims remain, fallback replies must lead with a clearly labeled preliminary judgment and keep the evidence gap visible. A generic downgrade summary must not hide the useful accepted judgment.
 
 Claude Code output is not user-facing until the runtime review step accepts it.
 
