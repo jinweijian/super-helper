@@ -3,7 +3,7 @@ import type { AgentModelClient } from '../providers/model/adapter.js';
 import type { PreflightDecision } from './preflight-decision.js';
 import { isSafetyPermissionDecision } from './preflight-decision.js';
 import type { ResolvedTurnContext } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { buildAnswerGoal } from './answer-goal.js';
@@ -14,7 +14,7 @@ import { reconcileResolvedTurnContext } from './resolved-turn.js';
 export class PreflightService {
   constructor(
     private readonly config: SuperHelperConfig,
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     private readonly model: AgentModelClient,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly mainAgentSpec: string,

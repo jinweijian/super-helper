@@ -9,7 +9,7 @@ import type { KnowledgeCaseReviewAction, KnowledgeCaseReviewRecord } from '../kn
 import { resolveKnowledgeWorkspaceRoot } from '../knowledge/storage-scope.js';
 import { defaultConfig } from '../config.js';
 import type { CaseRuntimeEventRecorder } from './event-recorder.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 
 export interface ReviewSolvedCaseInput {
   caseSession: StoredCase;

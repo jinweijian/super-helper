@@ -1,6 +1,5 @@
 import type { CaseSession, DiagnosticRequest, HelperAgentConfig } from '../domain.js';
-import { buildAnswerGoal } from './answer-goal.js';
-import { ANSWER_GOAL_CONSTRAINT } from './request-builder.js';
+import { buildDiagnosticRequestFromResolvedTurn } from './request-builder.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export interface PreflightInput {
@@ -90,49 +89,24 @@ export function preflight(input: PreflightInput): PreflightDecision {
     };
   }
 
-  const latestRunNumber = input.caseSession.runs.length + 1;
   const resolvedTurn = buildResolvedTurnContext({
     caseSession: input.caseSession,
     latestUserMessage: input.userMessage,
   });
-  const answerGoal = buildAnswerGoal({ rawUserQuestion: input.userMessage, resolvedTurn });
-  const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
+  const unknowns = Array.from(new Set([
+    ...(shouldContinueWithUnknown ? missingInfo : []),
+    ...resolvedTurn.unknowns.map((unknown) => unknown.text),
+  ]));
 
   return {
     action: 'dispatch',
-    request: {
-      caseId: input.caseSession.id,
-      runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
-      workspaceId: input.caseSession.workspaceId,
-      claudeSessionId: input.caseSession.claudeSessionId,
-      answerGoal,
-      userGoal: resolvedTurn.resolvedQuery,
-      knownFacts,
-      unknowns: Array.from(new Set([
-        ...(shouldContinueWithUnknown ? missingInfo : []),
-        ...resolvedTurn.unknowns.map((unknown) => unknown.text),
-      ])),
-      constraints: [
-        'Claude Code is an inspection tool and must not respond directly to the user.',
-        'Handle both troubleshooting requests and general project questions.',
-        'Return structured evidence, assumptions, missing information, and recommended next action.',
-        'Do not make final claims without evidence.',
-        ANSWER_GOAL_CONSTRAINT,
-      ],
+    request: buildDiagnosticRequestFromResolvedTurn({
+      caseSession: input.caseSession,
+      rawUserQuestion: input.userMessage,
+      resolvedTurn,
+      unknowns,
       allowedMcpToolIds: input.allowedMcpToolIds ?? [],
-      context: {
-        isFollowUp: resolvedTurn.isFollowUp,
-        currentUserMessage: resolvedTurn.latestUserMessage,
-        recentMessages: input.caseSession.messages.slice(-8).map((message) => ({
-          id: message.id,
-          role: message.role,
-          body: message.body,
-          createdAt: message.createdAt,
-        })),
-        previousRuns: [],
-        resolvedTurn,
-      },
-    },
+    }),
   };
 }
 

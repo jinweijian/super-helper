@@ -39,6 +39,10 @@ The product uses one main Agent with configured sub-agents:
 - `main`: main coordinator
 - `input_review` / `preflight`: input review Agent
 - `experience`: prior-session experience Agent
+- `knowledge_router`: knowledge route normalization Agent
+- `evidence_judge`: knowledge evidence sufficiency Agent
+- `rag_answerability`: AnswerGoal coverage and partial extraction Agent
+- `case_curator`: solved-case draft curation Agent
 - `output_review`: evidence review Agent
 - `presentation`: persona-aware presentation Agent
 
@@ -112,6 +116,8 @@ Queue requirements:
 ## Runtime Pipeline
 
 `DiagnosticRuntime` is the runtime orchestrator for a single user turn. Synchronous chat calls use `handleUserMessage`. Asynchronous chat calls split the same pipeline into `startUserTurn` and `completeUserTurn`, so `/api/chat` can return `202 Accepted` while the runtime continues the diagnosis.
+
+The expanded user-question-to-answer design is documented in [Agent Runtime 技术总览](agent-runtime/README.md). That document group explains the turn lifecycle, Agent collaboration, contracts/data flow, knowledge-to-worker handoff, and observability semantics.
 
 The runtime pipeline is:
 

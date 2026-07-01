@@ -1,5 +1,5 @@
 import type { DiagnosticRequest } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { ReviewPresentationResult } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
@@ -14,7 +14,7 @@ import {
 
 export class WorkerDiagnosisService {
   constructor(
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     private readonly worker: DiagnosticWorker,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,

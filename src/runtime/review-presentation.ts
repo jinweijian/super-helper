@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticResult, DiagnosticRun } from '../domain.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 import type { ReviewPresentationResult } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
@@ -126,14 +126,21 @@ ${this.presentationAgentSpec}
       },
     ], { json: true });
     const parsed = parseAgentModelJson<ModelPresentationParsed>(response);
-    this.events.modelReviewResult(caseSession, response, parsed);
-    return validateModelPresentation({
+    const validated = validateModelPresentation({
       parsed,
       result,
       acceptedClaimIds,
       acceptedPrimaryAnswerClaimIds,
       persona: caseSession.userPersona,
-    })?.reply;
+    });
+    this.events.modelReviewResult(caseSession, {
+      accepted: Boolean(validated),
+      answerTarget: typeof parsed.answerTarget === 'string' ? parsed.answerTarget.slice(0, 300) : undefined,
+      claimIds: validated?.claimIds ?? safeStringArray(parsed.claimIds),
+      evidenceIds: validated?.evidenceIds ?? safeStringArray(parsed.evidenceIds),
+      directAnswerClaimIds: validated?.directAnswerClaimIds ?? safeStringArray(parsed.directAnswerClaimIds),
+    });
+    return validated?.reply;
   }
 }
 
@@ -152,7 +159,7 @@ function validateModelPresentation(input: {
   acceptedClaimIds: string[];
   acceptedPrimaryAnswerClaimIds: string[];
   persona: StoredCase['userPersona'];
-}): { reply: string; claimIds: string[]; evidenceIds: string[] } | undefined {
+}): { reply: string; claimIds: string[]; evidenceIds: string[]; directAnswerClaimIds: string[] } | undefined {
   const { parsed, result, acceptedClaimIds, acceptedPrimaryAnswerClaimIds, persona } = input;
   if (typeof parsed.reply !== 'string' || !parsed.reply.trim()) {
     return undefined;
@@ -231,7 +238,14 @@ function validateModelPresentation(input: {
     return undefined;
   }
 
-  return { reply, claimIds, evidenceIds };
+  return { reply, claimIds, evidenceIds, directAnswerClaimIds };
+}
+
+function safeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(new Set(value.filter((item): item is string => typeof item === 'string'))).slice(0, 20);
 }
 
 function replyStartsWithDirectAnswer(reply: string, directAnswer: string): boolean {

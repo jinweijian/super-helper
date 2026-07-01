@@ -241,6 +241,41 @@ test('runtime module does not instantiate embedding or rerank providers', () => 
   );
 });
 
+test('runtime depends on the case repository port instead of FileMemoryStore', () => {
+  assertNoImportPattern(
+    tsFilesUnder(join(srcRoot, 'runtime')),
+    [
+      /from\s+['"]\.\.\/sessions\/file-memory-store(?:\.js)?['"]/,
+      /\bFileMemoryStore\b/,
+    ],
+    'runtime services should depend on CaseRepository and StoredCase from the repository contract, not the file-backed implementation',
+  );
+});
+
+test('case repository contract does not reverse-import file store implementation', () => {
+  assertNoImportPattern(
+    [join(srcRoot, 'sessions', 'case-repository.ts')],
+    [
+      /file-memory-store/,
+      /\bFileMemoryStore\b/,
+    ],
+    'case-repository.ts must define the port and StoredCase shape without importing the file-backed implementation',
+  );
+});
+
+test('production modules consume StoredCase from the repository contract', () => {
+  const productionFiles = tsFilesUnder(srcRoot)
+    .filter((file) => relativeSource(file) !== 'src/sessions/file-memory-store.ts');
+  assertNoImportPattern(
+    productionFiles,
+    [
+      /import\s+type\s+\{[^}]*\bStoredCase\b[^}]*\}\s+from\s+['"][^'"]*file-memory-store(?:\.js)?['"]/,
+      /import\s+\{[^}]*\bStoredCase\b[^}]*\}\s+from\s+['"][^'"]*file-memory-store(?:\.js)?['"]/,
+    ],
+    'StoredCase is part of the CaseRepository contract; consumers should not import it from the file-backed adapter',
+  );
+});
+
 test('diagnostic runtime is a thin composition root with focused collaborators', () => {
   const runtimePath = join(srcRoot, 'runtime', 'diagnostic-runtime.ts');
   const source = read(runtimePath);

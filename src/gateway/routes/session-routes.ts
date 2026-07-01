@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SuperHelperConfig } from '../../config.js';
 import type { UserPersona } from '../../domain.js';
-import type { FileMemoryStore } from '../../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../../sessions/case-repository.js';
 import { recoverStaleActiveTurn } from '../../sessions/stale-turn.js';
-import { serializeSession, sessionSummary } from '../dto.js';
+import { getKnowledgeHealthSummary } from '../../knowledge/health-service.js';
+import { serializeSession, sessionSummary, type SerializedSession } from '../dto.js';
 import { readJson, sendJson } from '../http-utils.js';
 
 export async function handleSessionRoutes(
@@ -11,7 +12,7 @@ export async function handleSessionRoutes(
   res: ServerResponse,
   url: URL,
   config: SuperHelperConfig,
-  store: FileMemoryStore,
+  store: CaseRepository,
 ): Promise<boolean> {
   if (req.method === 'GET' && url.pathname === '/api/sessions') {
     const sessions = store.listCases();
@@ -33,7 +34,7 @@ export async function handleSessionRoutes(
     });
     caseSession.userPersona = body.persona ?? config.agent.defaultUserPersona;
     store.saveCase(caseSession);
-    sendJson(res, 200, { session: await serializeSession(caseSession, config, serializeOptions(url)) });
+    sendJson(res, 200, { session: await serializeSessionForRoute(caseSession, config, url) });
     return true;
   }
 
@@ -51,7 +52,7 @@ export async function handleSessionRoutes(
     }
 
     recoverStaleActiveTurn(caseSession, store, config);
-    sendJson(res, 200, { session: await serializeSession(caseSession, config, serializeOptions(url)) });
+    sendJson(res, 200, { session: await serializeSessionForRoute(caseSession, config, url) });
     return true;
   }
 
@@ -78,7 +79,7 @@ export async function handleSessionRoutes(
       sendJson(res, 400, { error: 'unsupported session action' });
       return true;
     }
-    sendJson(res, 200, { session: await serializeSession(caseSession, config, serializeOptions(url)) });
+    sendJson(res, 200, { session: await serializeSessionForRoute(caseSession, config, url) });
     return true;
   }
 
@@ -100,8 +101,27 @@ export async function handleSessionRoutes(
   return false;
 }
 
-function serializeOptions(url: URL): { includeKnowledgeHealth: boolean } {
-  return {
-    includeKnowledgeHealth: url.searchParams.get('includeKnowledgeHealth') !== 'false',
-  };
+async function serializeSessionForRoute(
+  caseSession: StoredCase,
+  config: SuperHelperConfig,
+  url: URL,
+): Promise<SerializedSession> {
+  const session = serializeSession(caseSession, config);
+  if (url.searchParams.get('includeKnowledgeHealth') === 'false') {
+    return session;
+  }
+  session.knowledgeHealth = await getKnowledgeHealthSummary({
+    config,
+    workspaceId: caseSession.workspaceId,
+    query: knowledgeHealthQuery(caseSession),
+  });
+  return session;
+}
+
+function knowledgeHealthQuery(caseSession: StoredCase): string {
+  return [...caseSession.messages]
+    .reverse()
+    .find((message) => message.role === 'user')
+    ?.body
+    .trim() || caseSession.title;
 }

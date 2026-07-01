@@ -659,7 +659,9 @@ test('model presentation reply is used and preserves multiple reviewed claims', 
     assert.match(response.assistantMessage, /基本信息、价格、封面、服务、班主任、教师、助教、课程管理和学员管理/);
     assert.doesNotMatch(response.assistantMessage, /配置或使用问题|对业务的影响|你可以怎么处理/);
     const parsed = response.caseSession.logs.find((event) => event.phase === 'model_review_result')?.detail?.parsed;
-    assert.match(parsed.reply, /班课配置入口/);
+    assert.equal(parsed.accepted, true);
+    assert.deepEqual(parsed.directAnswerClaimIds, ['claim_1', 'claim_3']);
+    assert.equal(Object.hasOwn(parsed, 'reply'), false);
   } finally {
     globalThis.fetch = originalFetch;
     rmSync(root, { recursive: true, force: true });

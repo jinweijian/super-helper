@@ -1,5 +1,5 @@
 import type { AnswerGoal, DiagnosticResult, DiagnosticRun, Evidence, UserPersona } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import { validateDiagnosticResult } from './result-validator.js';
 
 export interface ExperienceMatch {
@@ -23,7 +23,7 @@ export interface RejectedExperienceCandidate {
 }
 
 export function findExperienceMatch(input: {
-  store: FileMemoryStore;
+  store: CaseRepository;
   currentCase: StoredCase;
   userMessage: string;
   answerGoal?: AnswerGoal;
@@ -42,7 +42,7 @@ export function findExperienceMatch(input: {
 }
 
 export function findRejectedExperienceCandidates(input: {
-  store: FileMemoryStore;
+  store: CaseRepository;
   currentCase: StoredCase;
   userMessage: string;
   answerGoal?: AnswerGoal;

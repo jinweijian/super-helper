@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { HelperAgentConfig } from '../domain.js';
 import { preflight, type PreflightDecision } from './preflight-decision.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 import { attachCaseContext, personaDiagnosticConstraints } from './request-builder.js';
 
 export function buildLocalPreflightDecision(input: {

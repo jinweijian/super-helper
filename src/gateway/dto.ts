@@ -2,9 +2,9 @@ import type { SuperHelperConfig } from '../config.js';
 import { resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
-import { getKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/health-service.js';
+import type { KnowledgeHealthSummary } from '../knowledge/health.js';
 import { caseStatusFromDiagnosticResult } from '../runtime/review-gate.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 
 export type {
@@ -57,7 +57,7 @@ export type SerializedSession = SessionSummary
   & { knowledgeHealth?: KnowledgeHealthSummary };
 
 export interface SerializeSessionOptions {
-  includeKnowledgeHealth?: boolean;
+  knowledgeHealth?: KnowledgeHealthSummary;
 }
 
 export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConfig): SessionSummary {
@@ -92,11 +92,11 @@ function publicSessionStatus(caseSession: StoredCase): StoredCase['status'] {
   return caseStatusFromDiagnosticResult(latestResult);
 }
 
-export async function serializeSession(
+export function serializeSession(
   caseSession: StoredCase,
   config: SuperHelperConfig,
   options: SerializeSessionOptions = {},
-): Promise<SerializedSession> {
+): SerializedSession {
   const session: SerializedSession = {
     ...sessionSummary(caseSession, config),
     messages: caseSession.messages,
@@ -105,12 +105,8 @@ export async function serializeSession(
       workerTrace: run.workerTrace ? sanitizeWorkerTrace(run.workerTrace) : undefined,
     })),
   };
-  if (options.includeKnowledgeHealth !== false) {
-    session.knowledgeHealth = await getKnowledgeHealthSummary({
-      config,
-      workspaceId: caseSession.workspaceId,
-      query: knowledgeHealthQuery(caseSession),
-    });
+  if (options.knowledgeHealth) {
+    session.knowledgeHealth = options.knowledgeHealth;
   }
   return session;
 }
@@ -131,12 +127,4 @@ function recentAgentActivity(caseSession: StoredCase): AgentActivityItem[] {
       summary: event.summary,
       severity: event.severity ?? 'info',
     }));
-}
-
-function knowledgeHealthQuery(caseSession: StoredCase): string {
-  return [...caseSession.messages]
-    .reverse()
-    .find((message) => message.role === 'user')
-    ?.body
-    .trim() || caseSession.title;
 }

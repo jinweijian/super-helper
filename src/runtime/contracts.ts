@@ -1,4 +1,4 @@
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 
 export type RuntimeDecision = 'ask_user' | 'dispatched' | 'final' | 'partial' | 'escalate';
 

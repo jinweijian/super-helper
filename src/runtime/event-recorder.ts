@@ -10,7 +10,7 @@ import type {
 import type { KnowledgeEvidencePack, KnowledgeRoute } from '../knowledge/index.js';
 import type { PreflightDecision } from './preflight-decision.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 import type { EvidenceJudgeResult } from './evidence-judge.js';
 import type { RetrievalTrace } from '../retrieval/types.js';
 import type { RuntimeEventRecorder } from './ports.js';
@@ -28,9 +28,11 @@ export interface ModelPreflightParsed {
 }
 
 export interface ModelReviewParsed {
-  reply?: unknown;
-  claimIds?: unknown;
-  evidenceIds?: unknown;
+  accepted: boolean;
+  answerTarget?: string;
+  claimIds: string[];
+  evidenceIds: string[];
+  directAnswerClaimIds: string[];
 }
 
 interface AgentIdentity {
@@ -293,17 +295,16 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     });
   }
 
-  modelReviewResult(caseSession: StoredCase, raw: string, parsed: ModelReviewParsed): DiagnosticLogEvent {
+  modelReviewResult(caseSession: StoredCase, parsed: ModelReviewParsed): DiagnosticLogEvent {
     return this.recordAgent(caseSession, agentIdentities.outputReview, {
       actor: 'agent',
       phase: 'model_review_result',
       label: '输出审核',
-      severity: 'ok',
-      summary: 'Presentation 模型完成已审核 claim/evidence 回复草案',
-      detail: {
-        raw: redactProviderErrorMessage(raw).slice(0, 2000),
-        parsed,
-      },
+      severity: parsed.accepted ? 'ok' : 'warn',
+      summary: parsed.accepted
+        ? 'Presentation 模型回复草案通过确定性校验'
+        : 'Presentation 模型回复草案未通过确定性校验，降级到本地格式化',
+      detail: { parsed },
     });
   }
 

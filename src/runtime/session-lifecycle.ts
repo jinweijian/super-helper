@@ -1,13 +1,13 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { UserPersona } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { personaGuide, personaName } from './presenter.js';
 
 export class SessionLifecycle {
   constructor(
     private readonly config: SuperHelperConfig,
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     private readonly events: CaseRuntimeEventRecorder,
   ) {}
 

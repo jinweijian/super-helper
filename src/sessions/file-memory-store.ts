@@ -1,13 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { CaseMessage, CaseSession, DiagnosticLogEvent, DiagnosticRun } from '../domain.js';
-import type { CaseRepository } from './case-repository.js';
+import type { CaseMessage, DiagnosticLogEvent, DiagnosticRun } from '../domain.js';
+import type { CaseRepository, StoredCase } from './case-repository.js';
 
-export interface StoredCase extends CaseSession {
-  createdAt: string;
-  updatedAt: string;
-}
+export type { StoredCase } from './case-repository.js';
 
 export class FileMemoryStore implements CaseRepository {
   readonly rootDir: string;

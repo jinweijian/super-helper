@@ -77,12 +77,13 @@ The runtime pipeline is:
 ```text
 Gateway chat route
   -> DiagnosticRuntime.startUserTurn
-  -> Experience Agent
+  -> ResolvedTurnContext builder
   -> Preflight Gate
-  -> DiagnosticRequest builder
+  -> Experience Agent
+  -> Knowledge Router / Retrieval / Evidence Judge / RAG Answerability
   -> DiagnosticWorker port
-  -> Review Gate
-  -> Presenter
+  -> Result Validator / Review Gate
+  -> Presentation / Presenter
   -> RuntimeEventRecorder
   -> CaseRepository
 ```

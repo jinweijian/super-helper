@@ -2,7 +2,7 @@ import type { SuperHelperConfig } from '../config.js';
 import { getModelProvider } from '../config.js';
 import type { UserPersona } from '../domain.js';
 import { createModelClient } from '../providers/model/adapter.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import { resolveAgentConfig } from './agent-configs.js';
 import { CaseCurationService } from './case-curation-service.js';
@@ -33,7 +33,7 @@ export class DiagnosticRuntime {
 
   constructor(
     config: SuperHelperConfig,
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     worker: DiagnosticWorker,
   ) {
     const model = createModelClient(getModelProvider(config));

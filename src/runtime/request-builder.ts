@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticRequest, DiagnosticResult, UserPersona } from '../domain.js';
+import type { CaseSession, DiagnosticRequest, DiagnosticResult, ResolvedTurnContext, UserPersona } from '../domain.js';
 import { buildDiagnosticRequestContext } from '../sessions/context-builder.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 import { buildAnswerGoal, followUpAnswerGoal } from './answer-goal.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
@@ -15,11 +15,41 @@ export function buildDiagnosticRequest(input: {
 }): DiagnosticRequest {
   const { caseSession, userMessage, unknowns, config } = input;
   const resolvedTurn = buildResolvedTurnContext({ caseSession, latestUserMessage: userMessage });
-  const answerGoal = buildAnswerGoal({ rawUserQuestion: userMessage, resolvedTurn });
+  const request = buildDiagnosticRequestFromResolvedTurn({
+    caseSession,
+    rawUserQuestion: userMessage,
+    resolvedTurn,
+    unknowns,
+    allowedMcpToolIds: config.workspaces.find((workspace) => workspace.id === caseSession.workspaceId)?.mcpToolIds ?? [],
+    includePersonaConstraints: true,
+  });
+  attachCaseContext(caseSession, request);
+  request.context!.resolvedTurn = resolvedTurn;
+  return request;
+}
+
+export function buildDiagnosticRequestFromResolvedTurn(input: {
+  caseSession: CaseSession;
+  rawUserQuestion: string;
+  resolvedTurn: ResolvedTurnContext;
+  unknowns: string[];
+  allowedMcpToolIds: string[];
+  includePersonaConstraints?: boolean;
+}): DiagnosticRequest {
+  const { caseSession, rawUserQuestion, resolvedTurn } = input;
+  const answerGoal = buildAnswerGoal({ rawUserQuestion, resolvedTurn });
   const latestRunNumber = caseSession.runs.length + 1;
   const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
+  const constraints = [
+    'Claude Code is an inspection tool and must not respond directly to the user.',
+    ...(input.includePersonaConstraints ? personaDiagnosticConstraints(caseSession.userPersona) : []),
+    'Handle both troubleshooting requests and general project questions.',
+    'Return structured evidence, assumptions, missing information, and recommended next action.',
+    'Do not make final claims without evidence.',
+    ANSWER_GOAL_CONSTRAINT,
+  ];
 
-  const request: DiagnosticRequest = {
+  return {
     caseId: caseSession.id,
     runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
     workspaceId: caseSession.workspaceId,
@@ -27,21 +57,23 @@ export function buildDiagnosticRequest(input: {
     answerGoal,
     userGoal: resolvedTurn.resolvedQuery,
     knownFacts,
-    unknowns: Array.from(new Set([...unknowns, ...resolvedTurn.unknowns.map((item) => item.text)])),
-    constraints: [
-      'Claude Code is an inspection tool and must not respond directly to the user.',
-      ...personaDiagnosticConstraints(caseSession.userPersona),
-      'Handle both troubleshooting requests and general project questions.',
-      'Return structured evidence, assumptions, missing information, and recommended next action.',
-      'Do not make final claims without evidence.',
-      ANSWER_GOAL_CONSTRAINT,
-    ],
-    allowedMcpToolIds: config.workspaces.find((workspace) => workspace.id === caseSession.workspaceId)?.mcpToolIds ?? [],
+    unknowns: Array.from(new Set([...input.unknowns, ...resolvedTurn.unknowns.map((item) => item.text)])),
+    constraints,
+    allowedMcpToolIds: input.allowedMcpToolIds,
     userPersona: caseSession.userPersona,
+    context: {
+      isFollowUp: resolvedTurn.isFollowUp,
+      currentUserMessage: resolvedTurn.latestUserMessage,
+      recentMessages: caseSession.messages.slice(-8).map((message) => ({
+        id: message.id,
+        role: message.role,
+        body: message.body,
+        createdAt: message.createdAt,
+      })),
+      previousRuns: [],
+      resolvedTurn,
+    },
   };
-  attachCaseContext(caseSession, request);
-  request.context!.resolvedTurn = resolvedTurn;
-  return request;
 }
 
 export function buildFollowUpDiagnosticRequest(input: {

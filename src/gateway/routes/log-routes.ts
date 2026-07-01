@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { FileMemoryStore } from '../../sessions/file-memory-store.js';
+import type { CaseRepository } from '../../sessions/case-repository.js';
 import { buildLogBlocks, formatLogSection } from '../../observability/log-blocks.js';
 import { sanitizeWorkerTrace } from '../../observability/worker-trace.js';
 import { sendJson } from '../http-utils.js';
@@ -8,7 +8,7 @@ export async function handleLogRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  store: FileMemoryStore,
+  store: CaseRepository,
 ): Promise<boolean> {
   if (req.method !== 'GET' || url.pathname !== '/api/logs') {
     return false;

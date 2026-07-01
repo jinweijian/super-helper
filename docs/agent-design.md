@@ -19,6 +19,8 @@ Current configured Agents:
 - `presentation.md`: 美化输出 Agent，负责用户视角表达。
 - `registry.json`: runtime stage 到 Agent 配置的配对表。
 
+端到端协作、数据契约和运维日志的展开说明见 [Agent Runtime 技术总览](agent-runtime/README.md)。这里继续保留产品 Agent 的角色设计；runtime 方案细节以该文档组和代码为准。
+
 It is different from `CLAUDE.md`:
 
 - `CLAUDE.md` belongs to a specific workspace and tells Claude Code how to inspect that project.
@@ -117,6 +119,8 @@ User message
   -> Output Review verifies merged claims against AnswerGoal
   -> Presentation answers original question from reviewed claims
 ```
+
+这条链路的阶段级说明见 [知识库、Worker 与 Review 流程](agent-runtime/knowledge-worker-review-flow.md)。
 
 ## Non-Guessing Contract
 

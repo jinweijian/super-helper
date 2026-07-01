@@ -1,5 +1,9 @@
-import type { CaseMessage, DiagnosticLogEvent, DiagnosticRun } from '../domain.js';
-import type { StoredCase } from './file-memory-store.js';
+import type { CaseMessage, CaseSession, DiagnosticLogEvent, DiagnosticRun } from '../domain.js';
+
+export interface StoredCase extends CaseSession {
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface CaseRepository {
   createCase(input: {
@@ -14,5 +18,10 @@ export interface CaseRepository {
   addMessage(caseSession: StoredCase, message: Omit<CaseMessage, 'id' | 'createdAt'>): CaseMessage;
   addRun(caseSession: StoredCase, run: DiagnosticRun): DiagnosticRun;
   addLogEvent(caseSession: StoredCase, event: Omit<DiagnosticLogEvent, 'id' | 'createdAt'>): DiagnosticLogEvent;
+  updateTitle(caseSession: StoredCase, title: string): StoredCase;
+  pinCase(caseSession: StoredCase): StoredCase;
+  unpinCase(caseSession: StoredCase): StoredCase;
+  archiveCase(caseSession: StoredCase): StoredCase;
+  deleteCase(caseId: string): boolean;
   appendDailyMemory(line: string): void;
 }

@@ -1,6 +1,6 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { CaseStatus, DiagnosticResult, DiagnosticRun, DiagnosticRunStatus } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from './file-memory-store.js';
+import type { CaseRepository, StoredCase } from './case-repository.js';
 
 const ACTIVE_CASE_STATUSES: CaseStatus[] = ['ready_for_diagnosis', 'diagnosing'];
 const ACTIVE_RUN_STATUSES: DiagnosticRunStatus[] = ['queued', 'running'];
@@ -9,7 +9,7 @@ const STALE_GRACE_MS = 60 * 1000;
 
 export function recoverStaleActiveTurn(
   caseSession: StoredCase,
-  store: FileMemoryStore,
+  store: CaseRepository,
   config: SuperHelperConfig,
   now = new Date(),
 ): boolean {

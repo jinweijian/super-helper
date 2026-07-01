@@ -6,6 +6,11 @@ dist/
 .DS_Store
 *.log
 
+# Local package-manager caches and generated artifacts
+.pnpm-store/
+pnpm-store/
+**/.pnpm-store/
+
 # Local secrets and environment overrides
 .key
 .key.yaml

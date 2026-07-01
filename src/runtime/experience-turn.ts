@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { findExperienceMatch, findRejectedExperienceCandidates } from './experience-agent.js';
@@ -9,7 +9,7 @@ import { ReviewPresentationService } from './review-presentation.js';
 
 export class ExperienceTurnService {
   constructor(
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
   ) {}

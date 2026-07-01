@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
 import { resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { RagAnswerabilityService, type RagAnswerabilityResult } from './rag-answerability-service.js';
@@ -17,7 +17,7 @@ import { ReviewPresentationService } from './review-presentation.js';
 export class KnowledgeTurnService {
   constructor(
     private readonly config: SuperHelperConfig,
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
     private readonly ragAnswerabilityService?: RagAnswerabilityService,

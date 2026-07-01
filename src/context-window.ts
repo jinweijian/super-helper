@@ -1,5 +1,5 @@
 import type { ContextUsage } from './domain.js';
-import type { StoredCase } from './sessions/file-memory-store.js';
+import type { StoredCase } from './sessions/case-repository.js';
 
 export function estimateCaseContextUsage(caseSession: StoredCase, limitTokens: number): ContextUsage {
   const payload = {

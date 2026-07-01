@@ -1,5 +1,5 @@
 import type { DiagnosticLogEvent, LogSeverity } from '../domain.js';
-import type { StoredCase } from '../sessions/file-memory-store.js';
+import type { StoredCase } from '../sessions/case-repository.js';
 
 export interface DiagnosticLogBlock {
   id: string;

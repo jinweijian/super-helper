@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import type { SuperHelperConfig } from '../config.js';
 import { knowledgeRoot, resolveKnowledgeWorkspaceRoot } from '../knowledge/index.js';
-import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
+import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from './case-curator.js';
 import type { RuntimeTurnResponse } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
@@ -9,7 +9,7 @@ import { CaseRuntimeEventRecorder } from './event-recorder.js';
 export class CaseCurationService {
   constructor(
     private readonly config: SuperHelperConfig,
-    private readonly store: FileMemoryStore,
+    private readonly store: CaseRepository,
     private readonly events: CaseRuntimeEventRecorder,
   ) {}
 

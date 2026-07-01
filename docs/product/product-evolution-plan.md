@@ -1,5 +1,7 @@
 # super helper 产品迭代规划
 
+> 当前产品需求以 [super helper PRD](README.md) 为准；本文负责阶段路线、优先级和长期演进判断。
+
 ## 一句话定位
 
 `super helper` 的第一阶段不是做另一个通用 Agent 平台，而是做企业内部的技术支持首诊助手。
@@ -12,8 +14,10 @@
 
 - 判断信息是否足够诊断。
 - 信息不足时追问一个最高价值问题。
-- 信息足够时读取当前 workspace、知识库、历史工单或只读 MCP 数据源。
+- 信息足够时围绕同一个 `AnswerGoal` 读取当前 workspace、知识库、历史 case 或只读 MCP 数据源。
+- 优先复用安全的历史答案和已审核知识；知识不足时再升级只读 Worker。
 - 输出事实、推断、假设和未知。
+- 只从已接受 claim 和 evidence 生成用户可见回复。
 - 给出可复制的客户回复或内部升级材料。
 - 在诊断日志中保留证据、工具调用和判断过程。
 
@@ -46,6 +50,7 @@
 
 - 极简对话页。
 - workspace 绑定。
+- Setup / Dashboard 本地配置流。
 - Claude Code 只读诊断 worker。
 - Preflight Gate：信息不足先追问，不直接派发低价值任务。
 - DiagnosticRequest / DiagnosticResult 结构化。
@@ -75,8 +80,11 @@
 
 - Evidence Card：每个证据包含来源、摘要、置信度和关联结论。
 - Claim Review：每个结论必须关联证据。
+- `AnswerGoal.mustAnswerItems` 覆盖校验。
+- `primary_answer`、`process_note`、`evidence_locator` 等 claim role 分层。
 - Unknown 管理：明确哪些信息仍然缺失。
 - 结论分层：事实、推断、假设、未知。
+- Presentation 只能表达已冻结 accepted claim/evidence。
 - 用户质疑后重新诊断，并保留旧 run。
 - 诊断日志支持完整审计链路。
 
@@ -94,9 +102,11 @@
 
 - 接入历史工单库，例如 `ReadReadme`。
 - 接入 README、FAQ、部署文档、接口文档和故障手册。
-- 支持相似案例召回。
+- 支持 Knowledge Router、BM25/Embedding recall、fusion、rerank 和 Evidence Judge。
+- 支持 RAG Answerability：`full` 直答、`partial` 保留 covered claims 后升级、`none/unknown` 保守升级。
+- 支持相似案例和历史答案召回，但必须区分 history evidence 与当前事实。
 - 输出参考历史案例的诊断建议。
-- 将已解决 case 沉淀为可复用知识。
+- 将已解决 case 沉淀为 `review_required` solved case 草稿，经审核后才能成为 active knowledge。
 
 产品重点：
 
@@ -114,6 +124,8 @@
 
 - 能召回相似历史工单。
 - 能区分历史案例参考和当前事实。
+- 能拒绝“相关但不回答”的知识证据。
+- 能在 partial RAG 场景保留有用判断，并把缺口交给代码排查。
 - 能把已解决问题沉淀为新的知识资产。
 
 ## 阶段 4：企业只读 MCP 生态

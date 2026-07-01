@@ -41,12 +41,32 @@ const checks = [
     terms: ['super helper', '极简对话页', '输入框吸底', '查看诊断日志', '用户质疑'],
   },
   {
+    file: 'docs/product/README.md',
+    terms: ['super helper PRD', 'AnswerGoal', 'Preflight Gate', 'RAG Answerability', 'Case Curator', '查看诊断日志', '验收标准'],
+  },
+  {
     file: 'docs/agent-design.md',
     terms: ['Preflight Gate', 'Experience Agent', '不能乱猜', '证据不足必须追问', 'DiagnosticRequest', 'Claude Code 不直接回复用户'],
   },
   {
     file: 'docs/technical-architecture.md',
     terms: ['caseId', 'runId', 'Worker Pool', 'workspace', 'MCP', '只读', 'agentActivity'],
+  },
+  {
+    file: 'docs/agent-runtime/README.md',
+    terms: ['Agent Runtime 技术总览', 'AnswerGoal', 'DiagnosticRequest', 'Preflight Gate', 'Experience Agent', 'Evidence Judge', 'primary_answer', 'Presentation'],
+  },
+  {
+    file: 'docs/agent-runtime/contracts-and-data-flow.md',
+    terms: ['ResolvedTurnContext', 'DiagnosticClaim', 'direct_answer', 'ValidatedDiagnosticResult', 'Presentation Output Contract'],
+  },
+  {
+    file: 'docs/agent-runtime/knowledge-worker-review-flow.md',
+    terms: ['Knowledge Router', 'RAG Answerability', 'Claude Code Worker', 'Deep Query Retry', 'Output Review'],
+  },
+  {
+    file: 'docs/agent-runtime/observability-and-operations.md',
+    terms: ['DiagnosticLogEvent', 'Agent Activity', 'WorkerTrace', 'Solved Case', '/api/logs'],
   },
   {
     file: 'docs/mvp-roadmap.md',
