@@ -80,6 +80,14 @@ test('production retrieval evaluation reuses runtime composition and enforces sa
           category: 'implementation_risk',
           split: 'holdout',
         },
+        {
+          id: 'partial-hit',
+          question: '课程发布可见性规则有没有命令行处理？',
+          expectedParentId: 'kb_course_visibility',
+          expectedBehavior: 'escalate',
+          category: 'paraphrase',
+          split: 'holdout',
+        },
       ],
       reportPath: join(workspaceRoot, 'reports', 'runtime-retrieval-eval.json'),
     });
@@ -94,6 +102,12 @@ test('production retrieval evaluation reuses runtime composition and enforces sa
     assert.equal(report.questions[0].trace.strategies.find((item) => item.id === 'embedding')?.status, 'skipped');
     assert.equal(report.questions[1].answerable, false);
     assert.equal(report.questions[2].blockers.includes('implementation_detail'), true);
+    const partialHit = report.questions.find((question) => question.id === 'partial-hit');
+    assert.equal(partialHit.retrievalHit, true);
+    assert.equal(partialHit.answerability, 'partial');
+    assert.equal(partialHit.coveredClaimCount > 0, true);
+    assert.match(partialHit.missingElements.join('\n'), /命令行|命令/);
+    assert.equal(partialHit.passed, true);
     assert.equal(JSON.stringify(report).includes('课程发布后，学员需要满足'), false);
 
     const questionsPath = join(workspaceRoot, 'runtime-eval-questions.json');

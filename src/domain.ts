@@ -42,6 +42,33 @@ export interface ContextUsage {
   available: boolean;
 }
 
+export type AnswerQuestionType =
+  | 'definition'
+  | 'feature_overview'
+  | 'configuration_location'
+  | 'operation_procedure'
+  | 'troubleshooting_cause'
+  | 'rule_explanation'
+  | 'bug_or_behavior'
+  | 'unknown';
+
+export interface AnswerRequirement {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface AnswerContract {
+  originalQuestion: string;
+  resolvedQuestion: string;
+  questionType: AnswerQuestionType;
+  userNeed: string;
+  mustAnswer: AnswerRequirement[];
+  usefulContext: AnswerRequirement[];
+  missingTolerance: 'full_required' | 'partial_allowed_with_escalation';
+  finalAnswerExpectation: string;
+}
+
 export interface WorkspaceConfig {
   id: string;
   name: string;
@@ -97,21 +124,12 @@ export interface CaseMessage {
   replyToMessageId?: string;
 }
 
-export interface AnswerGoal {
-  rawUserQuestion: string;
-  resolvedQuestion: string;
-  answerObject: string;
-  mustAnswerItems: string[];
-  diagnosticObjective: string;
-  sourceMessageIds: string[];
-}
-
 export interface DiagnosticRequest {
   caseId: string;
   runId: string;
   workspaceId: string;
   claudeSessionId: string;
-  answerGoal: AnswerGoal;
+  userGoal: string;
   knownFacts: string[];
   unknowns: string[];
   constraints: string[];
@@ -123,6 +141,7 @@ export interface DiagnosticRequest {
 export interface DiagnosticRequestContext {
   isFollowUp: boolean;
   currentUserMessage: string;
+  answerContract?: AnswerContract;
   recentMessages: Array<{
     id?: string;
     role: CaseMessage['role'];
@@ -132,7 +151,7 @@ export interface DiagnosticRequestContext {
   previousRuns: Array<{
     runId: string;
     status: DiagnosticRunStatus;
-    answerGoal?: AnswerGoal;
+    userGoal?: string;
     summary?: string;
     missingInfo: string[];
     evidence: Evidence[];
@@ -148,6 +167,21 @@ export interface DiagnosticRequestContext {
     rejectionReason: string;
   }>;
   knowledge?: {
+    answerability?: {
+      answerability: 'full' | 'partial' | 'none' | 'unknown';
+      selectedEvidenceIds: string[];
+      coveredClaims: Array<{
+        id: string;
+        text: string;
+        evidenceIds: string[];
+        coveredRequirementIds: string[];
+        usefulness: string;
+      }>;
+      missingElements: string[];
+      shouldEscalate: boolean;
+      escalationFocus: string;
+      reason: string;
+    };
     route?: {
       normalizedQuestion: string;
       moduleCandidates: string[];
@@ -283,21 +317,11 @@ export interface Evidence {
   };
 }
 
-export type DiagnosticClaimRole =
-  | 'primary_answer'
-  | 'supporting_context'
-  | 'evidence_locator'
-  | 'process_note'
-  | 'next_action'
-  | 'unknown';
-
 export interface DiagnosticClaim {
   id?: string;
   type: ClaimType;
-  role: DiagnosticClaimRole;
   text: string;
   evidenceIds: string[];
-  answers: string[];
 }
 
 export interface DiagnosticResult {

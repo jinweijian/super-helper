@@ -23,6 +23,7 @@
 
 - [x] 4.1 Add the 50-question production evaluation set with exact parent IDs and required behavior: 12 exact, 10 paraphrase, 8 generic, 8 no-hit, 6 implementation/risk, and 6 visibility/stale/conflict cases; split 35 calibration/15 holdout.
 - [x] 4.2 Add migration reporting that identifies legacy v1 direct-ineligible parents/chunks without mutating them into v2 compliance.
+- [x] 4.2a Add feature-overview regression coverage for concrete module feature-list questions, including production eval coverage for “AI伴学助手有哪些功能”.
 - [ ] 4.3 Rerun real source extract/normalize/v2 slice/strict audit/deterministic repair and generate an AI Companion review queue; do not auto-approve warnings or errors.
 - [ ] 4.4 After explicit reviewed clean slices exist, publish/reindex/vectorize/evaluate AI Companion as an independent batch; otherwise record the human-review blocker and keep it investigation-only.
 - [ ] 4.5 Repeat the reviewed publish/reindex/vector/eval flow for EduSoho only after the AI Companion batch gate passes; failed batches must not affect previously eligible modules.
@@ -36,6 +37,7 @@
 ## 6. Anti-Fake-Complete Audit And Completion Gates
 
 - [x] 6.1 Audit that runtime really uses new child/BM25/hybrid paths, filters run before vector ranking, parent provenance survives final evidence, old artifacts cannot fake eligibility, and no business logic moved into knowledge/providers/CLI/runtime wrong layers; feed gaps back into artifacts.
+- [x] 6.1a Audit that draft/published mirror slices do not create `duplicate_content` warnings for the published parent, and that operations presentation uses feature-answer templates for feature-overview questions.
 - [ ] 6.2 Prove holdout direct precision 100%, no-hit abstention 100%, must-escalate 100%, Recall@5 >= 90%, and MRR >= 0.80; unmet metrics keep this change incomplete.
 - [x] 6.3 Run `openspec validate upgrade-hybrid-parent-child-retrieval --strict`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm test`; record fresh output and remaining manual-review/real-provider status.
 

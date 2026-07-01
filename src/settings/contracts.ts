@@ -12,6 +12,9 @@ export interface ModelSettingsInput {
   maxTokens?: number;
   contextWindowTokens?: number;
   useModelForPreflight?: boolean;
+  useModelForRagAnswerability?: boolean;
+  ragAnswerabilityTopN?: number;
+  useModelForEvidenceCoverage?: boolean;
 }
 
 export interface EmbeddingSettingsInput {

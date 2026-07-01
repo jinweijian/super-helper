@@ -75,6 +75,12 @@ export function routeKnowledgeQuestion(input: { workspaceRoot: string; question:
 
   const codeEscalationSignals = detectCodeEscalationSignals(input.question);
   const risks = detectRisks(input.question);
+  if (/有哪些功能|有什么功能|什么功能|功能有哪些|功能清单|功能列表|有哪些能力|有什么能力|支持哪些|能做什么|主要功能/.test(input.question)) {
+    intentCandidates.add('feature_overview');
+    sourceTypes.add('faq');
+    sourceTypes.add('whitepaper');
+    sourceTypes.add('module_doc');
+  }
   if (/怎么|如何|哪里|入口|步骤/.test(input.question)) {
     sourceTypes.add('faq');
     sourceTypes.add('runbook');

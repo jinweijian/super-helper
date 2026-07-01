@@ -82,6 +82,8 @@ intents:
     name: 术语解释
   - id: module_explanation
     name: 模块说明
+  - id: feature_overview
+    name: 功能概览
 `,
   'source-types.yaml': `# Source types and MVP ranking weights.
 source_types:

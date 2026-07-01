@@ -128,7 +128,7 @@ Gateway chat route
   -> DiagnosticWorker port
        -> bounded retry / pivot (Deep Query Correction)
   -> deterministic Result Validator / frozen Review Gate
-  -> Presentation Agent (Answer Contract) + runtime validation/fallback
+  -> Presenter (accepted claim/evidence IDs only)
   -> RuntimeEventRecorder
   -> CaseRepository
   -> optional Case Curator (solved case draft, review workflow)
@@ -138,11 +138,11 @@ Route code must not embed preflight, worker, review, or presentation decisions. 
 
 Same-case async turns are serialized in the runtime so every accepted user message receives its own helper reply. Runtime calls the retrieval service for knowledge evidence; it does not instantiate embedding or rerank providers directly.
 
-`ResolvedTurnContext.resolvedQuery` feeds `DiagnosticRequest.answerGoal.resolvedQuestion` for Preflight dispatch, Experience, Knowledge Router, Retrieval, Deep Query, Worker, Review, and Presentation. `answerGoal.rawUserQuestion` remains raw and source message IDs remain attached for UI/audit. `answerGoal.diagnosticObjective` is internal-only investigation intent and must not become the user's conclusion. Local resolution owns promotion: model-assisted preflight may downgrade a confirmed fact but cannot promote a user hypothesis or unknown to a fact.
+`ResolvedTurnContext.resolvedQuery` is the shared effective query for Preflight dispatch, Experience, Knowledge Router, Retrieval, Deep Query, `DiagnosticRequest.userGoal`, and Worker. `latestUserMessage` remains raw and source message IDs remain attached for UI/audit. Local resolution owns promotion: model-assisted preflight may downgrade a confirmed fact but cannot promote a user hypothesis or unknown to a fact.
 
 Deep Query planning is module-aware. `src/runtime/deep-query-planner.ts` treats Knowledge Router `moduleCandidates` as the primary signal for artifact targets, uses code escalation signals and regex heuristics only as fallback, and filters noisy anchor terms before adding worker constraints. Runtime passes `knowledge.projectType` into the planner through `attachKnowledgeCodeEscalationContext`; missing values default to `generic`. Project types adapt likely path hints without changing the worker contract: `symfony` favors Twig templates, bundle controllers/services, and app config; `node` and `vue` favor their conventional route/service/component/config paths. The plan records `projectType` in `DiagnosticRequest.context.deepQuery` so audit logs and worker prompts can explain why a path family was suggested.
 
-Before presentation, the pure result validator enforces unique evidence IDs, existing claim references, medium/high evidence for facts, required claim `role`, and required claim `answers`. It freezes the result, decision, and primary answer claim IDs. `final_answer` requires an accepted `primary_answer` claim whose `answers` cover `answerGoal.mustAnswerItems`; `process_note`, `evidence_locator`, and `supporting_context` cannot become the first conclusion. The Presentation model may author the final Chinese reply only through the Answer Contract: `answerTarget`, `directAnswer`, `reply`, `claimIds`, `evidenceIds`, and `directAnswerClaimIds`. Runtime validates that referenced IDs are accepted, that `directAnswerClaimIds` is the same unique set as the frozen primary answer claim IDs, that every selected evidence ID is referenced by selected accepted claims, that the first reply paragraph covers `directAnswer`, and that the full visible reply stays inside accepted claims/evidence/missingInfo for `DiagnosticRequest.answerGoal`. Invalid output falls back to a minimal fact-only reply from accepted primary answer claims. The model cannot return an outcome, choose the main answer by question-phrase lists, cite unrelated evidence, or add facts beyond accepted claims/evidence anywhere in the reply. Worker command/cwd/stdout/stderr/stack/provider payload stay in bounded redacted diagnostic logs. A pre-result worker failure is shown only as a safe category, diagnosis state, next action, and case/run identity.
+Before presentation, the pure result validator enforces unique evidence IDs, existing claim references, and medium/high evidence for facts. It freezes the result and decision. A presentation model may author the final Chinese reply only from accepted claim/evidence and must return `reply + claimIds + evidenceIds` for deterministic validation; it cannot return an outcome or introduce new factual content. Worker command/cwd/stdout/stderr/stack/provider payload stay in bounded redacted diagnostic logs. A pre-result worker failure is shown only as a safe category, diagnosis state, next action, and case/run identity.
 
 ## Dashboard Onboarding
 
@@ -202,12 +202,12 @@ Quality reports are written next to the indexes and reports directories. Severit
 
 ## Providers, Vector Artifacts, and Retrieval
 
-Embeddings and rerank are configured independently from the Agent chat model. The default config enables local vector-index building and the embedding retrieval entrypoint, with SiliconFlow as the primary real provider for this implementation. If no provider key is available, the provider is unreachable, or the local vector index is missing, retrieval must degrade safely to lexical/structured retrieval and must not block the diagnostic flow. Rerank remains optional and disabled unless config explicitly enables it:
+Embeddings and rerank are configured independently from the Agent chat model. The default config keeps both disabled and points at SiliconFlow only as the primary real provider for this implementation:
 
 ```json
 {
   "embedding": {
-    "enabled": true,
+    "enabled": false,
     "provider": "siliconflow",
     "model": "Qwen/Qwen3-Embedding-0.6B",
     "baseUrl": "https://api.siliconflow.cn/v1",

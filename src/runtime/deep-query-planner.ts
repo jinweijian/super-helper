@@ -1,7 +1,7 @@
 import type { DiagnosticRequest } from '../domain.js';
 import type { KnowledgeEvidencePack, KnowledgeRoute } from '../knowledge/index.js';
-import { answerGoalText } from './answer-goal.js';
 import type { EvidenceJudgeResult } from './evidence-judge.js';
+import type { RagAnswerabilityResult } from './rag-answerability-service.js';
 import { correctionActionsFor } from './query-correction.js';
 
 export interface DeepQueryPlan {
@@ -33,16 +33,19 @@ export function planDeepQuery(input: {
   failedReasons?: string[];
   projectType?: string;
   glossaryTerms?: string[];
+  answerability?: RagAnswerabilityResult;
 }): DeepQueryPlan {
   const attempt = input.attempt ?? 1;
   const maxAttempts = input.maxAttempts ?? 2;
   const projectType = normalizeProjectType(input.projectType);
-  const artifactTargets = inferArtifactTargets(input.question, input.route);
+  const answerabilityFocus = answerabilityFocusText(input.answerability);
+  const artifactTargets = inferArtifactTargets(input.question, input.route, answerabilityFocus);
   const anchorTerms = filterMeaningfulAnchorTerms(Array.from(new Set([
     ...input.route.keywords,
     ...input.route.moduleCandidates,
     ...input.route.intentCandidates,
     ...input.evidencePack.results.flatMap((result) => result.matched_terms),
+    ...answerabilityAnchorTerms(input.answerability),
   ])), input.glossaryTerms).slice(0, 24);
 
   return {
@@ -80,7 +83,7 @@ export function attachDeepQueryContext(input: {
 }): void {
   input.request.context ??= {
     isFollowUp: false,
-    currentUserMessage: input.request.answerGoal.rawUserQuestion,
+    currentUserMessage: input.request.userGoal,
     recentMessages: [],
     previousRuns: [],
   };
@@ -124,7 +127,7 @@ export function attachDeepQueryContext(input: {
     ...input.request.constraints,
     '知识库证据不足或问题依赖当前实现，请执行带线索的只读静态调查。',
     `优先检查 artifact targets: ${input.deepQuery.artifactTargets.join(', ') || 'general workspace evidence'}.`,
-    `优先使用 anchor terms: ${input.deepQuery.anchorTerms.join(', ') || answerGoalText(input.request.answerGoal)}.`,
+    `优先使用 anchor terms: ${input.deepQuery.anchorTerms.join(', ') || input.request.userGoal}.`,
     ...input.deepQuery.avoidAssumptions,
   ]));
 }
@@ -137,18 +140,35 @@ const MODULE_TO_ARTIFACT_TARGETS: Record<string, string[]> = {
 
 const BIGRAM_NOISE = new Set(['销主', '题中', '中关']);
 
-function inferArtifactTargets(question: string, route: KnowledgeRoute): string[] {
+function inferArtifactTargets(question: string, route: KnowledgeRoute, answerabilityFocus = ''): string[] {
   const targets = new Set<string>();
   for (const module of route.moduleCandidates) {
     for (const target of MODULE_TO_ARTIFACT_TARGETS[module] ?? []) {
       targets.add(target);
     }
   }
-  addRegexArtifactTargets(targets, `${question}\n${route.codeEscalationSignals.join('\n')}`, false);
+  addRegexArtifactTargets(targets, `${question}\n${route.codeEscalationSignals.join('\n')}\n${answerabilityFocus}`, false);
   if (targets.size === 0) {
-    addRegexArtifactTargets(targets, `${question}\n${route.codeEscalationSignals.join('\n')}`, true);
+    addRegexArtifactTargets(targets, `${question}\n${route.codeEscalationSignals.join('\n')}\n${answerabilityFocus}`, true);
   }
   return Array.from(targets);
+}
+
+function answerabilityFocusText(answerability?: RagAnswerabilityResult): string {
+  if (!answerability) return '';
+  return [
+    answerability.escalationFocus,
+    ...answerability.missingElements,
+  ].filter(Boolean).join('\n');
+}
+
+function answerabilityAnchorTerms(answerability?: RagAnswerabilityResult): string[] {
+  if (!answerability) return [];
+  return [
+    ...answerability.missingElements,
+    answerability.escalationFocus,
+    ...answerability.coveredClaims.flatMap((claim) => claim.coveredRequirementIds),
+  ].filter(Boolean);
 }
 
 function addRegexArtifactTargets(targets: Set<string>, text: string, fallback: boolean): void {

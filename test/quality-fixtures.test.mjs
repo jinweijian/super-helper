@@ -86,6 +86,59 @@ test('7.4 fixture: duplicate content pair is detected', () => {
   }
 });
 
+test('7.4b published slice is not downgraded by its own draft mirror', () => {
+  const workspace = tempWorkspace();
+  try {
+    initKnowledgeWorkspace({ workspaceRoot: workspace });
+    const publishedDir = join(workspace, 'knowledge', 'faq', 'general');
+    const draftDir = join(workspace, 'knowledge', '_pipeline', 'drafts', 'src_mirror');
+    mkdirSync(publishedDir, { recursive: true });
+    mkdirSync(draftDir, { recursive: true });
+    const body = `---
+id: kb_mirror_feature
+title: AI伴学助手功能清单
+type: faq
+module: ai-companion
+intent: feature_overview
+source_type: faq
+confidence: high
+status: active
+visibility: internal
+product_versions: []
+related_terms:
+  - AI伴学助手
+  - 功能清单
+  - 学习问答
+related_repos: []
+last_verified_at: 2026-06-27
+owner: knowledge-admin
+source_document: knowledge/_sources/whitepapers/ai-companion.docx
+source_document_id: src_mirror
+source_block_ids:
+  - blk_mirror_feature
+section_path:
+  - AI伴学助手
+quality_status: ok
+---
+
+# AI伴学助手功能清单
+
+AI伴学助手支持学习计划制定、督学提醒、学习问答、题目答疑和知识点诊断。
+`;
+    writeFileSync(join(publishedDir, 'mirror.md'), body, 'utf8');
+    writeFileSync(join(draftDir, '001-mirror.md'), body.replace('status: active', 'status: draft'), 'utf8');
+    updateKnowledgeIndex({ workspaceRoot: workspace });
+
+    const report = auditKnowledgeQuality({ workspaceRoot: workspace });
+    const duplicateIssues = report.issues.filter((issue) => (
+      issue.code === 'duplicate_content' && issue.documentId === 'kb_mirror_feature'
+    ));
+    assert.deepEqual(duplicateIssues, []);
+  } finally {
+    cleanup(workspace);
+  }
+});
+
 test('7.5 fixture: missing source_document is flagged error', () => {
   const workspace = tempWorkspace();
   try {

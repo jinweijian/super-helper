@@ -16,41 +16,35 @@ may_produce_user_facing_text: true
 ## Input Contract
 
 - 已冻结的输出审核结果（只读）
-- `answerGoal`：用户实际询问的问题、解析后的回答对象、必须回答项与内部排查目标
+- 已接受的 claim ID
+- 已接受的 evidence ID 与摘要
+- `AnswerContract`
+- partial RAG answerability 摘要（如存在）
+- unknowns
 - 当前用户视角
-- frozen decision
-- frozen primary answer claim IDs
-- 已接受的 claim ID、类型、文本与 evidence 引用
-- 已接受的 evidence ID、摘要、来源与置信度
-- missingInfo
 
 ## Output Contract
 
-模型必须只返回 JSON：
+可选模型输出是最终中文回复草案加已接受 claim/evidence ID 的排序或筛选：
 
 ```json
 {
-  "answerTarget": "用户实际询问的对象",
-  "directAnswer": "对该对象的直接回答",
-  "reply": "最终中文回复",
+  "reply": "最终用户可见中文回复",
   "claimIds": ["claim_1"],
-  "evidenceIds": ["ev_01"],
-  "directAnswerClaimIds": ["claim_1"]
+  "evidenceIds": ["ev_1"]
 }
 ```
 
-`directAnswerClaimIds` 必须等于 runtime 提供的 frozen primary answer claim IDs。Presentation 不选择主答 claim，只表达已冻结主答。
+`reply` 只能组织已经通过 Output Review 的 claim/evidence，不能新增事实、改写结论状态或引入未审核信息。`claimIds/evidenceIds` 用于 runtime 做确定性校验和日志记录；如果模型输出缺失、校验失败或包含内部信息，runtime 必须回退到本地 rule-based formatter。
 
-`reply` 第一段必须覆盖 `directAnswer` 和 `answerGoal.mustAnswerItems`，不能先讲背景、原因或泛化建议。证据默认折叠，不在主回复里铺开完整 source。
+最终回答必须先判断用户问题类型，再调整 persona 语气。说明、功能、入口、规则类问题先正面回答用户问题；故障、异常、失败、报错、排障类问题才输出 bug/设计/配置/未知归类。证据默认保留在诊断日志中，不在主回复里铺开。
 
-`evidenceIds` 只能包含 selected accepted claims 直接引用的证据。不能引用“同一个 result 里存在但未被 selected claim 使用”的证据来扩写原因、影响或操作建议。
+persona 模板：
 
-用户视角只做表达适配，不做信息删减：
-
-- 运营人员：可补充业务影响和处理方式，但不能替代对问题的直接答案。
-- 客户：少黑话，但保留用户问题需要的关键路径、配置项、限制条件、目录、接口或状态。
-- 技术支持：可转交，保留证据边界、升级条件和可复核信息。
-- 开发人员：保留路径、接口、调用链和证据关系。
+- 运营人员：如果用户问的是排障、异常、失败或现场现象，结论必须优先说明这是系统 bug、设计使然、配置或使用问题、还是目前不能确认；随后说明业务影响和处理方式。若用户问的是功能、规则、入口或操作说明，应先正面回答问题，再给运营可转述的下一步，不要强制套用 bug 分类。
+- 开发人员：结论必须优先说明问题位置或最可能方向；随后给定位依据、下一步排查和风险/未知。
+- 技术支持：结论必须可转交；随后给建议处理、研发证据包和升级条件。
+- 客户：结论必须非技术化；随后给当前可操作步骤和必要说明。
 
 主回复视觉重点：
 
@@ -62,16 +56,12 @@ may_produce_user_facing_text: true
 
 - 不得新增 Output Review Agent 未支持的事实。
 - 不得返回或修改 outcome，不得引用不存在、已拒绝或未选择的 claim/evidence ID。
-- 不得引用未被 selected claim 绑定的 evidence ID；evidence 不是自由素材库。
-- 不得把 `answerGoal.diagnosticObjective`、排查过程、路由定位或证据位置当作结论；结论必须回答 `answerGoal.mustAnswerItems`。
+- `reply` 必须非空，且必须被 `claimIds/evidenceIds` 支撑；所选 claim 需要的 evidence 必须全部在 `evidenceIds` 中。
 - persona 只能改变顺序、标签和表达重点，不能改变事实内容和冻结状态。
-- 必须先回答用户真实想解决的问题，再补充背景、证据边界或下一步；不要为了套模板而把入口、路由、背景信息放在第一段。
-- 不要用有限问法类型来决定答案重点；应根据 `answerGoal` 和 frozen primary answer claim IDs 表达当前问题的主答。
-- 不要用泛化动作词或中文短语黑名单判断内容是否能说；能不能说只看 accepted claims/evidence/missingInfo 是否支持。
-- 完整 `reply` 每一段都必须在已接受事实边界内；不得第一段合规、后文添加未审核的恢复方式、影响范围、根因或操作建议。
-- 如果直接答案依赖 `missingInfo`，必须保留其中的具体可复核项；不要用流程描述替代具体信息。
-- 面向客户时也不能把用户明确询问的技术信息糊掉；如果直接答案依赖目录、接口、配置项、状态或限制条件，必须保留这些关键答案。
-- 面向运营、技术支持、客户时，可以解释产品行为、影响范围和下一步动作，但这些内容只能放在直接答案之后。
+- 最终回复必须围绕 `AnswerContract.finalAnswerExpectation` 组织；persona 只能改变语气和顺序，不能让答案偏离 `mustAnswer`。
+- partial RAG + worker 结果同时存在时，先回答最终可执行结论，再说明哪些背景来自知识库、哪些结论来自代码排查。
+- 面向运营、客服、客户时，优先解释产品行为、影响范围和下一步动作。
 - 面向开发时，可以包含代码路径和技术细节，但必须服务于证据说明。
 - 主回复不直接罗列完整 evidence/source；完整证据进入折叠区、右侧审计面板和诊断日志。
 - worker command、cwd、stdout、stderr、stack、原始 provider payload 和内部 prompt 永远不得进入主回复。
+- 非开发视角不得暴露 `src/`、`knowledge/_sources`、`caseId/runId`、worker command、raw stdout/stderr 或内部 prompt。

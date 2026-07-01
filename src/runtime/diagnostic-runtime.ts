@@ -12,6 +12,7 @@ import { ExperienceTurnService } from './experience-turn.js';
 import { KnowledgeTurnService } from './knowledge-turn.js';
 import { PreflightService } from './preflight-service.js';
 import { formatPreflightQuestion } from './presenter.js';
+import { RagAnswerabilityService } from './rag-answerability-service.js';
 import { ReviewPresentationService } from './review-presentation.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { CaseTurnQueue } from './turn-queue.js';
@@ -41,6 +42,7 @@ export class DiagnosticRuntime {
     const experienceAgentSpec = resolveAgentConfig('experience').content;
     const outputReviewAgentSpec = resolveAgentConfig('output_review').content;
     const presentationAgentSpec = resolveAgentConfig('presentation').content;
+    const ragAnswerabilityAgentSpec = resolveAgentConfig('rag_answerability').content;
 
     this.events = new CaseRuntimeEventRecorder(store);
     this.reviewer = new ReviewPresentationService(
@@ -62,7 +64,12 @@ export class DiagnosticRuntime {
       experienceAgentSpec,
     );
     this.experienceTurn = new ExperienceTurnService(store, this.events, this.reviewer);
-    this.knowledgeTurn = new KnowledgeTurnService(config, store, this.events, this.reviewer);
+    const ragAnswerabilityService = new RagAnswerabilityService(
+      model,
+      ragAnswerabilityAgentSpec,
+      config.agent.ragAnswerabilityTopN ?? config.agent.evidenceCoverageTopN ?? 3,
+    );
+    this.knowledgeTurn = new KnowledgeTurnService(config, store, this.events, this.reviewer, ragAnswerabilityService);
     this.workerDiagnosis = new WorkerDiagnosisService(store, worker, this.events, this.reviewer);
     this.caseCuration = new CaseCurationService(config, store, this.events);
   }
@@ -126,7 +133,7 @@ export class DiagnosticRuntime {
 
     const knowledgeResponse = await this.knowledgeTurn.answer(
       caseSession,
-      decision.request.answerGoal.resolvedQuestion,
+      decision.request.userGoal,
       replyToMessageId,
       decision.request,
     );

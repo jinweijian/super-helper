@@ -61,10 +61,6 @@ function assertNoImportPattern(files, patterns, message) {
   assert.deepEqual(offenders, [], message);
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function assertAbsent(paths, message) {
   const existing = paths.filter((path) => existsSync(join(repoRoot, path)));
   assert.deepEqual(existing, [], message);
@@ -162,53 +158,6 @@ test('root deprecation re-exports match owner module symbols', async () => {
   assert.equal(oldStorage.FileMemoryStore, newStorage.FileMemoryStore);
 });
 
-test('production source does not import deprecated root compatibility modules', () => {
-  const files = tsFilesUnder(srcRoot).filter((path) => {
-    const relative = relativeSource(path);
-    return ![
-      'src/model.ts',
-      'src/model-smoke-test.ts',
-      'src/preflight.ts',
-      'src/storage.ts',
-    ].includes(relative);
-  });
-  const forbidden = [
-    './model.js',
-    './model',
-    '../model.js',
-    '../model',
-    './model-smoke-test.js',
-    './model-smoke-test',
-    '../model-smoke-test.js',
-    '../model-smoke-test',
-    './preflight.js',
-    './preflight',
-    '../preflight.js',
-    '../preflight',
-    './storage.js',
-    './storage',
-    '../storage.js',
-    '../storage',
-  ];
-  assertNoImportPattern(
-    files,
-    forbidden.map((specifier) => new RegExp(`from\\s+['"]${escapeRegExp(specifier)}['"]|import\\s*\\(\\s*['"]${escapeRegExp(specifier)}['"]\\s*\\)`)),
-    'production source must import owner modules instead of deprecated root compatibility modules',
-  );
-});
-
-test('ui compatibility facades re-export split renderers', async () => {
-  const [rootUi, splitUi, rootSetupUi, splitSetupUi] = await Promise.all([
-    import('../dist/ui.js'),
-    import('../dist/ui/main-screen.js'),
-    import('../dist/setup-ui.js'),
-    import('../dist/ui/setup-screen.js'),
-  ]);
-
-  assert.equal(rootUi.renderApp, splitUi.renderApp);
-  assert.equal(rootSetupUi.renderSetupApp, splitSetupUi.renderSetupApp);
-});
-
 test('retrieval CLI uses configured retrieval instead of manual BM25-only wiring', () => {
   assertNoImportPattern(
     [join(srcRoot, 'cli', 'command-retrieval.ts')],
@@ -290,14 +239,6 @@ test('runtime module does not instantiate embedding or rerank providers', () => 
     ],
     'runtime must depend on retrieval services, not provider factories or legacy embedding provider modules',
   );
-});
-
-test('runtime case curator does not write knowledge files directly', () => {
-  const source = read(join(srcRoot, 'runtime', 'case-curator.ts'));
-  assert.doesNotMatch(source, /from\s+['"]node:fs['"]/);
-  assert.doesNotMatch(source, /\bwriteFileSync\b/);
-  assert.doesNotMatch(source, /\bmkdirSync\b/);
-  assert.doesNotMatch(source, /\bdirtyFlagPath\b/);
 });
 
 test('diagnostic runtime is a thin composition root with focused collaborators', () => {

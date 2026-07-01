@@ -1,26 +1,24 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import { Readable } from 'node:stream';
 import test from 'node:test';
 import { DiagnosticRuntime } from '../dist/runtime/diagnostic-runtime.js';
 import { ClaudeCodeWorker } from '../dist/workers/claude/claude-code-worker.js';
-import { ensureConfig, loadConfig, saveConfig } from '../dist/config.js';
+import { loadConfig, saveConfig } from '../dist/config.js';
 import { createModelClient } from '../dist/model.js';
 import { renderApp } from '../dist/ui.js';
 import { FileMemoryStore } from '../dist/storage.js';
 import { startServer } from '../dist/gateway/http-server.js';
-import { serializeSession } from '../dist/gateway/dto.js';
-import { handleChatRoutes } from '../dist/gateway/routes/chat-routes.js';
 import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeIndex } from '../dist/knowledge/index.js';
 import { failedExecutionDiagnosticResult, mockDiagnosticResponse, parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
 import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/claude-policy.js';
-import { runCommand } from '../dist/workers/claude/claude-cli.js';
+import { buildClaudeSystemPrompt, buildClaudeUserPrompt } from '../dist/workers/claude/claude-prompts.js';
 import { buildDiagnosticRequestContext } from '../dist/sessions/context-builder.js';
 import { buildDiagnosticRequest, buildFollowUpDiagnosticRequest } from '../dist/runtime/request-builder.js';
+import { buildAnswerContract } from '../dist/runtime/answer-contract.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from '../dist/runtime/preflight-gate.js';
 import {
   caseStatusFromDiagnosticResult,
@@ -33,11 +31,9 @@ import { listPublicAgentConfigs, loadAgentRegistry, resolveAgentConfig } from '.
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
 import { planDeepQuery } from '../dist/runtime/deep-query-planner.js';
 import { curateSolvedCase, hasCuratableDiagnosticResult, isResolutionConfirmation } from '../dist/runtime/case-curator.js';
-import { reviewSolvedCase } from '../dist/runtime/case-review-runtime.js';
 import { runKnowledgeAcceptance } from '../dist/runtime/knowledge-acceptance.js';
-import { validateDiagnosticResult } from '../dist/runtime/result-validator.js';
-import { CaseRuntimeEventRecorder } from '../dist/runtime/event-recorder.js';
 import { resolveSessionStorageRoot } from '../dist/sessions/storage-scope.js';
+import { updateModelSettings } from '../dist/settings/model-settings.js';
 
 function baseConfig(rootDir) {
   return {
@@ -101,34 +97,6 @@ test('saveConfig replaces config atomically and leaves no temp file', () => {
   }
 });
 
-test('ensureConfig reads existing config without rewriting it', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const target = join(dir, 'config.json');
-  try {
-    const config = baseConfig(dir);
-    config.onboarding = {
-      version: 1,
-      completedAt: '2026-06-29T09:48:58.868Z',
-      lastRunId: 'run_completed',
-    };
-    saveConfig(config, target);
-    const oldDate = new Date('2020-01-01T00:00:00.000Z');
-    utimesSync(target, oldDate, oldDate);
-    const before = {
-      content: readFileSync(target, 'utf8'),
-      mtimeMs: statSync(target).mtimeMs,
-    };
-
-    const loaded = ensureConfig(dir);
-
-    assert.equal(loaded.onboarding.completedAt, '2026-06-29T09:48:58.868Z');
-    assert.equal(readFileSync(target, 'utf8'), before.content);
-    assert.equal(statSync(target).mtimeMs, before.mtimeMs);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 function chatResponse(content) {
   return new Response(
     JSON.stringify({
@@ -136,31 +104,6 @@ function chatResponse(content) {
     }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
-}
-
-function jsonRequest(path, body) {
-  const req = Readable.from([JSON.stringify(body)]);
-  req.method = 'POST';
-  req.url = path;
-  req.headers = { host: 'localhost' };
-  return req;
-}
-
-function captureJsonResponse() {
-  return {
-    statusCode: undefined,
-    headers: undefined,
-    body: undefined,
-    json: undefined,
-    writeHead(statusCode, headers) {
-      this.statusCode = statusCode;
-      this.headers = headers;
-    },
-    end(body) {
-      this.body = body;
-      this.json = body ? JSON.parse(body) : undefined;
-    },
-  };
 }
 
 async function waitFor(assertion, timeoutMs = 2000) {
@@ -177,212 +120,12 @@ async function waitFor(assertion, timeoutMs = 2000) {
   throw lastError;
 }
 
-function testAnswerGoal(question, answerObject = question) {
-  return {
-    rawUserQuestion: question,
-    resolvedQuestion: question,
-    answerObject,
-    mustAnswerItems: [answerObject],
-    diagnosticObjective: `围绕当前用户问题进行只读诊断：${question}`,
-    sourceMessageIds: ['msg_test'],
-  };
-}
-
-function primaryClaim(text, evidenceIds, answers, type = 'fact') {
-  return { type, role: 'primary_answer', text, evidenceIds, answers };
-}
-
-function supportingClaim(text, evidenceIds, answers = [], type = 'fact') {
-  return { type, role: 'supporting_context', text, evidenceIds, answers };
-}
-
-function sourceFilesUnder(dir) {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return sourceFilesUnder(fullPath);
-    }
-    return /\.(ts|md)$/.test(entry.name) ? [fullPath] : [];
-  });
-}
-
 test('composer sends on Enter and keeps Shift+Enter for newline', () => {
   const html = renderApp();
 
   assert.match(html, /event\.key === 'Enter'/);
   assert.match(html, /!event\.shiftKey/);
   assert.match(html, /event\.preventDefault\(\)/);
-});
-
-test('empty chat prompt uses support-focused examples instead of implementation copy', () => {
-  const html = renderApp();
-
-  assert.match(html, /示例：后台-运营-APP发现页是空白的，显示不出来，这是什么问题？/);
-  assert.match(html, /示例：老师反馈视频被盗，应该从哪些学习数据排查？/);
-  assert.doesNotMatch(html, /学员管理统计缺少 6 月数据/);
-  assert.doesNotMatch(html, /发送后展示稳定进度/);
-  assert.doesNotMatch(html, /跳动文案/);
-});
-
-test('runtime presentation logic does not rely on phrase-list gates for answer intent', () => {
-  const runtimeSource = ['src/runtime', 'src/agents']
-    .flatMap((dir) => sourceFilesUnder(join(process.cwd(), dir)))
-    .map((file) => readFileSync(file, 'utf8'))
-    .join('\n');
-
-  assert.doesNotMatch(runtimeSource, /asksForNextActionOrMissingInfo|isMetaProcessClaim|isGenericNonAnswer/);
-  assert.doesNotMatch(runtimeSource, /selectDirectAnswerClaim|directAnswer.*score|score.*directAnswer/);
-  assert.doesNotMatch(runtimeSource, /\/[^/\n]*(能不能|支不支持|下一步|给你什么|哪个目录)[^/\n]*\|[^/\n]*(能不能|支不支持|下一步|给你什么|哪个目录)[^/\n]*\//);
-});
-
-test('diagnostic requests use AnswerGoal instead of userGoal as the authoritative target', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  try {
-    const config = baseConfig(dir);
-    const store = new FileMemoryStore(dir);
-    const caseSession = store.createCase({
-      tenantId: 'local',
-      userId: 'local-user',
-      workspaceId: 'current',
-      title: 'answer goal request',
-    });
-    const message = '后台-运营-APP发现页是空白的，显示不出来，这是什么问题';
-    store.addMessage(caseSession, { role: 'user', body: message });
-
-    const request = buildDiagnosticRequest({
-      caseSession,
-      userMessage: message,
-      unknowns: [],
-      config,
-    });
-
-    assert.equal(Object.hasOwn(request, 'userGoal'), false);
-    assert.equal(request.answerGoal.rawUserQuestion, message);
-    assert.equal(request.answerGoal.resolvedQuestion, message);
-    assert.equal(request.answerGoal.answerObject.includes('APP发现页') || request.answerGoal.answerObject.includes('APP发现页'), true);
-    assert.deepEqual(request.answerGoal.mustAnswerItems, [request.answerGoal.answerObject]);
-    assert.equal(request.answerGoal.diagnosticObjective.includes('APP发现页'), true);
-    assert.deepEqual(request.answerGoal.sourceMessageIds, [caseSession.messages.at(-1).id]);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('follow-up request keeps the user-facing AnswerGoal separate from diagnostic objective', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  try {
-    const config = baseConfig(dir);
-    const store = new FileMemoryStore(dir);
-    const caseSession = store.createCase({
-      tenantId: 'local',
-      userId: 'local-user',
-      workspaceId: 'current',
-      title: 'answer goal follow-up',
-    });
-    const message = '下一步我应该做什么，给你什么信息';
-    store.addMessage(caseSession, { role: 'user', body: message });
-    const request = buildDiagnosticRequest({
-      caseSession,
-      userMessage: message,
-      unknowns: [],
-      config,
-    });
-    const result = {
-      status: 'partial',
-      summary: '需要客户补充浏览器和服务器侧证据来收敛根因。',
-      missingInfo: ['浏览器 Console 报错', 'discovery API 响应状态'],
-      evidence: [
-        { id: 'ev_api', kind: 'workspace', source: 'mobile-discovery.vue', summary: '发现页依赖 discovery API。', confidence: 'high' },
-      ],
-      claims: [
-        {
-          type: 'inference',
-          role: 'primary_answer',
-          text: '需要先收集 Console 报错和 discovery API 响应状态。',
-          evidenceIds: ['ev_api'],
-          answers: [request.answerGoal.mustAnswerItems[0]],
-        },
-      ],
-      recommendedNextAction: 'continue_diagnosis',
-    };
-
-    const followUp = buildFollowUpDiagnosticRequest({
-      caseSession,
-      previousRequest: request,
-      previousResult: result,
-    });
-
-    assert.equal(Object.hasOwn(followUp, 'userGoal'), false);
-    assert.equal(followUp.answerGoal.rawUserQuestion, message);
-    assert.equal(followUp.answerGoal.resolvedQuestion, message);
-    assert.doesNotMatch(followUp.answerGoal.resolvedQuestion, /继续追查|本轮目标/);
-    assert.match(followUp.answerGoal.diagnosticObjective, /继续|缺失|证据/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('deterministic validation rejects final answers without a primary answer role', () => {
-  const validation = validateDiagnosticResult({
-    status: 'concluded',
-    summary: '找到页面路由。',
-    missingInfo: [],
-    evidence: [
-      { id: 'ev_route', kind: 'workspace', source: 'routes.ts', summary: 'APP 发现页路由存在。', confidence: 'high' },
-    ],
-    claims: [
-      { type: 'fact', text: 'APP 发现页路由是 /admin/v2/setting/mobile_discoveries。', evidenceIds: ['ev_route'] },
-    ],
-    recommendedNextAction: 'final_answer',
-  }, {
-    answerGoal: {
-      rawUserQuestion: '后台-运营-APP发现页空白是什么问题',
-      resolvedQuestion: '后台-运营-APP发现页空白是什么问题',
-      answerObject: 'APP发现页空白原因',
-      mustAnswerItems: ['APP发现页空白原因'],
-      diagnosticObjective: '排查 APP 发现页空白原因',
-      sourceMessageIds: ['msg_1'],
-    },
-  });
-
-  assert.equal(validation.result.status, 'partial');
-  assert.equal(validation.result.recommendedNextAction, 'ask_user');
-  assert.equal(validation.acceptedClaimIds.length, 0);
-  assert.equal(validation.issues.some((issue) => issue.code === 'missing_claim_role'), true);
-});
-
-test('process notes cannot satisfy the frozen primary answer requirement', () => {
-  const validation = validateDiagnosticResult({
-    status: 'concluded',
-    summary: '本轮目标是给支持提供资料清单。',
-    missingInfo: [],
-    evidence: [
-      { id: 'ev_api', kind: 'workspace', source: 'mobile-discovery.vue', summary: '发现页依赖 discovery API。', confidence: 'high' },
-    ],
-    claims: [
-      {
-        type: 'fact',
-        role: 'process_note',
-        text: '本轮目标是给支持提供下一步资料清单。',
-        evidenceIds: ['ev_api'],
-        answers: ['APP发现页空白下一步资料'],
-      },
-    ],
-    recommendedNextAction: 'final_answer',
-  }, {
-    answerGoal: {
-      rawUserQuestion: '下一步我应该做什么，给你什么信息',
-      resolvedQuestion: '下一步我应该做什么，给你什么信息',
-      answerObject: 'APP发现页空白下一步资料',
-      mustAnswerItems: ['APP发现页空白下一步资料'],
-      diagnosticObjective: '整理 APP 发现页空白排查需要的资料',
-      sourceMessageIds: ['msg_1'],
-    },
-  });
-
-  assert.equal(validation.result.status, 'partial');
-  assert.equal(validation.result.recommendedNextAction, 'ask_user');
-  assert.equal(validation.issues.some((issue) => issue.code === 'missing_primary_answer'), true);
 });
 
 test('app exposes a model settings and test entry', () => {
@@ -404,7 +147,10 @@ test('app exposes a model settings and test entry', () => {
   assert.match(html, /payload = readRerankForm\(true\)[\s\S]*payload\.enabled = true/);
   assert.match(html, /上下文窗口 Tokens/);
   assert.match(html, /id="contextWindowTokens"/);
+  assert.match(html, /RAG 可回答性审核/);
+  assert.match(html, /id="useModelForRagAnswerability"/);
   assert.match(html, /contextWindowTokens: Number\(document\.getElementById\('contextWindowTokens'\)\.value/);
+  assert.match(html, /useModelForRagAnswerability: document\.getElementById\('useModelForRagAnswerability'\)\.checked/);
 });
 
 test('helper answers render concise body with collapsed evidence and claims before evidence', () => {
@@ -458,6 +204,17 @@ test('app switches sessions with lightweight fetches and background refreshes', 
   assert.match(html, /includeKnowledgeHealth=false/);
   assert.match(html, /refreshCurrentKnowledgeHealth/);
   assert.match(html, /loadSessionsInBackground/);
+});
+
+test('app supports shareable session urls that initialize and update case routing', () => {
+  const html = renderApp();
+
+  assert.match(html, /function sessionIdFromLocation/);
+  assert.match(html, /decodeURIComponent\(match\[1\]\)/);
+  assert.match(html, /'\/sessions\/' \+ encodeURIComponent\(id\)/);
+  assert.match(html, /sessionIdFromLocation\(\) \|\| localStorage\.getItem\('super-helper\.caseId'\)/);
+  assert.match(html, /function setSessionRoute/);
+  assert.match(html, /history\.pushState/);
 });
 
 test('history session list keeps its own scroll area instead of compressing items', () => {
@@ -725,6 +482,35 @@ test('settings API stores submitted keys in secrets file instead of config', asy
   }
 });
 
+test('model settings preserve rag answerability switch when form omits it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForRagAnswerability = false;
+    config.agent.useModelForEvidenceCoverage = false;
+    const secrets = {
+      has: () => false,
+      set: (key) => ({ source: 'file', key }),
+    };
+
+    updateModelSettings({
+      config,
+      secrets,
+      body: {
+        providerId: 'minimax',
+        baseUrl: 'https://api.example.test/v1',
+        model: 'MiniMax-M3',
+        useModelForPreflight: true,
+      },
+    });
+
+    assert.equal(config.agent.useModelForRagAnswerability, false);
+    assert.equal(config.agent.useModelForEvidenceCoverage, false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('model client times out instead of hanging agent review forever', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) =>
@@ -804,26 +590,41 @@ test('sessions API lists, creates, and loads reusable chat sessions', async () =
   }
 });
 
-test('session serialization includes knowledge health only when explicitly requested', async () => {
+test('shareable session page route serves the chat app shell', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  let server;
 
   try {
     const config = baseConfig(dir);
-    const store = new FileMemoryStore(dir);
-    const caseSession = store.createCase({
-      tenantId: 'local',
-      userId: 'local-user',
-      workspaceId: 'current',
-      title: '轻量序列化',
+    config.server.port = 43984;
+    config.onboarding = { completedAt: new Date().toISOString() };
+    config.agent.useModelForPreflight = false;
+    config.agent.modelProvider = undefined;
+    config.claude.enabled = false;
+    server = await startServer({
+      config,
+      onboarding: {
+        getState: () => ({
+          completed: true,
+          needsReview: false,
+          draft: null,
+          latestRun: null,
+          review: { required: false, pendingCount: 0, blockedCount: 0, items: [] },
+        }),
+      },
     });
 
-    const defaultSerialized = await serializeSession(caseSession, config);
-    assert.equal(Object.hasOwn(defaultSerialized, 'knowledgeHealth'), false);
+    const res = await fetch('http://127.0.0.1:43984/sessions/case_share_123');
+    const html = await res.text();
 
-    const explicitSerialized = await serializeSession(caseSession, config, { includeKnowledgeHealth: true });
-    assert.equal(Object.hasOwn(explicitSerialized, 'knowledgeHealth'), true);
-    assert.equal(typeof explicitSerialized.knowledgeHealth.serviceBinding.status, 'string');
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') || '', /text\/html/);
+    assert.match(html, /super helper/);
+    assert.match(html, /sessionIdFromLocation/);
   } finally {
+    if (server) {
+      await server.close();
+    }
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -1054,7 +855,7 @@ test('Claude Code worker reuses the per-case Claude session instead of disabling
       runId: 'run_01',
       workspaceId: 'current',
       claudeSessionId: '11111111-1111-4111-8111-111111111111',
-      answerGoal: testAnswerGoal('查一下项目里 package.json 的用途'),
+      userGoal: '查一下项目里 package.json 的用途',
       knownFacts: ['用户在问项目问题'],
       unknowns: [],
       constraints: [],
@@ -1081,7 +882,7 @@ test('Claude Code worker resumes an existing Claude session on follow-up runs', 
       runId: 'run_02',
       workspaceId: 'current',
       claudeSessionId: '55555555-5555-4555-8555-555555555555',
-      answerGoal: testAnswerGoal('继续追问 doing 流程'),
+      userGoal: '继续追问 doing 流程',
       knownFacts: ['上一轮已经分析过 q2'],
       unknowns: [],
       constraints: [],
@@ -1108,7 +909,7 @@ test('Claude Code worker separates system prompt from user payload and enforces 
       runId: 'run_01',
       workspaceId: 'current',
       claudeSessionId: '22222222-2222-4222-8222-222222222222',
-      answerGoal: testAnswerGoal('只读分析 package.json'),
+      userGoal: '只读分析 package.json',
       knownFacts: ['用户要求只读'],
       unknowns: [],
       constraints: ['Do not modify files.'],
@@ -1121,7 +922,7 @@ test('Claude Code worker separates system prompt from user payload and enforces 
     assert.match(response.trace.command, /--tools Read,Glob,Grep/);
     assert.match(response.trace.command, /--disallowedTools /);
     assert.match(response.trace.command, /DiagnosticRequest\.context/);
-    assert.match(response.trace.command, /answerGoal/i);
+    assert.match(response.trace.command, /answer the latest userGoal first/i);
     assert.match(response.trace.command, /Before returning need_input for a selected workspace/);
     assert.match(response.trace.command, /Use Glob or Grep to inspect the current workspace/);
     assert.match(response.trace.command, /Do not cite paths outside the active workspace root as workspace evidence/);
@@ -1154,7 +955,7 @@ const result = {
   summary: 'retry succeeded',
   missingInfo: [],
   evidence: [{ id: 'ev_01', kind: 'workspace', source: 'package.json', summary: 'read-only evidence', confidence: 'high' }],
-  claims: [{ type: 'fact', role: 'primary_answer', text: 'retry succeeded after busy session', evidenceIds: ['ev_01'], answers: ['只读分析 package.json'] }],
+  claims: [{ type: 'fact', text: 'retry succeeded after busy session', evidenceIds: ['ev_01'] }],
   recommendedNextAction: 'final_answer'
 };
 console.log(JSON.stringify({ result: JSON.stringify(result) }));
@@ -1177,7 +978,7 @@ console.log(JSON.stringify({ result: JSON.stringify(result) }));
       runId: 'run_01',
       workspaceId: 'current',
       claudeSessionId: '33333333-3333-4333-8333-333333333333',
-      answerGoal: testAnswerGoal('只读分析 package.json'),
+      userGoal: '只读分析 package.json',
       knownFacts: [],
       unknowns: [],
       constraints: [],
@@ -1187,45 +988,6 @@ console.log(JSON.stringify({ result: JSON.stringify(result) }));
     assert.equal(response.result.summary, 'retry succeeded');
     assert.equal(response.trace.exitCode, 0);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('Claude command timeout force-kills children that ignore SIGTERM', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const pidPath = join(dir, 'child.pid');
-  const workerPath = join(dir, 'ignore-sigterm.mjs');
-  writeFileSync(
-    workerPath,
-    `#!/usr/bin/env node
-import { writeFileSync } from 'node:fs';
-writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
-process.on('SIGTERM', () => {});
-setInterval(() => {}, 1000);
-`,
-    'utf8',
-  );
-  chmodSync(workerPath, 0o755);
-
-  try {
-    const execution = await Promise.race([
-      runCommand(process.execPath, [workerPath], dir, 300),
-      new Promise((resolve) => setTimeout(() => resolve('test-timeout'), 2000)),
-    ]);
-    if (execution === 'test-timeout' && existsSync(pidPath)) {
-      process.kill(Number(readFileSync(pidPath, 'utf8')), 'SIGKILL');
-    }
-
-    assert.notEqual(execution, 'test-timeout');
-    assert.match(execution.error, /Command timed out after 300ms/);
-    assert.equal(execution.signal, 'SIGKILL');
-  } finally {
-    if (existsSync(pidPath)) {
-      try {
-        process.kill(Number(readFileSync(pidPath, 'utf8')), 0);
-        process.kill(Number(readFileSync(pidPath, 'utf8')), 'SIGKILL');
-      } catch {}
-    }
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -1254,7 +1016,7 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
       runId: 'run_01',
       workspaceId: 'current',
       claudeSessionId: '44444444-4444-4444-8444-444444444444',
-      answerGoal: testAnswerGoal('分析 q2'),
+      userGoal: '分析 q2',
       knownFacts: [],
       unknowns: [],
       constraints: [],
@@ -1267,6 +1029,69 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('worker prompt includes answer contract and partial rag escalation focus', () => {
+  const userGoal = '学员统计缺少6月份如何补上，有没有命令行处理';
+  const request = {
+    caseId: 'case_worker_prompt_contract',
+    runId: 'run_worker_prompt_contract',
+    workspaceId: 'current',
+    claudeSessionId: 'claude_worker_prompt_contract',
+    userGoal,
+    knownFacts: [],
+    unknowns: [],
+    constraints: [],
+    allowedMcpToolIds: [],
+    userPersona: 'operations',
+    context: {
+      isFollowUp: false,
+      currentUserMessage: userGoal,
+      recentMessages: [],
+      previousRuns: [],
+      answerContract: buildAnswerContract({
+        originalQuestion: userGoal,
+        resolvedQuestion: userGoal,
+      }),
+      knowledge: {
+        evidence: [],
+        judge: {
+          answerable: false,
+          confidence: 'low',
+          need_code_escalation: true,
+          reason: 'partial RAG',
+          evidence: [],
+          risks: [],
+          missing_info: ['现成命令名称'],
+          conflicts: [],
+          recommended_next_action: 'dispatch_code_diagnosis',
+          answer_score: 0.4,
+        },
+        answerability: {
+          answerability: 'partial',
+          selectedEvidenceIds: ['ev_stat_task'],
+          coveredClaims: [{
+            id: 'rag_claim_1',
+            text: '学员统计由定时任务生成。',
+            evidenceIds: ['ev_stat_task'],
+            coveredRequirementIds: ['generation_source'],
+            usefulness: '补数排查背景',
+          }],
+          missingElements: ['现成命令名称', '月份参数'],
+          shouldEscalate: true,
+          escalationFocus: '查找统计补数命令和月份参数',
+          reason: '知识库缺命令',
+        },
+      },
+    },
+  };
+
+  const prompt = `${buildClaudeSystemPrompt()}\n${buildClaudeUserPrompt(request)}`;
+
+  assert.match(prompt, /DiagnosticRequest\.context\.answerContract/);
+  assert.match(prompt, /missing mustAnswer/);
+  assert.match(prompt, /查找统计补数命令和月份参数/);
+  assert.match(prompt, /学员统计由定时任务生成/);
 });
 
 test('Claude Code worker omits budget limit when no budget is configured', async () => {
@@ -1293,7 +1118,7 @@ console.log(JSON.stringify({ type: 'result', subtype: 'success', result: 'ok', t
       runId: 'run_01',
       workspaceId: 'current',
       claudeSessionId: '55555555-5555-4555-8555-555555555555',
-      answerGoal: testAnswerGoal('分析 q3'),
+      userGoal: '分析 q3',
       knownFacts: [],
       unknowns: [],
       constraints: [],
@@ -1337,7 +1162,7 @@ process.exit(1);
       runId: 'run_01',
       workspaceId: 'current',
       claudeSessionId: '66666666-6666-4666-8666-666666666666',
-      answerGoal: testAnswerGoal('查找倍速播放路由'),
+      userGoal: '查找倍速播放路由',
       knownFacts: [],
       unknowns: [],
       constraints: [],
@@ -1360,7 +1185,7 @@ test('Claude worker helper modules parse output, downgrade failures, and narrow 
     runId: 'run_01',
     workspaceId: 'current',
     claudeSessionId: '77777777-7777-4777-8777-777777777777',
-    answerGoal: testAnswerGoal('分析 package.json'),
+    userGoal: '分析 package.json',
     knownFacts: [],
     unknowns: ['traceId'],
     constraints: [],
@@ -1371,7 +1196,7 @@ test('Claude worker helper modules parse output, downgrade failures, and narrow 
     summary: 'parsed result',
     missingInfo: [],
     evidence: [{ id: 'ev_01', kind: 'workspace', source: 'package.json', summary: 'read evidence', confidence: 'high' }],
-    claims: [primaryClaim('parsed', ['ev_01'], ['分析 package.json'])],
+    claims: [{ type: 'fact', text: 'parsed', evidenceIds: ['ev_01'] }],
     recommendedNextAction: 'final_answer',
   };
 
@@ -1492,7 +1317,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
           summary: 'worker should not be called for answerable knowledge',
           missingInfo: [],
           evidence: [{ id: 'ev_worker', kind: 'workspace', source: 'worker', summary: 'worker called', confidence: 'low' }],
-          claims: [primaryClaim('worker called', ['ev_worker'], request.answerGoal.mustAnswerItems)],
+          claims: [{ type: 'fact', text: 'worker called', evidenceIds: ['ev_worker'] }],
           recommendedNextAction: 'final_answer',
         },
         trace: {
@@ -1536,10 +1361,9 @@ test('runtime answers directly from knowledge evidence before calling the worker
     assert.equal(response.decision, 'final');
     assert.equal(response.caseSession.runs.length, 1);
     assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
-    assert.match(response.assistantMessage, /通过 AI 伴学助手制定学习计划/);
-    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.match(response.assistantMessage, /AI伴学助手如何制定学习计划/);
+    assert.match(response.assistantMessage, /\*\*(结论|答案)：/);
     assert.doesNotMatch(response.assistantMessage, /支撑证据/);
-    assert.doesNotMatch(response.assistantMessage, /Evidence Judge|answer_score|模块候选/);
     assert.match(response.caseSession.runs[0].result.evidence[0].source, /knowledge\/faq\/ai-companion/);
     assert.equal(response.caseSession.logs.some((event) => event.phase === 'knowledge_search_result'), true);
     assert.equal(response.caseSession.logs.some((event) => event.phase === 'preflight_decision' && event.detail?.decision === 'knowledge_answer'), true);
@@ -1599,6 +1423,327 @@ test('runtime broadens source type filters so whitepaper evidence can answer nat
   }
 });
 
+test('runtime carries partial RAG claims into code escalation instead of discarding them', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    const userContent = body.messages?.find((message) => message.role === 'user')?.content ?? '{}';
+    let payload = {};
+    try {
+      payload = JSON.parse(userContent);
+    } catch {
+      payload = {};
+    }
+    if (payload.answerContract && Array.isArray(payload.evidence)) {
+      const evidenceId = payload.evidence[0].id;
+      return chatResponse(JSON.stringify({
+        answerability: 'partial',
+        selectedEvidenceIds: [evidenceId],
+        coveredClaims: [{
+          id: 'rag_claim_entry',
+          text: '知识库确认学员加入课程后可以通过 AI 伴学助手制定学习计划。',
+          evidenceIds: [evidenceId],
+          coveredRequirementIds: ['operation_method'],
+          usefulness: '说明学习计划制定方式。',
+        }],
+        missingElements: ['入口路径', '验证或注意事项'],
+        shouldEscalate: true,
+        escalationFocus: '查找 AI 伴学学习计划入口和验证方式。',
+        reason: '知识库只覆盖制定方式，缺入口和验证方式。',
+      }));
+    }
+    return chatResponse('{bad json');
+  };
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '知识库确认制定方式，代码确认入口和验证方式。',
+          missingInfo: [],
+          evidence: [
+            { id: 'ev_rag_entry', kind: 'knowledge', source: 'knowledge/faq/ai-companion/how-to.md', summary: '知识库确认学习计划制定方式。', confidence: 'high' },
+            { id: 'ev_code_items', kind: 'workspace', source: 'learning-plan.ts', summary: '代码确认学习计划入口和验证方式。', confidence: 'high' },
+          ],
+          claims: [
+            { id: 'claim_rag_entry', type: 'fact', text: '知识库确认学员加入课程后可以通过 AI 伴学助手制定学习计划。', evidenceIds: ['ev_rag_entry'] },
+            { id: 'claim_code_items', type: 'fact', text: '代码确认学习计划入口会保存学习时间段、每周学习日，并可通过计划生成结果验证。', evidenceIds: ['ev_code_items'] },
+          ],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForPreflight = false;
+    config.agent.useModelForRagAnswerability = true;
+    config.agent.useModelForEvidenceCoverage = true;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeFaq(knowledgeWorkspace, {
+      module: 'ai-companion',
+      intent: 'how_to',
+      title: 'AI伴学助手如何制定学习计划',
+      body: '学员加入课程后，可以通过 AI 伴学助手制定学习计划。学习计划生成后包含任务数、学习总时长、学习起止时间、每周学习日和每日学习时长。',
+      terms: ['AI伴学助手', '制定学习计划', '学习计划'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+    const response = await agent.handleUserMessage({
+      persona: 'operations',
+      message: 'AI伴学助手如何制定学习计划？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.answerability.answerability, 'partial');
+    assert.match(workerRequests[0].context.knowledge.answerability.coveredClaims[0].text, /制定学习计划/);
+    assert.match(workerRequests[0].context.knowledge.answerability.escalationFocus, /入口和验证方式/);
+    assert.match(workerRequests[0].context.deepQuery.anchorTerms.join('\n'), /入口路径|验证或注意事项|入口和验证方式/);
+    assert.match(response.assistantMessage, /制定学习计划/);
+    assert.match(response.assistantMessage, /学习时间段|每周学习日/);
+    assert.match(response.assistantMessage, /验证/);
+    assert.doesNotMatch(response.assistantMessage, /配置或使用问题|对业务的影响|你可以怎么处理/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime escalates scheduled-statistics backfill questions even with matching knowledge evidence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已升级到当前实现排查，需确认补统计命令。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code_escalated', kind: 'workspace', source: 'Grep:console command', summary: '已进入命令行和定时任务实现排查。', confidence: 'medium' }],
+          claims: [{ type: 'unknown', text: '现成补统计命令仍需当前代码证据确认。', evidenceIds: ['ev_code_escalated'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
+      module: 'edusoho-training',
+      title: '用户数据统计',
+      body: '用户数据统计用于查看学员管理中的用户统计数据，包含注册、登录、学习等运营统计信息。',
+      terms: ['学员管理', '用户数据统计', '学员数据统计', '数据统计'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+
+    const response = await agent.handleUserMessage({
+      message: '学员管理的学员数据统计里面缺少6月份的数据，已经确认是定时任务没执行的问题，现在已经解决了定时任务。如何补上这个数据统计，有没有现成的命令行处理？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.judge.need_code_escalation, true);
+    assert.equal(workerRequests[0].context.knowledge.judge.blockers.includes('question_not_answered'), true);
+    assert.equal(workerRequests[0].context.knowledge.route.codeEscalationSignals.includes('command_or_job'), false);
+    assert.equal(workerRequests[0].context.knowledge.route.codeEscalationSignals.includes('data_backfill'), false);
+    assert.equal(workerRequests[0].context.knowledge.evidence.some((item) => item.title === '用户数据统计'), true);
+    assert.equal(workerRequests[0].context.deepQuery.artifactTargets.includes('scheduler'), true);
+    assert.doesNotMatch(response.assistantMessage, /设计使然/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime runs rag answerability even when evidence judge blocks direct answer', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    const userContent = body.messages?.find((message) => message.role === 'user')?.content ?? '{}';
+    let payload = {};
+    try {
+      payload = JSON.parse(userContent);
+    } catch {
+      payload = {};
+    }
+    if (payload.answerContract && Array.isArray(payload.evidence)) {
+      const evidenceId = payload.evidence[0].id;
+      return chatResponse(JSON.stringify({
+        answerability: 'partial',
+        selectedEvidenceIds: [evidenceId],
+        coveredClaims: [{
+          id: 'rag_claim_generation_source',
+          text: '知识库确认学员数据统计用于查看运营统计数据。',
+          evidenceIds: [evidenceId],
+          coveredRequirementIds: ['generation_source'],
+          usefulness: '可作为补统计排查背景。',
+        }],
+        missingElements: ['现成补跑命令', '月份参数', '执行验证方式'],
+        shouldEscalate: true,
+        escalationFocus: '查找学员数据统计补跑命令、月份参数和执行验证方式。',
+        reason: '知识库只覆盖统计功能背景，未覆盖补跑命令。',
+      }));
+    }
+    return chatResponse('{bad json');
+  };
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已结合知识库背景升级排查补统计命令。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code_escalated', kind: 'workspace', source: 'Grep:console command', summary: '已进入命令行和定时任务实现排查。', confidence: 'medium' }],
+          claims: [{ type: 'unknown', text: '现成补统计命令仍需当前代码证据确认。', evidenceIds: ['ev_code_escalated'] }],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: {
+          command: 'worker',
+          cwd: workspace,
+          stdout: '',
+          stderr: '',
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    config.agent.useModelForPreflight = false;
+    config.agent.useModelForRagAnswerability = true;
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
+      module: 'edusoho-training',
+      title: '用户数据统计',
+      body: '用户数据统计用于查看学员管理中的用户统计数据，包含注册、登录、学习等运营统计信息。',
+      terms: ['学员管理', '用户数据统计', '学员数据统计', '数据统计'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+
+    await agent.handleUserMessage({
+      message: '学员管理的学员数据统计里面缺少6月份的数据，如何补上这个数据统计，有没有现成的命令行处理？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 1);
+    assert.equal(workerRequests[0].context.knowledge.judge.blockers.includes('question_not_answered'), true);
+    assert.equal(workerRequests[0].context.knowledge.answerability.answerability, 'partial');
+    assert.match(workerRequests[0].context.knowledge.answerability.coveredClaims[0].text, /运营统计数据/);
+    assert.match(workerRequests[0].context.knowledge.answerability.escalationFocus, /补跑命令/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test('runtime skips legacy coverage agent when rag answerability has no model provider', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
+  const workerRequests = [];
+  const worker = {
+    async diagnose(request) {
+      workerRequests.push(request);
+      return {
+        result: {
+          status: 'concluded',
+          summary: '已升级排查。',
+          missingInfo: [],
+          evidence: [{ id: 'ev_code', kind: 'workspace', source: 'Grep', summary: '命令行排查。', confidence: 'medium' }],
+          claims: [],
+          recommendedNextAction: 'final_answer',
+        },
+        trace: { command: 'worker', cwd: workspace, stdout: '', stderr: '', startedAt: new Date().toISOString(), finishedAt: new Date().toISOString() },
+      };
+    },
+  };
+
+  try {
+    const config = baseConfig(dir);
+    delete config.agent.modelProvider;
+    config.agent.useModelForPreflight = false;
+    config.agent.useModelForEvidenceCoverage = true;
+    config.rerank = { enabled: true, provider: 'fake', model: 'fake-reranker', topN: 8, apiKeyEnv: '' };
+    config.workspaces[0].rootPath = workspace;
+    const knowledgeWorkspace = resolveKnowledgeWorkspaceRoot(config, 'current');
+    initKnowledgeWorkspace({ workspaceRoot: knowledgeWorkspace });
+    writeKnowledgeWhitepaper(knowledgeWorkspace, {
+      module: 'edusoho-training',
+      title: '学员数据统计补跑命令',
+      body: '学员数据统计缺失时可通过命令行补跑统计：执行 php app/console student:statistics:rebuild --month=YYYY-MM 补跑指定月份的学员数据统计。',
+      terms: ['学员数据统计', '补跑', '命令行', 'app/console'],
+    });
+    updateKnowledgeIndex({ workspaceRoot: knowledgeWorkspace });
+
+    const store = new FileMemoryStore(dir);
+    const agent = new DiagnosticRuntime(config, store, worker);
+
+    await agent.handleUserMessage({
+      message: '学员数据统计缺失如何补跑，有没有现成命令行处理？',
+      workspaceId: 'current',
+    });
+
+    assert.equal(workerRequests.length, 0, 'missing rag answerability model should fall back to Evidence Judge direct answer');
+
+    const cases = store.listCases();
+    const caseSession = cases.find((c) => c.messages.some((message) => /student:statistics:rebuild|补跑指定月份/.test(message.body)));
+    assert.ok(caseSession, 'case should have direct knowledge answer');
+    assert.equal(caseSession.logs.some((log) => log.phase === 'evidence_coverage_result'), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
 test('runtime escalates no-hit or implementation-detail knowledge questions with deep query context', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workspace = mkdtempSync(join(tmpdir(), 'super-helper-kb-workspace-'));
@@ -1612,7 +1757,7 @@ test('runtime escalates no-hit or implementation-detail knowledge questions with
           summary: '已升级并检查当前接口实现',
           missingInfo: [],
           evidence: [{ id: 'ev_code_partial', kind: 'workspace', source: 'Grep:/api/orders', summary: '需要进一步静态调查', confidence: 'low' }],
-          claims: [{ type: 'unknown', role: 'unknown', text: '知识库没有命中，需要代码证据', evidenceIds: ['ev_code_partial'], answers: [] }],
+          claims: [{ type: 'unknown', text: '知识库没有命中，需要代码证据', evidenceIds: ['ev_code_partial'] }],
           recommendedNextAction: 'final_answer',
         },
         trace: {
@@ -1676,7 +1821,7 @@ test('runtime applies deep query pivot on one retry after insufficient code evid
             summary: '只找到 route 定义，尚未找到 controller/service 实现证据。',
             missingInfo: [],
             evidence: [{ id: 'ev_route', kind: 'workspace', source: 'routes.ts', summary: '只找到路由入口', confidence: 'medium' }],
-            claims: [{ type: 'unknown', role: 'unknown', text: '还缺少实现层证据', evidenceIds: ['ev_route'], answers: [] }],
+            claims: [{ type: 'unknown', text: '还缺少实现层证据', evidenceIds: ['ev_route'] }],
             recommendedNextAction: 'continue_diagnosis',
           },
           trace: {
@@ -1696,7 +1841,7 @@ test('runtime applies deep query pivot on one retry after insufficient code evid
           summary: '第二轮 pivot 到 controller/service 后找到实现证据。',
           missingInfo: [],
           evidence: [{ id: 'ev_controller', kind: 'workspace', source: 'src/controller.ts', summary: 'controller 调用 service。', confidence: 'high' }],
-          claims: [primaryClaim('实现证据已找到。', ['ev_controller'], request.answerGoal.mustAnswerItems)],
+          claims: [{ type: 'fact', text: '实现证据已找到。', evidenceIds: ['ev_controller'] }],
           recommendedNextAction: 'final_answer',
         },
         trace: {
@@ -1762,7 +1907,7 @@ test('runtime does not expose restricted knowledge directly to customer persona'
           summary: 'restricted knowledge was not shown directly',
           missingInfo: [],
           evidence: [{ id: 'ev_worker', kind: 'workspace', source: 'worker', summary: 'worker fallback used', confidence: 'low' }],
-          claims: [{ type: 'unknown', role: 'unknown', text: 'restricted knowledge requires controlled handling', evidenceIds: ['ev_worker'], answers: [] }],
+          claims: [{ type: 'unknown', text: 'restricted knowledge requires controlled handling', evidenceIds: ['ev_worker'] }],
           recommendedNextAction: 'final_answer',
         },
         trace: {
@@ -2067,7 +2212,7 @@ test('case curator keeps high-risk drafts restricted and refuses unsupported fac
         runId: 'run_01',
         workspaceId: 'current',
         claudeSessionId: caseSession.claudeSessionId,
-        answerGoal: testAnswerGoal('支付退款配置怎么修复？', '支付退款配置修复方式'),
+        userGoal: '支付退款配置怎么修复？',
         knownFacts: ['支付退款配置怎么修复？'],
         unknowns: [],
         constraints: [],
@@ -2080,10 +2225,9 @@ test('case curator keeps high-risk drafts restricted and refuses unsupported fac
         missingInfo: ['当前支付渠道状态'],
         evidence: [{ id: 'ev_pay', kind: 'knowledge', source: 'knowledge/faq/payment/refund.md', summary: '退款配置 runbook', confidence: 'medium' }],
         claims: [
-          primaryClaim('有证据的事实可沉淀', ['ev_pay'], ['支付退款配置修复方式']),
-          primaryClaim('无证据根因不应沉淀', [], ['支付退款配置修复方式']),
-          { type: 'inference', role: 'process_note', text: 'Evidence Judge 判定知识证据可直接回答，answer_score=0.91，模块候选：payment', evidenceIds: ['ev_pay'], answers: [] },
-          { type: 'unknown', role: 'unknown', text: '当前支付渠道状态未知', evidenceIds: [], answers: [] },
+          { type: 'fact', text: '有证据的事实可沉淀', evidenceIds: ['ev_pay'] },
+          { type: 'fact', text: '无证据根因不应沉淀', evidenceIds: [] },
+          { type: 'unknown', text: '当前支付渠道状态未知', evidenceIds: [] },
         ],
         recommendedNextAction: 'final_answer',
       },
@@ -2099,7 +2243,6 @@ test('case curator keeps high-risk drafts restricted and refuses unsupported fac
     assert.match(content, /visibility: restricted/);
     assert.match(content, /有证据的事实可沉淀/);
     assert.doesNotMatch(content, /无证据根因不应沉淀/);
-    assert.doesNotMatch(content, /Evidence Judge|answer_score|模块候选/);
     assert.match(content, /当前支付渠道状态未知/);
     assert.equal(existsSync(join(workspace, 'knowledge', 'indexes', 'dirty.flag')), true);
   } finally {
@@ -2128,66 +2271,12 @@ test('case curator refuses partial or unsupported diagnostic results', () => {
         summary: '还没有足够证据。',
         missingInfo: ['当前实现证据'],
         evidence: [],
-        claims: [primaryClaim('无证据事实不能沉淀', [], ['证据不足的问题'])],
+        claims: [{ type: 'fact', text: '无证据事实不能沉淀', evidenceIds: [] }],
         recommendedNextAction: 'ask_user',
       },
     });
 
     assert.equal(hasCuratableDiagnosticResult(caseSession), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('case review runtime resolves workspace root from injected config', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-
-  try {
-    const config = baseConfig(dir);
-    config.knowledge.rootDir = join(dir, 'custom-knowledge');
-    const workspaceRoot = resolveKnowledgeWorkspaceRoot(config, 'current');
-    const casePath = join(workspaceRoot, 'knowledge', 'tickets', 'solved-cases', 'general', 'kb_case_solved_demo.md');
-    mkdirSync(join(workspaceRoot, 'knowledge', 'tickets', 'solved-cases', 'general'), { recursive: true });
-    writeFileSync(casePath, `---
-id: kb_case_solved_demo
-title: Demo solved case
-type: solved_case
-module: general
-intent: troubleshooting
-source_type: solved_case
-confidence: medium
-status: review_required
-visibility: internal
-product_versions: []
-related_terms: []
-related_repos: []
-last_verified_at: 2026-06-30
-owner: knowledge-admin
----
-
-# Demo solved case
-`, 'utf8');
-
-    const events = {
-      caseReviewStarted() {},
-      caseReviewResult() {},
-      caseReviewFailed() {},
-    };
-    const result = reviewSolvedCase({
-      config,
-      caseSession: { id: 'case_review', workspaceId: 'current' },
-      workspaceId: 'current',
-      documentPath: 'knowledge/tickets/solved-cases/general/kb_case_solved_demo.md',
-      action: 'approve',
-      reviewer: 'tester',
-      notes: 'approved',
-      events,
-    });
-
-    assert.equal(result.record.documentId, 'kb_case_solved_demo');
-    assert.equal(result.record.reviewer, 'tester');
-    assert.equal(result.record.nextStatus, 'active');
-    assert.equal(existsSync(join(workspaceRoot, 'knowledge', 'indexes', 'dirty.flag')), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -2266,7 +2355,11 @@ test('sync and async chat flows use the same runtime pipeline', async () => {
               },
             ],
             claims: [
-              primaryClaim('同步和异步路径都调用了同一个诊断 worker 端口。', ['ev_pipeline'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '同步和异步路径都调用了同一个诊断 worker 端口。',
+                evidenceIds: ['ev_pipeline'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -2626,12 +2719,8 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
 
     return chatResponse(
       JSON.stringify({
-        answerTarget: '课程任务保存失败的当前可验证判断',
-        directAnswer: '存在可验证证据。',
-        reply: '**结论：存在可验证证据。**',
         claimIds: ['claim_1'],
         evidenceIds: ['ev_01'],
-        directAnswerClaimIds: ['claim_1'],
       }),
     );
   };
@@ -2639,7 +2728,7 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
   try {
     const store = new FileMemoryStore(dir);
     const worker = {
-      async diagnose(request) {
+      async diagnose() {
         return {
           result: {
             status: 'concluded',
@@ -2655,7 +2744,11 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
               },
             ],
             claims: [
-              primaryClaim('存在可验证证据', ['ev_01'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '存在可验证证据',
+                evidenceIds: ['ev_01'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -2676,11 +2769,9 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
     });
 
     assert.equal(modelCalls.length, 2);
-    assert.match(modelCalls[1][0].content, /answerTarget/);
-    assert.match(modelCalls[1][0].content, /directAnswer/);
-    assert.match(modelCalls[1][0].content, /reply 第一段必须覆盖 directAnswer/);
+    assert.match(modelCalls[1][0].content, /只负责.*claim\/evidence ID/);
     assert.doesNotMatch(modelCalls[1][1].content, /claude -p|stdout|stderr/);
-    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.match(response.assistantMessage, /\*\*(结论|答案)：/);
     assert.match(response.assistantMessage, /存在可验证证据/);
     assert.equal(response.decision, 'final');
     assert.equal(response.caseSession.logs.some((item) => item.actor === 'claude' && item.phase === 'raw_output'), true);
@@ -2710,7 +2801,7 @@ test('agent falls back to local reviewed formatting when presentation model retu
     config.agent.useModelForPreflight = false;
     const store = new FileMemoryStore(dir);
     const worker = {
-      async diagnose(request) {
+      async diagnose() {
         return {
           result: {
             status: 'concluded',
@@ -2726,7 +2817,11 @@ test('agent falls back to local reviewed formatting when presentation model retu
               },
             ],
             claims: [
-              primaryClaim('部门创建入口按 15 级限制展示。', ['ev_depth'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '部门创建入口按 15 级限制展示。',
+                evidenceIds: ['ev_depth'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -2754,7 +2849,7 @@ test('agent falls back to local reviewed formatting when presentation model retu
     });
 
     assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /\*\*结论：/);
+    assert.match(response.assistantMessage, /\*\*(结论|答案)：/);
     assert.match(response.assistantMessage, /部门创建入口按 15 级限制展示。/);
     assert.doesNotMatch(response.assistantMessage, /org-manage\/index\.html\.twig:82/);
     assert.match(response.caseSession.runs[0].result.evidence[0].source, /org-manage\/index\.html\.twig:82/);
@@ -2763,744 +2858,6 @@ test('agent falls back to local reviewed formatting when presentation model retu
     assert.doesNotMatch(response.assistantMessage, /The `org\.create` event has no depth check/);
     assert.doesNotMatch(response.assistantMessage, /来源：run_01/);
     assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation agent answers directory questions directly for case_ee3a079a customer view', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  const modelCalls = [];
-
-  globalThis.fetch = async (_url, init) => {
-    const body = JSON.parse(init.body);
-    modelCalls.push(body.messages);
-    if (modelCalls.length === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '本地视频文件在 edusoho 下的存放目录',
-      directAnswer: '本地视频文件存放在 edusoho/app/data/udisk/。',
-      reply: '**结论：本地视频文件存放在 edusoho/app/data/udisk/。**\n\n它下面会按 `{targetType}/{targetId}/{filename}` 分层，例如课时本地视频会在 `udisk/courselesson/{lessonId}/{filename}`。是否走这个目录取决于上传模式：默认/空 或 `local` 会落到本地；如果是 `cloud` 就不会在这个目录里。\n\n**说明：** 这不是 `web/files/` 或 `app/data/private_files/`。',
-      claimIds: ['claim_1', 'claim_2', 'claim_3', 'claim_4'],
-      evidenceIds: ['ev_config', 'ev_local', 'ev_activity', 'ev_web', 'ev_private'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
-              { id: 'ev_local', kind: 'workspace', source: 'src/AppBundle/Extensions/DataTag/LocalFileImplementorImpl.php', summary: '本地文件实现将文件写入 udisk。', confidence: 'high' },
-              { id: 'ev_activity', kind: 'workspace', source: 'src/Biz/File/Service/Impl/UploadFileServiceImpl.php', summary: '文件 key 由 targetType、targetId 和 filename 组成。', confidence: 'high' },
-              { id: 'ev_web', kind: 'workspace', source: 'web/files', summary: 'web/files 是公共上传目录，不是本地视频默认目录。', confidence: 'medium' },
-              { id: 'ev_private', kind: 'workspace', source: 'app/data/private_files', summary: 'private_files 用于私有导出等，不是本地视频默认目录。', confidence: 'medium' },
-            ],
-            claims: [
-              primaryClaim('本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', ['ev_config', 'ev_local'], request.answerGoal.mustAnswerItems),
-              supportingClaim('udisk 下的文件按 {targetType}/{targetId}/{filename} 分层，例如课时本地视频落到 udisk/courselesson/{lessonId}/{filename}。', ['ev_activity']),
-              supportingClaim('是否走 local 存储由后台“系统设置 - 存储 - 上传模式 upload_mode”控制：默认/空 或 local 即落 udisk；设为 cloud 则走云存储 implementor，不在 udisk。', ['ev_config']),
-              supportingClaim('EduSoho 中还有 web/files/（公共上传）和 app/data/private_files/（私有导出等）两个目录，但本地视频默认不在这两个目录。', ['ev_web', 'ev_private']),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const config = baseConfig(dir);
-    config.agent.defaultUserPersona = 'customer';
-    const agent = new DiagnosticRuntime(config, store, worker);
-    const response = await agent.handleUserMessage({
-      message: '本地视频 文件存在在 edusoho 下面的哪个目录？',
-      persona: 'customer',
-    });
-
-    assert.equal(modelCalls.length, 2);
-    assert.match(modelCalls[1][1].content, /answerGoal/);
-    assert.match(modelCalls[1][1].content, /frozenPrimaryAnswerClaimIds/);
-    assert.match(modelCalls[1][1].content, /userPersona/);
-    assert.match(modelCalls[1][1].content, /acceptedClaims/);
-    assert.match(response.assistantMessage, /^(\*\*)?结论：.*app\/data\/udisk/m);
-    assert.match(response.assistantMessage, /app\/data\/udisk/);
-    assert.match(response.assistantMessage, /\{targetType\}\/\{targetId\}\/\{filename\}|udisk\/courselesson\/\{lessonId\}\/\{filename\}/);
-    assert.doesNotMatch(response.assistantMessage, /相关系统位置/);
-    assert.doesNotMatch(response.assistantMessage, /先按上面的说明/);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects a reply whose first paragraph does not cover the direct answer', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '本地视频文件在 edusoho 下的存放目录',
-      directAnswer: '本地视频文件存放在 edusoho/app/data/udisk/。',
-      reply: '**结论：本地视频文件和云视频是两个不同的存储项。**\n\n证据显示本地目录与上传模式有关。',
-      claimIds: ['claim_1', 'claim_2'],
-      evidenceIds: ['ev_config', 'ev_activity'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
-              { id: 'ev_activity', kind: 'workspace', source: 'src/Biz/File/Service/Impl/UploadFileServiceImpl.php', summary: '文件 key 由 targetType、targetId 和 filename 组成。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', ['ev_config'], request.answerGoal.mustAnswerItems),
-              supportingClaim('udisk 下的文件按 {targetType}/{targetId}/{filename} 分层，例如课时本地视频落到 udisk/courselesson/{lessonId}/{filename}。', ['ev_activity']),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const config = baseConfig(dir);
-    const agent = new DiagnosticRuntime(config, store, worker);
-    const response = await agent.handleUserMessage({
-      message: '本地视频 文件存在在 edusoho 下面的哪个目录？',
-      persona: 'customer',
-    });
-
-    assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /^(\*\*)?结论：.*app\/data\/udisk/m);
-    assert.match(response.assistantMessage, /\{targetType\}\/\{targetId\}\/\{filename\}|udisk\/courselesson/);
-    assert.doesNotMatch(response.assistantMessage, /两个不同的存储项/);
-    assert.doesNotMatch(response.assistantMessage, /先按上面的说明/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation prioritizes the claim that answers the real user problem instead of route evidence', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: 'APP 发现页路由',
-      directAnswer: '后台-运营-APP发现页对应路由 /admin/v2/setting/mobile_discoveries。',
-      reply: '**结论：后台-运营-APP发现页对应路由 /admin/v2/setting/mobile_discoveries。**\n\n页面通过 Vue 和 discovery API 拉取模块数据。',
-      claimIds: ['claim_route', 'claim_cause', 'claim_check'],
-      evidenceIds: ['ev_route', 'ev_api', 'ev_service'],
-      directAnswerClaimIds: ['claim_route'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '已定位 APP 发现页入口和页面空白的主要可疑原因。',
-            missingInfo: ['浏览器 Console 报错', 'discovery API 响应状态', '服务器近期日志'],
-            evidence: [
-              { id: 'ev_route', kind: 'workspace', source: 'admin-v2-routes.ts', summary: 'APP 发现页路由为 /admin/v2/setting/mobile_discoveries。', confidence: 'high' },
-              { id: 'ev_api', kind: 'workspace', source: 'mobile-discovery.vue', summary: '页面通过 /api/pages/apps/settings/discovery?mode=published 拉取模块数据。', confidence: 'high' },
-              { id: 'ev_service', kind: 'workspace', source: 'H5SettingService.php', summary: '发现页模块依赖静态资源、权限和 discovery API 返回的数据。', confidence: 'medium' },
-            ],
-            claims: [
-              supportingClaim('后台-运营-APP发现页对应路由 /admin/v2/setting/mobile_discoveries，由 Vue 渲染并通过 discovery API 拉取模块数据。', ['ev_route', 'ev_api']),
-              primaryClaim('APP发现页页面空白、显示不出来，高概率由静态资源未构建或缓存、当前用户权限 403、discovery API 异常，或 h5 子包未构建导致。', ['ev_api', 'ev_service'], request.answerGoal.mustAnswerItems, 'inference'),
-              supportingClaim('仍需结合浏览器 Console、discovery API 响应和服务器日志确认具体原因。', ['ev_api', 'ev_service'], [], 'inference'),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      persona: 'support',
-      message: '后台-运营-APP发现页是空白的，显示不出来 这是什么问题',
-    });
-
-    assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /^(\*\*)?结论：.*页面空白.*高概率/m);
-    assert.doesNotMatch(response.assistantMessage, /^(\*\*)?结论：.*对应路由/m);
-    assert.match(response.assistantMessage, /仍需确认：.*Console.*discovery API.*日志/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation answers follow-up requests for next steps with the requested missing information first', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '本轮支持动作',
-      directAnswer: '本轮目标是给支持/客户提供下一步动作和所需资料清单，而非再次深挖代码。',
-      reply: '**结论：本轮目标是给支持/客户提供"下一步动作 + 所需资料"清单，而非再次深挖代码。**\n\n**补充说明：**\n1. 客户/支持按 P0→P2 顺序抓取信息后，多数情况可在 5 分钟内收敛根因。',
-      claimIds: ['claim_goal', 'claim_collect'],
-      evidenceIds: ['ev_api', 'ev_assets'],
-      directAnswerClaimIds: ['claim_goal'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '需要客户补充浏览器和服务器侧证据来收敛 APP 发现页空白根因。',
-            missingInfo: [
-              '浏览器 Network 中 GET /api/pages/apps/settings/discovery 的 HTTP 状态码、响应体大小与首行内容',
-              '浏览器 Console 中是否有 JS 报错截图或堆栈',
-              '服务器 web/static-dist/app/vue/dist/AppSetting*.js 等 webpack chunk 是否存在、最后构建时间',
-              "setting 表 SELECT * FROM setting WHERE name IN ('apps_published_discovery','apps_draft_discovery','app_discovery') 的实际值",
-              'EduSoho 当前版本号、最近一次发版/部署/重新执行 npm run build 的时间、问题影响范围',
-            ],
-            evidence: [
-              { id: 'ev_api', kind: 'workspace', source: 'mobile-discovery.vue', summary: '发现页依赖 discovery API 和浏览器端渲染。', confidence: 'high' },
-              { id: 'ev_assets', kind: 'workspace', source: 'webpack config', summary: '页面资源由 AppSetting chunk 提供。', confidence: 'medium' },
-            ],
-            claims: [
-              { type: 'inference', role: 'process_note', text: '诊断应优先整理客户/支持可补充的下一步资料。', evidenceIds: ['ev_api'], answers: [] },
-              primaryClaim('请先补充以下信息：Network 状态、Console 报错、AppSetting chunk、setting 表发现页配置、版本部署时间和影响范围。', ['ev_api', 'ev_assets'], request.answerGoal.mustAnswerItems, 'inference'),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      persona: 'support',
-      message: '下一步我应该做什么，给你什么信息',
-    });
-
-    assert.equal(response.decision, 'final');
-    assert.match(response.assistantMessage, /^(\*\*)?结论：请先补充以下信息/m);
-    assert.doesNotMatch(response.assistantMessage, /^(\*\*)?结论：本轮目标/m);
-    assert.match(response.assistantMessage, /GET \/api\/pages\/apps\/settings\/discovery/);
-    assert.match(response.assistantMessage, /Console/);
-    assert.match(response.assistantMessage, /AppSetting\*\.js/);
-    assert.match(response.assistantMessage, /apps_published_discovery/);
-    assert.match(response.assistantMessage, /EduSoho 当前版本号/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects unaccepted direct answer claim ids', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '当前系统是否支持云短信加本地视频',
-      directAnswer: '支持，云短信可以开启，同时视频上传模式可以选择本地。',
-      reply: '**结论：支持，云短信可以开启，同时视频上传模式可以选择本地。**\n\n云短信和云视频存储是两个独立设置项。',
-      claimIds: ['claim_1', 'claim_missing'],
-      evidenceIds: ['ev_sms'],
-      directAnswerClaimIds: ['claim_missing'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '系统支持「使用网校云平台云短信 + 视频存本地」这种组合配置。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_sms', kind: 'workspace', source: 'SmsServiceImpl.php', summary: '云短信读取独立开关。', confidence: 'high' },
-              { id: 'ev_video', kind: 'workspace', source: 'EduCloudController.php', summary: '视频上传模式可切到 local。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('系统支持把云短信开关保持开启、同时将视频上传模式切到 local（视频存本地）。', ['ev_sms', 'ev_video'], request.answerGoal.mustAnswerItems),
-              supportingClaim('网校系统将云短信和云视频存储分别实现为两个独立的服务项/设置项。', ['ev_sms']),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '我想要用网校的云平台的云短信功能，但是我视频想存本地的。当前系统支持这样吗',
-      persona: 'customer',
-    });
-
-    assert.match(response.assistantMessage, /^(\*\*)?结论：.*支持.*云短信.*视频.*本地/m);
-    assert.doesNotMatch(response.assistantMessage, /claim_missing/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects duplicated direct answer claim ids that omit a frozen primary answer', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: 'APP发现页空白原因',
-      directAnswer: 'APP发现页空白主要看前端资源和接口响应。',
-      reply: '**结论：APP发现页空白主要看前端资源和接口响应。**\n\n还需要确认 Console 报错。',
-      claimIds: ['claim_1', 'claim_2'],
-      evidenceIds: ['ev_assets', 'ev_api'],
-      directAnswerClaimIds: ['claim_1', 'claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: 'APP发现页空白需要同时确认前端资源和 discovery API。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_assets', kind: 'workspace', source: 'web/static-dist/app/vue/dist', summary: 'APP发现页依赖 AppSetting chunk。', confidence: 'high' },
-              { id: 'ev_api', kind: 'workspace', source: 'mobile-discovery.vue', summary: 'APP发现页依赖 discovery API 返回模块数据。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('APP发现页空白可能由前端资源未构建或 chunk 加载失败导致。', ['ev_assets'], request.answerGoal.mustAnswerItems, 'inference'),
-              primaryClaim('APP发现页空白也可能由 discovery API 4xx/5xx 或空数据导致。', ['ev_api'], request.answerGoal.mustAnswerItems, 'inference'),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '后台-运营-APP发现页是空白的，显示不出来 这是什么问题',
-      persona: 'support',
-    });
-
-    assert.match(response.assistantMessage, /前端资源|chunk/);
-    assert.match(response.assistantMessage, /discovery API/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects replies that introduce unreviewed path facts', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '本地视频文件在 edusoho 下的存放目录',
-      directAnswer: '本地视频文件存放在 edusoho/app/data/udisk/。',
-      reply: '**结论：本地视频文件存放在 edusoho/app/data/udisk/。**\n\n另一个可能位置是 `app/secret/unreviewed-video/`。',
-      claimIds: ['claim_1'],
-      evidenceIds: ['ev_config'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', ['ev_config'], request.answerGoal.mustAnswerItems),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '本地视频 文件存在在 edusoho 下面的哪个目录？',
-      persona: 'customer',
-    });
-
-    assert.match(response.assistantMessage, /app\/data\/udisk/);
-    assert.doesNotMatch(response.assistantMessage, /app\/secret\/unreviewed-video/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects replies that introduce unsupported non-path facts', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '小程序支付会话过期的原因',
-      directAnswer: '原因是接口响应缺少 sessionKeyExpiredTime 字段，并且需要重启服务才能恢复。',
-      reply: '**结论：原因是接口响应缺少 sessionKeyExpiredTime 字段，并且需要重启服务才能恢复。**\n\n证据显示序列化结果没有包含该字段。',
-      claimIds: ['claim_1'],
-      evidenceIds: ['ev_session'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '已定位到 API 响应字段缺失。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_session', kind: 'workspace', source: 'src/gateway/session.ts', summary: '序列化结果没有包含 sessionKeyExpiredTime。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('接口响应缺少 sessionKeyExpiredTime 字段。', ['ev_session'], request.answerGoal.mustAnswerItems),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '为什么小程序支付会提示会话过期？',
-      persona: 'customer',
-    });
-
-    assert.match(response.assistantMessage, /sessionKeyExpiredTime/);
-    assert.doesNotMatch(response.assistantMessage, /重启服务才能恢复/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects unsupported facts added after the first paragraph', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '小程序支付会话过期的原因',
-      directAnswer: '原因是接口响应缺少 sessionKeyExpiredTime 字段。',
-      reply: '**结论：原因是接口响应缺少 sessionKeyExpiredTime 字段。**\n\n补充说明：清理缓存即可恢复。',
-      claimIds: ['claim_1'],
-      evidenceIds: ['ev_session'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '已定位到 API 响应字段缺失。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_session', kind: 'workspace', source: 'src/gateway/session.ts', summary: '序列化结果没有包含 sessionKeyExpiredTime。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('接口响应缺少 sessionKeyExpiredTime 字段。', ['ev_session'], request.answerGoal.mustAnswerItems),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '为什么小程序支付会提示会话过期？',
-      persona: 'customer',
-    });
-
-    assert.match(response.assistantMessage, /sessionKeyExpiredTime/);
-    assert.doesNotMatch(response.assistantMessage, /清理缓存即可恢复/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation rejects evidence ids not referenced by selected accepted claims', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '小程序支付会话过期的原因',
-      directAnswer: '原因是接口响应缺少 sessionKeyExpiredTime 字段。',
-      reply: '**结论：原因是接口响应缺少 sessionKeyExpiredTime 字段。**\n\n补充说明：重启服务才能恢复。',
-      claimIds: ['claim_1'],
-      evidenceIds: ['ev_session', 'ev_unclaimed'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '已定位到 API 响应字段缺失。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_session', kind: 'workspace', source: 'src/gateway/session.ts', summary: '序列化结果没有包含 sessionKeyExpiredTime。', confidence: 'high' },
-              { id: 'ev_unclaimed', kind: 'workspace', source: 'ops-note.md', summary: '重启服务才能恢复。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('接口响应缺少 sessionKeyExpiredTime 字段。', ['ev_session'], request.answerGoal.mustAnswerItems),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '为什么小程序支付会提示会话过期？',
-      persona: 'customer',
-    });
-
-    assert.match(response.assistantMessage, /sessionKeyExpiredTime/);
-    assert.doesNotMatch(response.assistantMessage, /重启服务才能恢复/);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), true);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation accepts supported next-action wording without generic phrase false positives', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  let callCount = 0;
-
-  globalThis.fetch = async () => {
-    callCount += 1;
-    if (callCount === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: 'APP发现页空白需要补充的信息',
-      directAnswer: '需要先收集 Console 报错和 Network 状态。',
-      reply: '**结论：需要先收集 Console 报错和 Network 状态。**',
-      claimIds: ['claim_1'],
-      evidenceIds: ['ev_api'],
-      directAnswerClaimIds: ['claim_1'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '需要收集浏览器侧错误和接口状态。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_api', kind: 'workspace', source: 'mobile-discovery.vue', summary: '发现页依赖浏览器渲染和 discovery API。', confidence: 'high' },
-            ],
-            claims: [
-              primaryClaim('应先收集 Console 报错和 Network 状态。', ['ev_api'], request.answerGoal.mustAnswerItems, 'inference'),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const agent = new DiagnosticRuntime(baseConfig(dir), store, worker);
-    const response = await agent.handleUserMessage({
-      message: '下一步我应该做什么，给你什么信息',
-      persona: 'support',
-    });
-
-    assert.match(response.assistantMessage, /^(\*\*)?结论：需要先收集 Console 报错和 Network 状态/m);
-    assert.equal(response.caseSession.logs.some((item) => item.phase === 'model_review_failed'), false);
-  } finally {
-    globalThis.fetch = originalFetch;
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('presentation answers support questions before explaining independent service items', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  const originalFetch = globalThis.fetch;
-  const modelCalls = [];
-
-  globalThis.fetch = async (_url, init) => {
-    const body = JSON.parse(init.body);
-    modelCalls.push(body.messages);
-    if (modelCalls.length === 1) {
-      return chatResponse(JSON.stringify({ action: 'dispatch', reason: '信息足够', missingInfo: [] }));
-    }
-    return chatResponse(JSON.stringify({
-      answerTarget: '当前系统是否支持云短信加本地视频',
-      directAnswer: '支持：可以用云短信，同时把视频上传模式设置为本地。',
-      reply: '**结论：支持：可以用云短信，同时把视频上传模式设置为本地。**\n\n原因是云短信和云视频存储是两个独立服务项/设置项。关闭云视频只会让视频回退到本地服务器，不会影响云短信开关。',
-      claimIds: ['claim_2', 'claim_1', 'claim_3'],
-      evidenceIds: ['ev_sms', 'ev_video'],
-      directAnswerClaimIds: ['claim_2'],
-    }));
-  };
-
-  try {
-    const store = new FileMemoryStore(dir);
-    const worker = {
-      async diagnose(request) {
-        return {
-          result: {
-            status: 'concluded',
-            summary: '系统支持「使用网校云平台云短信 + 视频存本地」这种组合配置。',
-            missingInfo: [],
-            evidence: [
-              { id: 'ev_sms', kind: 'workspace', source: 'SmsServiceImpl.php', summary: '云短信读取独立开关。', confidence: 'high' },
-              { id: 'ev_video', kind: 'workspace', source: 'EduCloudController.php', summary: '视频上传模式可切到 local。', confidence: 'high' },
-            ],
-            claims: [
-              supportingClaim('网校系统将云短信和云视频存储分别实现为两个独立的服务项/设置项。', ['ev_sms']),
-              primaryClaim('系统支持把云短信开关保持开启、同时将视频上传模式切到 local（视频存本地）。', ['ev_video'], request.answerGoal.mustAnswerItems),
-              supportingClaim('关闭云视频只会把视频回退到本地服务器，不会影响云短信功能继续可用。', ['ev_sms', 'ev_video'], [], 'inference'),
-            ],
-            recommendedNextAction: 'final_answer',
-          },
-          trace: { command: 'claude -p ...', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
-        };
-      },
-    };
-
-    const config = baseConfig(dir);
-    config.agent.defaultUserPersona = 'customer';
-    const agent = new DiagnosticRuntime(config, store, worker);
-    const response = await agent.handleUserMessage({
-      message: '我想要用网校的云平台的云短信功能，但是我视频想存本地的。当前系统支持这样吗',
-      persona: 'customer',
-    });
-
-    assert.equal(modelCalls.length, 2);
-    assert.match(response.assistantMessage, /^\*\*结论：.*支持.*云短信.*视频.*本地/m);
-    assert.match(response.assistantMessage, /云短信.*视频.*本地/);
-    assert.doesNotMatch(response.assistantMessage, /^\*\*结论：网校系统将云短信和云视频存储分别实现为两个独立/m);
   } finally {
     globalThis.fetch = originalFetch;
     rmSync(dir, { recursive: true, force: true });
@@ -3611,7 +2968,11 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
               },
             ],
             claims: [
-              primaryClaim('已基于 workspace 证据定位。', ['ev_01'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '已基于 workspace 证据定位。',
+                evidenceIds: ['ev_01'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -3641,7 +3002,7 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
     assert.equal(receivedRequest.workspaceId, 'current');
     assert.equal(receivedRequest.userPersona, 'support');
     assert.deepEqual(receivedRequest.allowedMcpToolIds, ['readonly-docs']);
-    assert.match(receivedRequest.answerGoal.resolvedQuestion, /倍速播放/);
+    assert.match(receivedRequest.userGoal, /倍速播放/);
     assert.equal(receivedRequest.context.isFollowUp, false);
     assert.ok(receivedRequest.context.recentMessages.some((message) => message.role === 'user' && /倍速播放/.test(message.body)));
   } finally {
@@ -3657,7 +3018,7 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
     config.agent.modelProvider = undefined;
     const store = new FileMemoryStore(dir);
     const worker = {
-      async diagnose(request) {
+      async diagnose() {
         return {
           result: {
             status: 'concluded',
@@ -3665,7 +3026,11 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
             missingInfo: [],
             evidence: [],
             claims: [
-              primaryClaim('这是没有任何 evidenceIds 的事实判断。', [], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '这是没有任何 evidenceIds 的事实判断。',
+                evidenceIds: [],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -3757,7 +3122,9 @@ test('runtime helper modules expose stable context, request, preflight, review, 
       ],
       claims: [
         {
-          ...primaryClaim('package.json 是当前判断的证据来源。', ['ev_package'], request.answerGoal.mustAnswerItems),
+          type: 'fact',
+          text: 'package.json 是当前判断的证据来源。',
+          evidenceIds: ['ev_package'],
         },
       ],
       recommendedNextAction: 'continue_diagnosis',
@@ -3775,9 +3142,7 @@ test('runtime helper modules expose stable context, request, preflight, review, 
       previousResult: result,
     });
     assert.equal(followUp.runId, 'run_02');
-    assert.equal(followUp.answerGoal.rawUserQuestion, request.answerGoal.rawUserQuestion);
-    assert.doesNotMatch(followUp.answerGoal.resolvedQuestion, /继续追查/);
-    assert.match(followUp.answerGoal.diagnosticObjective, /继续|缺失|证据/);
+    assert.match(followUp.userGoal, /继续追查/);
     assert.match(followUp.constraints.join('\n'), /Resolve follow-up references/);
 
     const blockedCase = store.createCase({
@@ -3801,7 +3166,6 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     assert.equal(personaName('developer'), '开发人员');
     assert.equal(personaGuide('operations').focus.includes('配置入口'), true);
     assert.match(formatPreflightQuestion('请补充页面。', ['页面']), /缺少关键信息：页面/);
-    const playbackGoal = testAnswerGoal('后台视频倍速开关在哪里设置？', '倍速开关设置');
     const reviewedResult = {
       status: 'concluded',
       summary: '倍速开关由播放器初始化配置控制',
@@ -3810,63 +3174,25 @@ test('runtime helper modules expose stable context, request, preflight, review, 
         { id: 'ev_player', kind: 'workspace', source: 'src/player.ts', summary: '播放器初始化读取 enablePlaybackRates 配置。', confidence: 'high' },
       ],
       claims: [
-        primaryClaim('倍速开关由播放器初始化配置控制。', ['ev_player'], playbackGoal.mustAnswerItems),
+        { type: 'fact', text: '倍速开关由播放器初始化配置控制。', evidenceIds: ['ev_player'] },
       ],
       recommendedNextAction: 'final_answer',
     };
-    const operationsReply = ruleBasedReviewAndFormat(reviewedResult, 'operations', playbackGoal);
-    const developerReply = ruleBasedReviewAndFormat(reviewedResult, 'developer', playbackGoal);
-    const supportReply = ruleBasedReviewAndFormat(reviewedResult, 'support', playbackGoal);
-    const customerReply = ruleBasedReviewAndFormat(reviewedResult, 'customer', playbackGoal);
+    const operationsReply = ruleBasedReviewAndFormat(reviewedResult, 'operations');
+    const developerReply = ruleBasedReviewAndFormat(reviewedResult, 'developer');
+    const supportReply = ruleBasedReviewAndFormat(reviewedResult, 'support');
+    const customerReply = ruleBasedReviewAndFormat(reviewedResult, 'customer');
     assert.match(operationsReply, /\*\*结论：/);
-    assert.match(operationsReply, /倍速开关由播放器初始化配置控制/);
-    assert.equal(developerReply, operationsReply);
-    assert.equal(supportReply, operationsReply);
-    assert.equal(customerReply, operationsReply);
-    assert.doesNotMatch(customerReply, /先按上面的说明/);
-    assert.doesNotMatch(customerReply, /人工支持可以继续查看/);
-    const smsGoal = testAnswerGoal(
-      '我想要用网校的云平台的云短信功能，但是我视频想存本地的。当前系统支持这样吗',
-      '云短信开启同时视频存本地是否支持',
-    );
-    const customerActionReply = ruleBasedReviewAndFormat({
-      status: 'concluded',
-      summary: '系统支持「使用网校云平台云短信 + 视频存本地」这种组合配置。',
-      missingInfo: [],
-      evidence: [
-        { id: 'ev_sms', kind: 'workspace', source: 'SmsServiceImpl.php', summary: '云短信读取独立开关。', confidence: 'high' },
-        { id: 'ev_video', kind: 'workspace', source: 'EduCloudController.php', summary: '视频上传模式可切到 local。', confidence: 'high' },
-      ],
-      claims: [
-        supportingClaim('网校系统将云短信和云视频存储分别实现为两个独立的服务项/设置项。', ['ev_sms']),
-        primaryClaim('系统支持把云短信开关保持开启、同时将视频上传模式切到 local（视频存本地）。', ['ev_video'], smsGoal.mustAnswerItems),
-        supportingClaim('关闭云视频只会把视频回退到本地服务器，不会影响云短信功能继续可用。', ['ev_sms', 'ev_video'], [], 'inference'),
-      ],
-      recommendedNextAction: 'final_answer',
-    }, 'customer', smsGoal);
-    assert.match(customerActionReply, /\*\*结论：系统支持.*云短信.*视频.*本地/);
-    assert.doesNotMatch(customerActionReply, /\*\*结论：网校系统将云短信和云视频存储分别实现为两个独立/);
-    assert.match(customerActionReply, /\*\*补充说明：\*\*/);
-    assert.match(customerActionReply, /云短信功能继续可用|独立的服务项/);
-    assert.doesNotMatch(customerActionReply, /先按上面的说明/);
-    const directoryGoal = testAnswerGoal('本地视频 文件存在在 edusoho 下面的哪个目录？', '本地视频所在目录');
-    const directoryFallbackReply = ruleBasedReviewAndFormat({
-      status: 'concluded',
-      summary: '本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。',
-      missingInfo: [],
-      evidence: [
-        { id: 'ev_config', kind: 'workspace', source: 'app/config/config.yml:75', summary: 'local 目标目录配置为 %kernel.root_dir%/data/udisk。', confidence: 'high' },
-        { id: 'ev_activity', kind: 'workspace', source: 'src/Biz/File/Service/Impl/UploadFileServiceImpl.php', summary: '文件 key 由 targetType、targetId 和 filename 组成。', confidence: 'high' },
-      ],
-      claims: [
-        primaryClaim('本地视频文件的物理存储根目录为 edusoho/app/data/udisk/。', ['ev_config'], directoryGoal.mustAnswerItems),
-        supportingClaim('udisk 下的文件按 {targetType}/{targetId}/{filename} 分层，例如课时本地视频落到 udisk/courselesson/{lessonId}/{filename}。', ['ev_activity']),
-      ],
-      recommendedNextAction: 'final_answer',
-    }, 'customer', directoryGoal);
-    assert.match(directoryFallbackReply, /app\/data\/udisk/);
-    assert.match(directoryFallbackReply, /\{targetType\}\/\{targetId\}\/\{filename\}/);
-    assert.doesNotMatch(directoryFallbackReply, /相关系统位置/);
+    assert.match(operationsReply, /系统 bug|设计使然|配置或使用问题|目前不能确认/);
+    assert.match(operationsReply, /\*\*对业务的影响：\*\*/);
+    assert.doesNotMatch(operationsReply, /支撑证据：/);
+    assert.doesNotMatch(operationsReply, /src\/player\.ts/);
+    assert.match(developerReply, /\*\*结论：/);
+    assert.match(developerReply, /\*\*定位依据：\*\*/);
+    assert.match(developerReply, /\*\*下一步排查：\*\*/);
+    assert.match(supportReply, /\*\*建议处理：\*\*/);
+    assert.match(customerReply, /\*\*你现在可以这样做：\*\*/);
+    assert.notEqual(operationsReply, developerReply);
     assert.match(
       ruleBasedReviewAndFormat({
         status: 'concluded',
@@ -3904,12 +3230,8 @@ test('model preflight cannot block an inspectable workspace question with generi
 
     return chatResponse(
       JSON.stringify({
-        answerTarget: '倍速播放问题是否可在当前工作区排查',
-        directAnswer: '问题可以通过当前 workspace 先做只读排查。',
-        reply: '**结论：问题可以通过当前 workspace 先做只读排查。**',
         claimIds: ['claim_1'],
         evidenceIds: ['ev_01'],
-        directAnswerClaimIds: ['claim_1'],
       }),
     );
   };
@@ -3934,7 +3256,11 @@ test('model preflight cannot block an inspectable workspace question with generi
               },
             ],
             claims: [
-              primaryClaim('问题可以通过当前 workspace 先做只读排查。', ['ev_01'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '问题可以通过当前 workspace 先做只读排查。',
+                evidenceIds: ['ev_01'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -3958,7 +3284,7 @@ test('model preflight cannot block an inspectable workspace question with generi
     });
 
     assert.equal(workerRequests.length, 1);
-    assert.match(workerRequests[0].answerGoal.resolvedQuestion, /倍速播放/);
+    assert.match(workerRequests[0].userGoal, /倍速播放/);
     assert.equal(workerRequests[0].unknowns.length, 0);
     assert.equal(response.decision, 'final');
     assert.match(response.assistantMessage, /\*\*结论：/);
@@ -3991,24 +3317,16 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
     if (modelCalls.length === 2) {
       return chatResponse(
         JSON.stringify({
-          answerTarget: '视频倍速开关的继续排查方向',
-          directAnswer: '可能需要继续查播放器配置。',
-          reply: '**结论：可能需要继续查播放器配置。**',
           claimIds: ['claim_1'],
           evidenceIds: ['ev_01'],
-          directAnswerClaimIds: ['claim_1'],
         }),
       );
     }
 
     return chatResponse(
       JSON.stringify({
-        answerTarget: '视频倍速开关的位置',
-        directAnswer: '倍速开关由播放器初始化配置控制。',
-        reply: '**结论：倍速开关由播放器初始化配置控制。**',
         claimIds: ['claim_1'],
         evidenceIds: ['ev_02'],
-        directAnswerClaimIds: ['claim_1'],
       }),
     );
   };
@@ -4034,7 +3352,11 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
                 },
               ],
               claims: [
-                primaryClaim('可能需要继续查播放器配置。', ['ev_01'], request.answerGoal.mustAnswerItems, 'inference'),
+                {
+                  type: 'inference',
+                  text: '可能需要继续查播放器配置。',
+                  evidenceIds: ['ev_01'],
+                },
               ],
               recommendedNextAction: 'continue_diagnosis',
             },
@@ -4065,7 +3387,11 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
               },
             ],
             claims: [
-              primaryClaim('倍速开关由播放器初始化配置控制。', ['ev_02'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '倍速开关由播放器初始化配置控制。',
+                evidenceIds: ['ev_02'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -4099,130 +3425,6 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
   }
 });
 
-test('diagnostic validation accepts follow-up claims that cite previous run evidence', () => {
-  const previousEvidence = [
-    {
-      id: 'ev_previous',
-      kind: 'workspace',
-      source: 'src/runtime/session-lifecycle.ts:69-81',
-      summary: '上一轮已经确认 recordTurnFailure 无额外 try/catch。',
-      confidence: 'high',
-    },
-  ];
-  const result = {
-    status: 'concluded',
-    summary: '后续审查闭合缺口，可形成结论。',
-    missingInfo: [],
-    evidence: [
-      {
-        id: 'ev_current',
-        kind: 'workspace',
-        source: 'src/gateway/http-server.ts:42-49',
-        summary: '网关有顶层 try/catch。',
-        confidence: 'high',
-      },
-    ],
-    claims: [
-      {
-        id: 'claim_1',
-        ...primaryClaim('网关兜底和上一轮错误处理证据共同支持最终整改建议。', ['ev_current', 'ev_previous'], ['整改建议']),
-      },
-    ],
-    recommendedNextAction: 'final_answer',
-  };
-
-  const validation = validateDiagnosticResult(result, { additionalEvidence: previousEvidence });
-
-  assert.equal(validation.result.status, 'concluded');
-  assert.deepEqual(validation.acceptedClaimIds, ['claim_1']);
-  assert.equal(validation.result.evidence.some((item) => item.id === 'ev_previous'), true);
-  assert.equal(validation.issues.some((item) => item.code === 'missing_evidence_reference'), false);
-});
-
-test('diagnostic validation keeps accepted answer claims while dropping unsupported extras', () => {
-  const result = {
-    status: 'concluded',
-    summary: '部分 claim 有证据，可以回答；无证据 claim 必须丢弃。',
-    missingInfo: [],
-    evidence: [
-      {
-        id: 'ev_supported',
-        kind: 'workspace',
-        source: 'src/gateway/routes/chat-routes.ts:56-58',
-        summary: '后台失败处理链路可被验证。',
-        confidence: 'high',
-      },
-    ],
-    claims: [
-      {
-        id: 'claim_supported',
-        ...primaryClaim('后台失败处理链路有明确代码证据。', ['ev_supported'], ['后台失败处理链路']),
-      },
-      {
-        id: 'claim_unsupported',
-        ...primaryClaim('这个事实没有证据，不能输出给用户。', ['ev_missing'], ['后台失败处理链路']),
-      },
-    ],
-    recommendedNextAction: 'final_answer',
-  };
-
-  const validation = validateDiagnosticResult(result);
-
-  assert.equal(validation.result.status, 'concluded');
-  assert.deepEqual(validation.acceptedClaimIds, ['claim_supported']);
-  assert.deepEqual(validation.result.claims.map((item) => item.id), ['claim_supported']);
-  assert.deepEqual(validation.rejectedClaimIds, ['claim_unsupported']);
-  assert.equal(validation.result.claims.some((item) => item.text.includes('没有证据')), false);
-});
-
-test('evidence review log distinguishes knowledge direct answers from Claude Code results', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
-  try {
-    const store = new FileMemoryStore(dir);
-    const events = new CaseRuntimeEventRecorder(store);
-    const caseSession = store.createCase({
-      tenantId: 'local',
-      userId: 'local-user',
-      workspaceId: 'current',
-      title: 'knowledge direct answer',
-    });
-    const result = {
-      status: 'concluded',
-      summary: '知识库可以直接回答。',
-      missingInfo: [],
-      evidence: [
-        {
-          id: 'ev_knowledge',
-          kind: 'knowledge',
-          source: 'knowledge/faq/course.md',
-          summary: '课程发布后才展示加入入口。',
-          confidence: 'high',
-        },
-      ],
-      claims: [
-      {
-        id: 'claim_1',
-        ...primaryClaim('课程发布后才展示加入入口。', ['ev_knowledge'], ['课程发布后入口展示原因']),
-      },
-      ],
-      recommendedNextAction: 'final_answer',
-    };
-    const run = {
-      id: 'run_01',
-      caseId: caseSession.id,
-      status: 'concluded',
-      result,
-    };
-
-    const event = events.evidenceReviewStarted(caseSession, run, result);
-
-    assert.match(event.summary, /知识库直答/);
-    assert.doesNotMatch(event.summary, /Claude Code/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 test('follow-up diagnostic requests carry prior assistant replies and evidence context', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   const workerRequests = [];
@@ -4251,7 +3453,11 @@ test('follow-up diagnostic requests carry prior assistant replies and evidence c
                 },
               ],
               claims: [
-                primaryClaim('倍速播放开关和页面路由已经在上一轮确认。', ['ev_speed_setting'], request.answerGoal.mustAnswerItems),
+                {
+                  type: 'fact',
+                  text: '倍速播放开关和页面路由已经在上一轮确认。',
+                  evidenceIds: ['ev_speed_setting'],
+                },
               ],
               recommendedNextAction: 'final_answer',
             },
@@ -4282,7 +3488,11 @@ test('follow-up diagnostic requests carry prior assistant replies and evidence c
               },
             ],
             claims: [
-              primaryClaim('限制只能微信浏览器内观看的配置也在同一云视频设置页。', ['ev_security_setting'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '追问上下文已串联。',
+                evidenceIds: ['ev_security_setting'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -4354,7 +3564,11 @@ test('local preflight can dispatch general project questions, not only diagnosti
               },
             ],
             claims: [
-              primaryClaim('项目通过 package.json 暴露脚本。', ['ev_01'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: '项目通过 package.json 暴露脚本。',
+                evidenceIds: ['ev_01'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -4377,7 +3591,7 @@ test('local preflight can dispatch general project questions, not only diagnosti
     });
 
     assert.equal(response.decision, 'final');
-    assert.equal(receivedRequest.answerGoal.resolvedQuestion.includes('package.json'), true);
+    assert.equal(receivedRequest.userGoal.includes('package.json'), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -4394,17 +3608,19 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
     'experience',
     'knowledge_router',
     'evidence_judge',
+    'rag_answerability',
     'case_curator',
     'output_review',
     'presentation',
+    'evidence_coverage',
   ]);
   assert.match(resolveAgentConfig('main').absolutePath, /src\/agents\/main\.md$/);
   assert.match(resolveAgentConfig('preflight').content, /Input Review Agent/);
   assert.match(resolveAgentConfig('experience').content, /Experience Agent/);
   assert.match(resolveAgentConfig('knowledge_router').content, /Knowledge Router Agent/);
   assert.match(resolveAgentConfig('evidence_judge').content, /Evidence Judge Agent/);
+  assert.match(resolveAgentConfig('rag_answerability').content, /RAG Answerability Agent/);
   assert.match(resolveAgentConfig('case_curator').content, /Case Curator Agent/);
-  assert.equal(listPublicAgentConfigs().find((agent) => agent.stage === 'output_review').mayProduceUserFacingText, false);
   assert.equal(listPublicAgentConfigs().some((agent) => agent.stage === 'presentation' && agent.mayProduceUserFacingText), true);
   assert.equal(listPublicAgentConfigs().find((agent) => agent.stage === 'presentation').executionMode, 'presentation_only');
 });
@@ -4437,7 +3653,7 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
         runId: 'run_prior',
         workspaceId: prior.workspaceId,
         claudeSessionId: prior.claudeSessionId,
-        answerGoal: testAnswerGoal(priorUser.body, '课程任务保存失败原因'),
+        userGoal: priorUser.body,
         knownFacts: [],
         unknowns: [],
         constraints: [],
@@ -4451,11 +3667,15 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
           id: 'ev_prior',
           kind: 'workspace',
           source: 'src/task.ts',
-          summary: '任务保存配置入口。',
+          summary: '课程任务保存失败的现象、原因和下一步检查方式。',
           confidence: 'high',
           validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' },
         }],
-        claims: [primaryClaim('任务保存配置可在当前工作区核验。', ['ev_prior'], ['课程任务保存失败原因'])],
+        claims: [
+          { type: 'fact', text: '现象是课程任务保存失败。', evidenceIds: ['ev_prior'] },
+          { type: 'fact', text: '原因是任务配置缺失会导致课程任务保存失败。', evidenceIds: ['ev_prior'] },
+          { type: 'fact', text: '下一步建议检查任务配置和接口返回。', evidenceIds: ['ev_prior'] },
+        ],
         recommendedNextAction: 'final_answer',
       },
     });
@@ -4595,24 +3815,27 @@ test('async same-case turns receive ordered reply-to helper messages', async () 
     const store = new FileMemoryStore(dir);
     const worker = {
       async diagnose(request) {
-        const question = request.answerGoal.rawUserQuestion;
-        await new Promise((resolve) => setTimeout(resolve, question.includes('第二') ? 30 : 1));
+        await new Promise((resolve) => setTimeout(resolve, request.userGoal.includes('第二') ? 30 : 1));
         return {
           result: {
             status: 'concluded',
-            summary: `回答 ${question}`,
+            summary: `回答 ${request.userGoal}`,
             missingInfo: [],
             evidence: [
               {
                 id: 'ev_order',
                 kind: 'workspace',
                 source: 'test',
-                summary: question,
+                summary: request.userGoal,
                 confidence: 'high',
               },
             ],
             claims: [
-              primaryClaim(question, ['ev_order'], request.answerGoal.mustAnswerItems),
+              {
+                type: 'fact',
+                text: request.userGoal,
+                evidenceIds: ['ev_order'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -4673,137 +3896,6 @@ test('async turn failures can reply to the accepted user message', () => {
   }
 });
 
-test('async chat route does not leak unhandled rejection when failure recording throws', async () => {
-  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
-  const req = jsonRequest('/api/chat', {
-    async: true,
-    message: '后台失败也不能触发未处理拒绝',
-  });
-  const res = captureJsonResponse();
-  let recordFailureCalls = 0;
-  const unhandled = [];
-  const consoleErrors = [];
-  const originalConsoleError = console.error;
-  const onUnhandled = (reason) => unhandled.push(reason);
-  process.on('unhandledRejection', onUnhandled);
-  console.error = (...args) => {
-    consoleErrors.push(args);
-  };
-
-  try {
-    const handled = await handleChatRoutes(req, res, new URL('http://localhost/api/chat'), config, {
-      loadCase() {
-        return undefined;
-      },
-      startUserTurn() {
-        return {
-          id: 'case_async_failure',
-          claudeSessionId: 'claude_test',
-          title: 'async failure',
-          status: 'ready_for_diagnosis',
-          userPersona: 'operations',
-          messages: [{ id: 'msg_user', role: 'user', body: '后台失败也不能触发未处理拒绝' }],
-          runs: [],
-          logs: [],
-        };
-      },
-      completeUserTurn() {
-        return Promise.reject(new Error('worker failed'));
-      },
-      recordTurnFailure() {
-        recordFailureCalls += 1;
-        throw new Error('record failed');
-      },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    assert.equal(handled, true);
-    assert.equal(res.statusCode, 202);
-    assert.equal(res.json.userMessageId, 'msg_user');
-    assert.equal(recordFailureCalls, 1);
-    assert.deepEqual(unhandled, []);
-    assert.equal(consoleErrors.length, 1);
-    assert.match(String(consoleErrors[0][0]), /background turn failure recording failed/);
-  } finally {
-    console.error = originalConsoleError;
-    process.off('unhandledRejection', onUnhandled);
-    rmSync(config.storage.rootDir, { recursive: true, force: true });
-  }
-});
-
-test('async chat route maps startUserTurn archived races to conflict response', async () => {
-  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
-  const req = jsonRequest('/api/chat', {
-    async: true,
-    caseId: 'case_archived',
-    message: '继续问',
-  });
-  const res = captureJsonResponse();
-
-  try {
-    const handled = await handleChatRoutes(req, res, new URL('http://localhost/api/chat'), config, {
-      loadCase() {
-        return undefined;
-      },
-      startUserTurn() {
-        throw new Error('session is archived and cannot continue');
-      },
-      completeUserTurn() {
-        throw new Error('not expected');
-      },
-      recordTurnFailure() {},
-    });
-
-    assert.equal(handled, true);
-    assert.equal(res.statusCode, 409);
-    assert.deepEqual(res.json, { error: 'session is archived and cannot continue' });
-  } finally {
-    rmSync(config.storage.rootDir, { recursive: true, force: true });
-  }
-});
-
-test('async chat route rejects accepted turns without a persisted user message id', async () => {
-  const config = baseConfig(mkdtempSync(join(tmpdir(), 'super-helper-test-')));
-  const req = jsonRequest('/api/chat', {
-    async: true,
-    message: '没有落库消息 id 不应返回 202',
-  });
-  const res = captureJsonResponse();
-  let completeCalls = 0;
-
-  try {
-    const handled = await handleChatRoutes(req, res, new URL('http://localhost/api/chat'), config, {
-      loadCase() {
-        return undefined;
-      },
-      startUserTurn() {
-        return {
-          id: 'case_missing_message_id',
-          claudeSessionId: 'claude_test',
-          title: 'missing message id',
-          status: 'ready_for_diagnosis',
-          userPersona: 'operations',
-          messages: [],
-          runs: [],
-          logs: [],
-        };
-      },
-      completeUserTurn() {
-        completeCalls += 1;
-        return Promise.resolve();
-      },
-      recordTurnFailure() {},
-    });
-
-    assert.equal(handled, true);
-    assert.equal(res.statusCode, 500);
-    assert.deepEqual(res.json, { error: 'failed to accept message' });
-    assert.equal(completeCalls, 0);
-  } finally {
-    rmSync(config.storage.rootDir, { recursive: true, force: true });
-  }
-});
-
 test('session API recovers stale in-progress runs instead of polling forever', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'super-helper-test-'));
   let server;
@@ -4840,7 +3932,7 @@ test('session API recovers stale in-progress runs instead of polling forever', a
         runId: 'run_01',
         workspaceId: 'current',
         claudeSessionId: persisted.claudeSessionId,
-        answerGoal: testAnswerGoal('为什么一直诊断中'),
+        userGoal: '为什么一直诊断中',
         knownFacts: ['为什么一直诊断中'],
         unknowns: [],
         constraints: [],

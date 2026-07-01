@@ -50,6 +50,10 @@ export interface SuperHelperConfig {
     tone: 'calm_professional' | 'concise' | 'technical';
     modelProvider?: string;
     useModelForPreflight: boolean;
+    useModelForRagAnswerability?: boolean;
+    ragAnswerabilityTopN?: number;
+    useModelForEvidenceCoverage?: boolean;
+    evidenceCoverageTopN?: number;
     defaultUserPersona: UserPersona;
     contextWindowTokens: number;
   };
@@ -127,6 +131,10 @@ export function defaultConfig(): SuperHelperConfig {
       language: 'zh-CN',
       tone: 'calm_professional',
       useModelForPreflight: false,
+      useModelForRagAnswerability: true,
+      ragAnswerabilityTopN: 3,
+      useModelForEvidenceCoverage: true,
+      evidenceCoverageTopN: 3,
       defaultUserPersona: 'operations',
       contextWindowTokens: 200_000,
     },
@@ -205,7 +213,9 @@ export function ensureConfig(homeDir = DEFAULT_HOME): SuperHelperConfig {
     return config;
   }
 
-  return loadConfig(path);
+  const config = loadConfig(path);
+  saveConfig(config);
+  return config;
 }
 
 export function loadConfig(path = configPath()): SuperHelperConfig {
@@ -230,6 +240,18 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
   merged.storage.rootDir = resolve(merged.storage.rootDir || DEFAULT_HOME);
   merged.knowledge.rootDir = resolve(parsed.knowledge?.rootDir || join(merged.storage.rootDir, 'knowledge'));
   merged.agent.modelProvider = selectActiveModelProvider(merged);
+  merged.agent.useModelForRagAnswerability =
+    parsed.agent?.useModelForRagAnswerability ??
+    parsed.agent?.useModelForEvidenceCoverage ??
+    merged.agent.useModelForRagAnswerability ??
+    true;
+  merged.agent.useModelForEvidenceCoverage = merged.agent.useModelForRagAnswerability;
+  merged.agent.ragAnswerabilityTopN =
+    parsed.agent?.ragAnswerabilityTopN ??
+    parsed.agent?.evidenceCoverageTopN ??
+    merged.agent.ragAnswerabilityTopN ??
+    3;
+  merged.agent.evidenceCoverageTopN = merged.agent.ragAnswerabilityTopN;
   // 0.2 used to be the implicit default. Treat that legacy value as unset.
   if (parsed.claude?.maxBudgetUsd === 0.2) {
     delete merged.claude.maxBudgetUsd;

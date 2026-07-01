@@ -11,16 +11,7 @@ export function buildDiagnosticRequestContext(
     .map((run) => ({
       runId: run.id,
       status: run.status,
-      answerGoal: run.request?.answerGoal
-        ? {
-            ...run.request.answerGoal,
-            rawUserQuestion: truncateText(run.request.answerGoal.rawUserQuestion, 1200),
-            resolvedQuestion: truncateText(run.request.answerGoal.resolvedQuestion, 1200),
-            answerObject: truncateText(run.request.answerGoal.answerObject, 300),
-            mustAnswerItems: run.request.answerGoal.mustAnswerItems.map((item) => truncateText(item, 300)),
-            diagnosticObjective: truncateText(run.request.answerGoal.diagnosticObjective, 1200),
-          }
-        : undefined,
+      userGoal: truncateText(run.request?.userGoal ?? '', 1200),
       summary: truncateText(run.result?.summary ?? '', 1200),
       missingInfo: (run.result?.missingInfo ?? []).map((item) => truncateText(item, 300)),
       evidence: (run.result?.evidence ?? []).slice(0, 8).map((item) => ({

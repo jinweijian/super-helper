@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { AnswerGoal, DiagnosticRequest, DiagnosticResult, DiagnosticRun } from '../domain.js';
+import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import type { RuntimeTurnResponse } from './contracts.js';
-import { answerGoalText, primaryAnswerItems } from './answer-goal.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { findExperienceMatch, findRejectedExperienceCandidates } from './experience-agent.js';
 import { caseStatusFromDiagnosticResult } from './review-gate.js';
@@ -20,24 +19,25 @@ export class ExperienceTurnService {
     request: DiagnosticRequest,
     replyToMessageId?: string,
   ): Promise<RuntimeTurnResponse | undefined> {
-    const question = answerGoalText(request.answerGoal);
-    this.events.experienceStarted(caseSession, question);
+    this.events.experienceStarted(caseSession, request.userGoal);
     const match = findExperienceMatch({
       store: this.store,
       currentCase: caseSession,
-      userMessage: question,
+      userMessage: request.userGoal,
+      answerContract: request.context?.answerContract,
     });
 
     if (!match) {
       const rejectedCandidates = findRejectedExperienceCandidates({
         store: this.store,
         currentCase: caseSession,
-        userMessage: question,
+        userMessage: request.userGoal,
+        answerContract: request.context?.answerContract,
       });
       if (rejectedCandidates.length > 0) {
         request.context ??= {
           isFollowUp: false,
-          currentUserMessage: request.answerGoal.rawUserQuestion,
+          currentUserMessage: request.userGoal,
           recentMessages: [],
           previousRuns: [],
         };
@@ -55,31 +55,20 @@ export class ExperienceTurnService {
       sourceRunId: match.sourceRunId,
       score: match.score,
     });
-    const result = bindExperienceResultToCurrentGoal(match.result, request.answerGoal);
     const run: DiagnosticRun = {
       id: `run_${randomUUID().slice(0, 8)}`,
       caseId: caseSession.id,
-      status: result.status,
+      status: match.result.status,
       request,
-      result,
+      result: match.result,
     };
     this.store.addRun(caseSession, run);
-    caseSession.status = caseStatusFromDiagnosticResult(result);
+    caseSession.status = caseStatusFromDiagnosticResult(match.result);
     this.store.saveCase(caseSession);
-    const review = await this.reviewer.reviewAndFormat(caseSession, result, run);
+    const review = await this.reviewer.reviewAndFormat(caseSession, match.result, run);
     this.events.presentationPrepared(caseSession, review.decision);
     this.store.addMessage(caseSession, { role: 'helper', body: review.reply, replyToMessageId });
     this.events.finalReplyCreated(caseSession, review.reply, review.decision);
     return { caseSession, assistantMessage: review.reply, decision: review.decision };
   }
-}
-
-function bindExperienceResultToCurrentGoal(result: DiagnosticResult, answerGoal: AnswerGoal): DiagnosticResult {
-  const answers = primaryAnswerItems(answerGoal);
-  return {
-    ...result,
-    claims: result.claims.map((claim) => claim.role === 'primary_answer'
-      ? { ...claim, answers }
-      : claim),
-  };
 }

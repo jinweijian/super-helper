@@ -83,7 +83,7 @@ async function route(
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/') {
+  if (req.method === 'GET' && isAppShellRoute(url.pathname)) {
     const onboardingState = onboarding.getState();
     if (!onboardingState.completed || onboardingState.needsReview) {
       sendRedirect(res, '/setup');
@@ -116,4 +116,8 @@ async function route(
   }
 
   sendJson(res, 404, { error: 'not found' });
+}
+
+function isAppShellRoute(pathname: string): boolean {
+  return pathname === '/' || /^\/sessions\/[^/]+$/.test(pathname);
 }

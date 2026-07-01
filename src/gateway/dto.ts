@@ -93,7 +93,7 @@ export async function serializeSession(
       workerTrace: run.workerTrace ? sanitizeWorkerTrace(run.workerTrace) : undefined,
     })),
   };
-  if (options.includeKnowledgeHealth === true) {
+  if (options.includeKnowledgeHealth !== false) {
     session.knowledgeHealth = await getKnowledgeHealthSummary({
       config,
       workspaceId: caseSession.workspaceId,

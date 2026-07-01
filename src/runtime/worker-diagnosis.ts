@@ -59,7 +59,7 @@ export class WorkerDiagnosisService {
     if (deepRetry.retry) {
       followUpRequest.context ??= {
         isFollowUp: true,
-        currentUserMessage: followUpRequest.answerGoal.rawUserQuestion,
+        currentUserMessage: followUpRequest.userGoal,
         recentMessages: [],
         previousRuns: [],
       };

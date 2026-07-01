@@ -9,22 +9,6 @@ export function commitOnboardingConfig(input: {
   path?: string;
   now?: string;
 }): SuperHelperConfig {
-  const config = buildOnboardingConfig({
-    draft: input.draft,
-    currentConfig: input.currentConfig,
-    runId: input.runId,
-    completedAt: input.now,
-  });
-  saveConfig(config, input.path);
-  return config;
-}
-
-export function buildOnboardingConfig(input: {
-  draft: OnboardingDraft;
-  currentConfig: SuperHelperConfig;
-  runId: string;
-  completedAt?: string;
-}): SuperHelperConfig {
   const config: SuperHelperConfig = structuredClone(input.currentConfig);
   const host = input.draft.server.host ?? (input.draft.server.bindMode === 'lan' ? '0.0.0.0' : '127.0.0.1');
 
@@ -56,9 +40,10 @@ export function buildOnboardingConfig(input: {
   config.rerank = structuredClone(input.draft.rerank);
   config.onboarding = {
     version: 1,
-    completedAt: input.completedAt ?? new Date().toISOString(),
+    completedAt: input.now ?? new Date().toISOString(),
     lastRunId: input.runId,
   };
 
+  saveConfig(config, input.path);
   return config;
 }

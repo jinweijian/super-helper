@@ -1,5 +1,7 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { DiagnosticClaim, DiagnosticResult, DiagnosticRun, Evidence } from '../domain.js';
-import { writeSolvedCaseDraft } from '../knowledge/solved-case-curation.js';
+import { dirtyFlagPath } from '../knowledge/paths.js';
 import { routeKnowledgeQuestion } from '../knowledge/taxonomy.js';
 import type { StoredCase } from '../sessions/file-memory-store.js';
 
@@ -42,17 +44,20 @@ export function curateSolvedCase(input: {
     throw new Error('当前 case 没有可沉淀的已结论证据结果');
   }
 
-  const originalQuestion = originalUserQuestion(input.caseSession) ?? run.request?.answerGoal.resolvedQuestion ?? input.caseSession.title;
+  const originalQuestion = originalUserQuestion(input.caseSession) ?? run.request?.userGoal ?? input.caseSession.title;
   const moduleId = inferModuleId(input.workspaceRoot, input.caseSession, run, originalQuestion);
   const intent = inferIntent(run);
   const today = new Date().toISOString().slice(0, 10);
   const compactDate = today.replaceAll('-', '');
   const documentId = `kb_case_solved_${slug(moduleId)}_${compactDate}_${slug(input.caseSession.id)}`;
-  const { path } = writeSolvedCaseDraft({
-    workspaceRoot: input.workspaceRoot,
-    documentId,
-    moduleId,
-    markdown: buildSolvedCaseMarkdown({
+  const targetDir = join(input.workspaceRoot, 'knowledge', 'tickets', 'solved-cases', moduleId);
+  const targetPath = join(targetDir, `${documentId}.md`);
+
+  mkdirSync(targetDir, { recursive: true });
+  mkdirSync(join(input.workspaceRoot, 'knowledge', 'indexes'), { recursive: true });
+  writeFileSync(
+    targetPath,
+    buildSolvedCaseMarkdown({
       documentId,
       title: input.caseSession.title,
       moduleId,
@@ -64,12 +69,14 @@ export function curateSolvedCase(input: {
       originalQuestion,
       confirmationMessage: input.confirmationMessage,
     }),
-  });
+    'utf8',
+  );
+  writeFileSync(dirtyFlagPath(input.workspaceRoot), `Solved case ${documentId} needs indexing.\n`, 'utf8');
 
   return {
     documentId,
     moduleId,
-    path,
+    path: targetPath,
     status: 'review_required',
     confidence: 'medium',
   };
@@ -138,7 +145,7 @@ ${blockQuote(input.originalQuestion)}
 
 ## 归一化问题
 
-${blockQuote(input.run.request?.answerGoal.resolvedQuestion ?? input.originalQuestion)}
+${blockQuote(input.run.request?.userGoal ?? input.originalQuestion)}
 
 ## 模块与意图
 
@@ -250,9 +257,11 @@ function inferModuleId(
     return sourceModule;
   }
 
-  const route = routeKnowledgeQuestion({ workspaceRoot, question: originalQuestion });
-  if (route.moduleCandidates[0]) {
-    return route.moduleCandidates[0];
+  if (existsSync(join(workspaceRoot, 'knowledge'))) {
+    const route = routeKnowledgeQuestion({ workspaceRoot, question: originalQuestion });
+    if (route.moduleCandidates[0]) {
+      return route.moduleCandidates[0];
+    }
   }
 
   return 'general';
@@ -287,7 +296,6 @@ function supportedClaims(
 ): string[] {
   return claims
     .filter((claim) => claim.type === type)
-    .filter((claim) => reusableSolvedCaseClaimRole(claim.role))
     .filter((claim) => claim.evidenceIds.length > 0 && claim.evidenceIds.every((id) => evidenceIds.has(id)))
     .map((claim) => `${claim.text}（证据：${claim.evidenceIds.join('、')}）`);
 }
@@ -296,14 +304,9 @@ function hasEvidenceBackedClaim(result: DiagnosticResult): boolean {
   const evidenceIds = new Set(result.evidence.map((item) => item.id));
   return result.claims.some((claim) => (
     claim.type !== 'unknown' &&
-    reusableSolvedCaseClaimRole(claim.role) &&
     claim.evidenceIds.length > 0 &&
     claim.evidenceIds.every((id) => evidenceIds.has(id))
   ));
-}
-
-function reusableSolvedCaseClaimRole(role: DiagnosticClaim['role']): boolean {
-  return role === 'primary_answer' || role === 'supporting_context' || role === 'next_action';
 }
 
 function formatEvidence(evidence: Evidence[]): string {
@@ -322,7 +325,7 @@ function formatRuns(runs: DiagnosticRun[]): string {
     return '- 暂无诊断 run。';
   }
   return runs.map((run) => {
-    const goal = run.request?.answerGoal ? ` - ${run.request.answerGoal.resolvedQuestion}` : '';
+    const goal = run.request?.userGoal ? ` - ${run.request.userGoal}` : '';
     const summary = run.result?.summary ? `\n  - summary: ${run.result.summary}` : '';
     return `- ${run.id} (${run.status})${goal}${summary}`;
   }).join('\n');

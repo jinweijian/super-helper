@@ -146,7 +146,7 @@ export function prepareDeepQueryRetry(input: {
         artifactTargets: pivot.nextArtifactTargets,
         correctionActions: pivot.correctionActions,
         failedReasons,
-        triedQueries: Array.from(new Set([...(previousDeepQuery.triedQueries ?? []), input.previousRequest.answerGoal.resolvedQuestion])),
+        triedQueries: Array.from(new Set([...(previousDeepQuery.triedQueries ?? []), input.previousRequest.userGoal])),
         nextPivot: pivot.nextArtifactTargets[0],
         stopReason: undefined,
       },
