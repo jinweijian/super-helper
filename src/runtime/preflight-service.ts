@@ -6,7 +6,7 @@ import type { ResolvedTurnContext } from '../domain.js';
 import type { FileMemoryStore, StoredCase } from '../sessions/file-memory-store.js';
 import { parseAgentModelJson } from './agent-model-review.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
-import { buildAnswerContract } from './answer-contract.js';
+import { buildAnswerGoal } from './answer-goal.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from './preflight-gate.js';
 import { buildDiagnosticRequest } from './request-builder.js';
 import { reconcileResolvedTurnContext } from './resolved-turn.js';
@@ -138,10 +138,7 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
       if (localResolved) {
         const reconciled = reconcileResolvedTurnContext({ local: localResolved, model: parsed.resolvedTurn });
         request.context!.resolvedTurn = reconciled;
-        request.context!.answerContract = buildAnswerContract({
-          originalQuestion: userMessage,
-          resolvedQuestion: reconciled.resolvedQuery,
-        });
+        request.answerGoal = buildAnswerGoal({ rawUserQuestion: userMessage, resolvedTurn: reconciled });
         request.userGoal = reconciled.resolvedQuery;
         request.knownFacts = reconciled.confirmedFacts.map((fact) => fact.text);
         request.unknowns = Array.from(new Set([...request.unknowns, ...reconciled.unknowns.map((item) => item.text)]));
@@ -180,15 +177,13 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
       modelDecision.request.context = {
         ...localDecision.request.context!,
         resolvedTurn,
-        answerContract: localDecision.request.context?.answerContract ?? modelDecision.request.context?.answerContract ?? (
-          resolvedTurn
-            ? buildAnswerContract({
-                originalQuestion: modelDecision.request.context?.currentUserMessage ?? localDecision.request.context?.currentUserMessage ?? modelDecision.request.userGoal,
-                resolvedQuestion: resolvedTurn.resolvedQuery,
-              })
-            : undefined
-        ),
       };
+      modelDecision.request.answerGoal = resolvedTurn
+        ? buildAnswerGoal({
+            rawUserQuestion: modelDecision.request.context?.currentUserMessage ?? localDecision.request.context?.currentUserMessage ?? modelDecision.request.userGoal,
+            resolvedTurn,
+          })
+        : localDecision.request.answerGoal;
     }
 
     return modelDecision;

@@ -53,7 +53,13 @@ The runtime SHALL validate accepted claims against `DiagnosticRequest.answerGoal
 #### Scenario: Final result has no primary answer
 - **WHEN** a worker returns `status=concluded` and `recommendedNextAction=final_answer`
 - **AND** no accepted claim has `role=primary_answer`
-- **THEN** runtime downgrades the result and the reply cannot lead with a supporting or process claim
+- **THEN** runtime downgrades the result and the reply cannot present a supporting or process claim as a final conclusion
+
+#### Scenario: Downgraded result still has accepted inference
+- **WHEN** a result is downgraded because no frozen primary answer covers the current AnswerGoal
+- **AND** at least one accepted fact or inference claim remains
+- **THEN** fallback presentation leads with a clearly labeled preliminary judgment
+- **AND** the reply explicitly states that evidence is insufficient for a final conclusion
 
 #### Scenario: Primary answer does not cover the AnswerGoal
 - **WHEN** a `primary_answer` claim does not include all required `answerGoal.mustAnswerItems` in `answers`

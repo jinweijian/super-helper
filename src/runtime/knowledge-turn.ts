@@ -56,20 +56,20 @@ export class KnowledgeTurnService {
     this.events.evidenceJudgeResult(caseSession, judge);
 
     let answerability: RagAnswerabilityResult | undefined;
-    const answerContract = request.context?.answerContract;
+    const answerGoal = request.answerGoal;
     if (
       this.ragAnswerabilityService &&
       this.config.agent.useModelForRagAnswerability !== false &&
       this.config.agent.modelProvider &&
-      answerContract &&
+      answerGoal &&
       evidencePack.results[0]
     ) {
       this.events.ragAnswerabilityStarted(caseSession, {
-        questionType: answerContract.questionType,
+        answerObject: answerGoal.answerObject,
         evidenceIds: evidencePack.results.slice(0, 3).map((item) => item.evidence_id),
       });
       answerability = await this.ragAnswerabilityService.evaluate({
-        contract: answerContract,
+        answerGoal,
         evidence: evidencePack.results,
       });
       this.events.ragAnswerabilityResult(caseSession, answerability);

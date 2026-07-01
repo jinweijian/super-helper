@@ -16,6 +16,7 @@ import {
   type ConfiguredKnowledgeRetrievalResult,
 } from '../retrieval/configured-search.js';
 import type { RetrievalTrace } from '../retrieval/types.js';
+import { DIRECT_ANSWER_ITEM } from './answer-goal.js';
 import { attachDeepQueryContext, planDeepQuery } from './deep-query-planner.js';
 import { judgeKnowledgeEvidence, type EvidenceJudgeResult } from './evidence-judge.js';
 import type { RagAnswerabilityResult } from './rag-answerability-service.js';
@@ -182,7 +183,7 @@ export function diagnosticResultFromKnowledge(input: {
     });
   }
 
-  if (isFeatureOverviewRoute(input.route)) {
+  if (isFeatureOverviewRoute(input.route) || answerEvidence.length > 1) {
     return diagnosticFeatureOverviewResult({
       evidence,
       answerEvidence,
@@ -197,13 +198,17 @@ export function diagnosticResultFromKnowledge(input: {
     claims: [
       {
         type: 'fact',
+        role: 'primary_answer',
         text: summary,
         evidenceIds: evidence.map((item) => item.id),
+        answers: [DIRECT_ANSWER_ITEM],
       },
       {
         type: 'inference',
+        role: 'supporting_context',
         text: `Evidence Judge 判定知识证据可直接回答，answer_score=${input.judge.answer_score}，模块候选：${input.route.moduleCandidates.join('、') || '未限定'}`,
         evidenceIds: evidence.map((item) => item.id),
+        answers: [],
       },
     ],
     recommendedNextAction: 'final_answer',
@@ -221,8 +226,10 @@ function diagnosticCoveredClaimsResult(input: {
     .map((claim) => ({
       id: claim.id,
       type: 'fact' as const,
+      role: 'primary_answer' as const,
       text: cleanKnowledgeText(claim.text),
       evidenceIds: claim.evidenceIds.filter((evidenceId) => validEvidenceIds.has(evidenceId)),
+      answers: Array.from(new Set([DIRECT_ANSWER_ITEM, ...claim.coveredRequirementIds])),
     }))
     .filter((claim, index, all) => (
       claim.text &&
@@ -245,8 +252,10 @@ function diagnosticCoveredClaimsResult(input: {
       ...claims,
       {
         type: 'inference',
+        role: 'supporting_context',
         text: `RAG Answerability 判定知识证据覆盖当前问题，answer_score=${input.judge.answer_score}，模块候选：${input.route.moduleCandidates.join('、') || '未限定'}`,
         evidenceIds,
+        answers: [],
       },
     ],
     recommendedNextAction: 'final_answer',
@@ -281,8 +290,10 @@ function diagnosticFeatureOverviewResult(input: {
   const claims: DiagnosticClaim[] = selected
     .map((result) => ({
       type: 'fact' as const,
+      role: 'primary_answer' as const,
       text: featureFactText(result),
       evidenceIds: [result.evidence_id],
+      answers: [DIRECT_ANSWER_ITEM],
     }))
     .filter((claim, index, all) => (
       claim.text &&
@@ -303,8 +314,7 @@ function diagnosticFeatureOverviewResult(input: {
 }
 
 function isFeatureOverviewRoute(route: KnowledgeRoute): boolean {
-  return route.intentCandidates.includes('feature_overview') ||
-    /有哪些功能|有什么功能|什么功能|功能有哪些|功能清单|功能列表|有哪些能力|有什么能力|支持哪些|能做什么|主要功能/.test(route.normalizedQuestion);
+  return route.intentCandidates.includes('feature_overview');
 }
 
 function featureFactText(result: KnowledgeEvidencePack['results'][number]): string {

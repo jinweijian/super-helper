@@ -539,15 +539,15 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
     });
   }
 
-  ragAnswerabilityStarted(caseSession: StoredCase, input: { questionType?: string; evidenceIds: string[] }): DiagnosticLogEvent {
+  ragAnswerabilityStarted(caseSession: StoredCase, input: { answerObject?: string; evidenceIds: string[] }): DiagnosticLogEvent {
     return this.recordAgent(caseSession, agentIdentities.ragAnswerability, {
       actor: 'agent',
       phase: 'rag_answerability_started',
       label: 'RAG 可回答性',
       severity: 'ok',
-      summary: 'RAG 可回答性 Agent 开始判断知识证据是否满足 AnswerContract',
+      summary: 'RAG 可回答性 Agent 开始判断知识证据是否满足 AnswerGoal',
       detail: {
-        questionType: input.questionType,
+        answerObject: input.answerObject,
         evidenceIds: input.evidenceIds,
       },
     });
@@ -560,7 +560,7 @@ export class CaseRuntimeEventRecorder implements RuntimeEventRecorder {
       label: 'RAG 可回答性',
       severity: result.answerability === 'full' ? 'ok' : 'warn',
       summary: result.answerability === 'full'
-        ? 'RAG 证据覆盖当前 AnswerContract'
+        ? 'RAG 证据覆盖当前 AnswerGoal'
         : result.answerability === 'partial'
           ? 'RAG 证据只覆盖部分答案，需要继续升级'
           : 'RAG 证据不足以回答当前问题',

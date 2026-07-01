@@ -297,7 +297,13 @@ function runSolvedCaseCurationScenario(input: RunKnowledgeAcceptanceInput): Know
               { id: 'ev_accept', kind: 'knowledge', source: 'knowledge/faq/general/accept.md', summary: '配置缺失会导致验收失败。', confidence: 'medium' },
             ],
             claims: [
-              { type: 'fact', text: '配置缺失会导致验收失败。', evidenceIds: ['ev_accept'] },
+              {
+                type: 'fact',
+                role: 'primary_answer',
+                text: '配置缺失会导致验收失败。',
+                evidenceIds: ['ev_accept'],
+                answers: ['direct_answer'],
+              },
             ],
             recommendedNextAction: 'final_answer',
           },

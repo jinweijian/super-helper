@@ -15,7 +15,7 @@ may_produce_user_facing_text: false
 
 - 当前 case 最近消息
 - 当前 `DiagnosticRequest`
-- 当前 `DiagnosticRequest.context.answerContract`
+- 当前 `DiagnosticRequest.answerGoal`
 - 当前 `DiagnosticResult`
 - 已归因并通过当前范围复核的 history evidence
 - 主 Agent 不乱猜与证据约束
@@ -38,8 +38,12 @@ may_produce_user_facing_text: false
 - 不得将 plausible cause 写成最终结论。
 - 需要继续排查时，可以要求 runtime 追加一轮诊断。
 - 历史经验答案也必须审核，不能因为来自历史会话就直接当作事实。
-- 审核必须保留完整 evidence，但主回复只展示答案和下一步；证据默认进入“查看关键证据”折叠区和右侧审计面板。
-- Presentation 可以按 persona 调整表达模板和重点字重，但不能改变冻结 outcome、claim 或 evidence。
+- 审核必须保留完整 evidence，但主回复只展示答案和必要补充；证据默认进入“查看关键证据”折叠区和右侧审计面板。
+- Presentation 可以基于已接受 claim/evidence 生成最终中文回复，但必须通过 AnswerGoal 与 runtime 校验，不能改变冻结 outcome、claim、primary answer claim IDs 或 evidence。
+- Presentation 引用的 evidence 必须由 selected accepted claims 直接引用；未被 selected claim 绑定的 evidence 不能用来授权额外事实。
+- Presentation 的完整用户可见 reply 都必须落在 accepted claims/evidence/missingInfo 范围内；不能只让第一段合规、后文再补未经审核的原因、影响或操作建议。
+- 输出审核和 Presentation 都不得用中文问法枚举或泛化动作词黑名单决定主答重点；主答重点只来自 `answerGoal.mustAnswerItems` 和 frozen primary answer claim IDs。
+- 当结果被降级为 partial/ask_user 但仍有 accepted fact/inference 时，Presentation/fallback 可以展示“初步判断”，但必须保留证据不足状态，不能把它包装成最终结论。
 - worker command、cwd、stdout、stderr、stack、provider 原始 payload 和内部 prompt 只能进入脱敏且有界的诊断日志，不能进入主回复或模型 Presentation 输入。
-- 必须检查最终 claim 是否覆盖 `AnswerContract.mustAnswer`；未覆盖的要素必须保留为 unknown/missing，不能被 Presentation 弱化或删除。
+- 必须检查最终 claim 是否覆盖 `answerGoal.mustAnswerItems`；未覆盖的要素必须保留为 unknown/missing，不能被 Presentation 弱化或删除。
 - partial RAG 的 coveredClaims 只要已通过证据审核就必须保留；代码排查结果不能把这些已审核背景结论挤掉。

@@ -229,7 +229,7 @@ Concrete implementation:
 - `src/agents/presentation.md` defines presentation constraints; the presentation step must express the frozen `primary_answer` for `answerGoal` and must not add unsupported facts.
 - `src/runtime/event-recorder.ts` records the review and presentation lifecycle events used by the diagnostic log drawer.
 - `src/runtime/diagnostic-runtime.ts` is the runtime orchestration entry; private root facades are intentionally not used.
-- Presentation 的运营模板按问题类型分流：排障/异常类问题保留“系统 bug / 设计使然 / 配置或使用问题 / 目前不能确认”的分类；功能、规则、入口、操作说明类问题先回答用户问题，再给运营可转述动作。
+- Presentation 先表达 frozen primary answer；运营、支持、客户、开发 persona 只能调整表达顺序和补充信息，不能通过问题类型分流或模板归类改写主答。
 
 Worker command, cwd, stdout, stderr, stack, raw provider payload, and internal prompt data are diagnostic-log-only. Logs remain bounded and redacted. If a worker fails before usable evidence exists, the main reply contains only a safe failure category, current diagnosis state, next action, and case/run identity.
 

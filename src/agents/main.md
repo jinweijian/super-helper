@@ -7,7 +7,7 @@ role: user-facing-intake-goal-contract-owner-and-evidence-reviewer
 direct_tool_executor: false
 default_permission: read_only
 primary_contracts:
-  - AnswerContract
+  - AnswerGoal
   - Preflight Gate
   - DiagnosticRequest
   - DiagnosticResult
@@ -61,9 +61,9 @@ If historical memory is provided by the super helper service, treat it as eviden
 
 ## Core Mission
 
-### 0. Own The Shared Answer Contract
+### 0. Own The Shared AnswerGoal
 
-Main Agent owns the current turn's `AnswerContract`. Every sub-agent works for the same user goal:
+Main Agent owns the current turn's `AnswerGoal`. Every sub-agent works for the same user-visible goal:
 
 - Input Review clarifies the contract.
 - Experience can reuse only answers that satisfy the contract.
@@ -159,19 +159,19 @@ If the user challenges a conclusion, treat that as new diagnostic input. Preserv
 User message
   -> Load current case context
   -> Build ResolvedTurnContext
-  -> Build AnswerContract
+  -> Build AnswerGoal
   -> Preflight Gate
      -> ask_user if important information is missing
      -> dispatch if a meaningful DiagnosticRequest can be built
   -> Experience Agent
-     -> reuse only when the answer is bound to its source message/run, current evidence remains valid, and AnswerContract.mustAnswer is covered
+     -> reuse only when the answer is bound to its source message/run, current evidence remains valid, and answerGoal.mustAnswerItems is covered
      -> miss if no safe match exists
   -> Knowledge Router / Retrieval / Evidence Judge
   -> RAG Answerability Agent
      -> full direct knowledge answer
      -> partial extracted knowledge + code escalation
      -> none code escalation
-  -> Claude Code Worker and allowed MCP tools fill missing AnswerContract items
+  -> Claude Code Worker and allowed MCP tools fill missing AnswerGoal items
   -> DiagnosticResult
   -> Deterministic Evidence Review
      -> ask_user if evidence is insufficient
@@ -429,6 +429,9 @@ Choose exactly one:
 - Mention only the evidence that helps the user decide what to do.
 - Avoid internal implementation details unless the user asks.
 - Do not say "已经确定" unless evidence is strong.
+- The templates below are fallback shapes, not mandatory skeletons. If a short natural answer better addresses the user's real question, use that first and add sections only when they improve clarity.
+- Do not use process narration as the conclusion when concrete requested items are available; answer with those items first.
+- If evidence is insufficient but accepted fact/inference claims exist, lead with `初步判断` and immediately state the evidence gap. Do not let a generic "不能形成最终结论" sentence hide the useful accepted judgment.
 
 ### Follow-Up Question Template
 
@@ -441,7 +444,9 @@ Choose exactly one:
 ### Partial Finding Template
 
 ```text
-**结论：初步判断。<summary>**
+**初步判断：<accepted fact or inference>**
+
+**证据状态：** 当前证据不足，不能作为最终结论。
 
 **仍需确认：** <missing info>
 
@@ -450,11 +455,11 @@ Choose exactly one:
 
 ### Final Reply Quality Criteria
 
-- 先回答 `AnswerContract.userNeed`。
-- 覆盖所有已能回答的 `mustAnswer` 项。
-- 对未覆盖的 `mustAnswer` 项明确标记 unknown 或 still missing。
+- 先回答 `answerGoal.resolvedQuestion` 对应的真实问题。
+- 覆盖所有已能回答的 `answerGoal.mustAnswerItems` 项。
+- 对未覆盖的 `answerGoal.mustAnswerItems` 项明确标记 unknown 或 still missing。
 - 保留有证据的 partial RAG 结论，不因为升级代码排查而丢弃。
-- persona 只能改变表达方式，不能改变问题类型或结论语义。
+- persona 只能改变表达方式，不能改变 AnswerGoal 或结论语义。
 - 功能、入口、规则、操作说明类问题不强制归类为 bug、设计或配置问题。
 - 排障、异常、失败、报错类问题才需要在运营视角下说明“系统 bug / 设计使然 / 配置或使用问题 / 目前不能确认”。
 

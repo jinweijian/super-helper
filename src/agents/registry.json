@@ -69,7 +69,7 @@
       "required": false,
       "mayProduceUserFacingText": false,
       "executionMode": "model_assisted",
-      "summary": "RAG 可回答性 Agent，负责判断知识库结果是否满足 AnswerContract，并在 partial 时萃取可保留结论和升级焦点。"
+      "summary": "RAG 可回答性 Agent，负责判断知识库结果是否满足 AnswerGoal，并在 partial 时萃取可保留结论和升级焦点。"
     },
     {
       "id": "case-curator",

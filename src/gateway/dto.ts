@@ -3,6 +3,7 @@ import { resolveContextWindowTokens } from '../config.js';
 import { estimateCaseContextUsage } from '../context-window.js';
 import type { UserPersona } from '../domain.js';
 import { getKnowledgeHealthSummary, type KnowledgeHealthSummary } from '../knowledge/health-service.js';
+import { caseStatusFromDiagnosticResult } from '../runtime/review-gate.js';
 import type { StoredCase } from '../sessions/file-memory-store.js';
 import { sanitizeWorkerTrace } from '../observability/worker-trace.js';
 
@@ -65,7 +66,7 @@ export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConf
     id: caseSession.id,
     claudeSessionId: caseSession.claudeSessionId,
     title: caseSession.title,
-    status: caseSession.status,
+    status: publicSessionStatus(caseSession),
     workspaceId: caseSession.workspaceId,
     userPersona: caseSession.userPersona,
     messageCount: caseSession.messages.length,
@@ -78,6 +79,17 @@ export function sessionSummary(caseSession: StoredCase, config?: SuperHelperConf
     contextUsage: config ? estimateCaseContextUsage(caseSession, resolveContextWindowTokens(config)) : undefined,
     agentActivity: recentAgentActivity(caseSession),
   };
+}
+
+function publicSessionStatus(caseSession: StoredCase): StoredCase['status'] {
+  if (caseSession.runs.some((run) => run.status === 'queued' || run.status === 'running')) {
+    return caseSession.status === 'diagnosing' ? 'diagnosing' : caseSession.status;
+  }
+  const latestResult = [...caseSession.runs].reverse().find((run) => run.result)?.result;
+  if (!latestResult) {
+    return caseSession.status;
+  }
+  return caseStatusFromDiagnosticResult(latestResult);
 }
 
 export async function serializeSession(

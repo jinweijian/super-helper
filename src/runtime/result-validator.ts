@@ -1,7 +1,17 @@
-import type { DiagnosticClaim, DiagnosticResult, Evidence } from '../domain.js';
+import type { AnswerGoal, DiagnosticClaim, DiagnosticClaimRole, DiagnosticResult, Evidence } from '../domain.js';
+import { DIRECT_ANSWER_ITEM } from './answer-goal.js';
 
 export interface DiagnosticValidationIssue {
-  code: 'duplicate_evidence_id' | 'missing_evidence_reference' | 'low_confidence_fact' | 'invalid_claim_type' | 'unsupported_claim';
+  code:
+    | 'duplicate_evidence_id'
+    | 'missing_evidence_reference'
+    | 'low_confidence_fact'
+    | 'invalid_claim_type'
+    | 'missing_claim_role'
+    | 'missing_claim_answers'
+    | 'missing_primary_answer'
+    | 'incomplete_primary_answer'
+    | 'unsupported_claim';
   claimId?: string;
   evidenceId?: string;
   message: string;
@@ -12,9 +22,11 @@ export interface ValidatedDiagnosticResult {
   issues: DiagnosticValidationIssue[];
   acceptedClaimIds: string[];
   rejectedClaimIds: string[];
+  acceptedPrimaryAnswerClaimIds: string[];
 }
 
-export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDiagnosticResult {
+export function validateDiagnosticResult(result: DiagnosticResult, answerGoal?: AnswerGoal): ValidatedDiagnosticResult {
+  const goal = answerGoal ?? fallbackAnswerGoal();
   const issues: DiagnosticValidationIssue[] = [];
   const evidence = uniqueEvidence(result.evidence, issues);
   const evidenceById = new Map(evidence.map((item) => [item.id, item]));
@@ -25,6 +37,24 @@ export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDia
     const id = claim.id ?? `claim_${index + 1}`;
     if (!['fact', 'inference', 'assumption', 'unknown'].includes(claim.type)) {
       issues.push({ code: 'invalid_claim_type', claimId: id, message: `Claim ${id} has an invalid claim type.` });
+      issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
+      rejectedClaimIds.push(id);
+      return;
+    }
+    if (!validClaimRole(claim.role)) {
+      issues.push({ code: 'missing_claim_role', claimId: id, message: `Claim ${id} must declare a valid role.` });
+      issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
+      rejectedClaimIds.push(id);
+      return;
+    }
+    if (!Array.isArray(claim.answers)) {
+      issues.push({ code: 'missing_claim_answers', claimId: id, message: `Claim ${id} must declare answers.` });
+      issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
+      rejectedClaimIds.push(id);
+      return;
+    }
+    if (claim.role === 'primary_answer' && claim.answers.length === 0) {
+      issues.push({ code: 'incomplete_primary_answer', claimId: id, message: `Primary answer claim ${id} must cover answerGoal.mustAnswerItems.` });
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
       rejectedClaimIds.push(id);
       return;
@@ -58,9 +88,16 @@ export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDia
   });
 
   const rejectedFacts = rejectedClaimIds.length > 0;
-  const resultCanConclude = !rejectedFacts && claims.some((claim) => (
-    claim.type === 'fact' || claim.type === 'inference'
-  ));
+  const acceptedPrimaryAnswerClaimIds = claims
+    .filter((claim) => claimCoversAnswerGoal(claim, goal))
+    .map((claim) => claim.id!);
+  if ((result.status === 'concluded' || result.recommendedNextAction === 'final_answer') && acceptedPrimaryAnswerClaimIds.length === 0) {
+    issues.push({
+      code: 'missing_primary_answer',
+      message: 'Final answer requires an accepted primary_answer claim that covers answerGoal.mustAnswerItems.',
+    });
+  }
+  const resultCanConclude = !rejectedFacts && acceptedPrimaryAnswerClaimIds.length > 0;
   const downgrade = (result.status === 'concluded' || result.recommendedNextAction === 'final_answer') && !resultCanConclude;
   const validated: DiagnosticResult = {
     ...result,
@@ -78,6 +115,33 @@ export function validateDiagnosticResult(result: DiagnosticResult): ValidatedDia
     issues,
     acceptedClaimIds: claims.map((claim) => claim.id!),
     rejectedClaimIds,
+    acceptedPrimaryAnswerClaimIds,
+  };
+}
+
+function validClaimRole(role: unknown): role is DiagnosticClaimRole {
+  return role === 'primary_answer' ||
+    role === 'supporting_context' ||
+    role === 'evidence_locator' ||
+    role === 'process_note' ||
+    role === 'next_action' ||
+    role === 'unknown';
+}
+
+function claimCoversAnswerGoal(claim: DiagnosticClaim, answerGoal: AnswerGoal): boolean {
+  return claim.role === 'primary_answer' &&
+    (claim.type === 'fact' || claim.type === 'inference') &&
+    answerGoal.mustAnswerItems.every((item) => claim.answers.includes(item));
+}
+
+function fallbackAnswerGoal(): AnswerGoal {
+  return {
+    rawUserQuestion: '',
+    resolvedQuestion: '',
+    answerObject: '当前问题',
+    mustAnswerItems: [DIRECT_ANSWER_ITEM],
+    diagnosticObjective: '',
+    sourceMessageIds: [],
   };
 }
 

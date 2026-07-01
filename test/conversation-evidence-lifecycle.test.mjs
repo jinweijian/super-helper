@@ -10,7 +10,6 @@ import { findExperienceMatch, findRejectedExperienceCandidates } from '../dist/r
 import { decisionFromReviewOutcome } from '../dist/runtime/review-gate.js';
 import { formatReviewFailureFallback, ruleBasedReviewAndFormat } from '../dist/runtime/presenter.js';
 import { buildDiagnosticRequest } from '../dist/runtime/request-builder.js';
-import { buildAnswerContract } from '../dist/runtime/answer-contract.js';
 import { buildResolvedTurnContext, reconcileResolvedTurnContext } from '../dist/runtime/resolved-turn.js';
 import { validateDiagnosticResult } from '../dist/runtime/result-validator.js';
 import { sanitizeWorkerTrace } from '../dist/observability/worker-trace.js';
@@ -57,6 +56,17 @@ function chatResponse(content) {
     }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
+}
+
+function answerGoal(question, mustAnswerItems = ['direct_answer']) {
+  return {
+    rawUserQuestion: question,
+    resolvedQuestion: question,
+    answerObject: question,
+    mustAnswerItems,
+    diagnosticObjective: question,
+    sourceMessageIds: ['msg_test'],
+  };
 }
 
 function modelConfig(root) {
@@ -152,9 +162,9 @@ test('preflight dispatches concrete feature overview questions without asking fo
   assert.match(decision.request.userGoal, /AI伴学助手有哪些功能/);
 });
 
-test('diagnostic request carries answer contract for request builder and local preflight dispatch', () => {
+test('diagnostic request carries answer goal for request builder and local preflight dispatch', () => {
   const current = caseSession({
-    id: 'case_answer_contract',
+    id: 'case_answer_goal',
     userPersona: 'operations',
     messages: [
       { id: 'msg_config', role: 'user', body: '班课在哪配置的', createdAt: '2026-06-20T00:00:00Z' },
@@ -169,15 +179,16 @@ test('diagnostic request carries answer contract for request builder and local p
     config,
   });
 
-  assert.equal(request.context?.answerContract?.questionType, 'configuration_location');
-  assert.equal(request.context?.answerContract?.resolvedQuestion, '班课在哪配置的');
-  assert.ok(request.constraints.some((item) => item.includes('AnswerContract')));
+  assert.equal(request.answerGoal.rawUserQuestion, '班课在哪配置的');
+  assert.equal(request.answerGoal.resolvedQuestion, '班课在哪配置的');
+  assert.deepEqual(request.answerGoal.mustAnswerItems, ['direct_answer']);
+  assert.ok(request.constraints.some((item) => item.includes('DiagnosticRequest.answerGoal')));
 
   const decision = preflight({ caseSession: current, userMessage: '班课在哪配置的', agentConfig: agentConfig() });
   assert.equal(decision.action, 'dispatch');
-  assert.equal(decision.request.context?.answerContract?.questionType, 'configuration_location');
-  assert.equal(decision.request.context?.answerContract?.resolvedQuestion, '班课在哪配置的');
-  assert.ok(decision.request.constraints.some((item) => item.includes('AnswerContract')));
+  assert.equal(decision.request.answerGoal.rawUserQuestion, '班课在哪配置的');
+  assert.equal(decision.request.answerGoal.resolvedQuestion, '班课在哪配置的');
+  assert.ok(decision.request.constraints.some((item) => item.includes('DiagnosticRequest.answerGoal')));
 });
 
 test('experience binds the matching reply to its source run instead of the latest unrelated run', () => {
@@ -189,22 +200,22 @@ test('experience binds the matching reply to its source run instead of the lates
     store.addMessage(source, { role: 'helper', body: '第一条已验证回复', replyToMessageId: firstUser.id });
     store.addRun(source, {
       id: 'run_first', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_first', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: firstUser.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: { caseId: source.id, runId: 'run_first', workspaceId: 'current', claudeSessionId: source.claudeSessionId, answerGoal: answerGoal(firstUser.body), userGoal: firstUser.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
       result: {
         status: 'concluded', summary: '第一条', missingInfo: [],
         evidence: [{ id: 'ev_first', kind: 'workspace', source: 'first.ts', summary: '第一条证据', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '第一条事实', evidenceIds: ['ev_first'] }], recommendedNextAction: 'final_answer',
+        claims: [{ type: 'fact', role: 'primary_answer', text: '第一条事实', evidenceIds: ['ev_first'], answers: ['direct_answer'] }], recommendedNextAction: 'final_answer',
       },
     });
     const secondUser = store.addMessage(source, { role: 'user', body: '完全不同的账单问题是什么？' });
     store.addMessage(source, { role: 'helper', body: '第二条回复', replyToMessageId: secondUser.id });
     store.addRun(source, {
       id: 'run_latest', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_latest', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: secondUser.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: { caseId: source.id, runId: 'run_latest', workspaceId: 'current', claudeSessionId: source.claudeSessionId, answerGoal: answerGoal(secondUser.body), userGoal: secondUser.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
       result: {
         status: 'concluded', summary: '第二条', missingInfo: [],
         evidence: [{ id: 'ev_latest', kind: 'workspace', source: 'latest.ts', summary: '错误的最新证据', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '第二条事实', evidenceIds: ['ev_latest'] }], recommendedNextAction: 'final_answer',
+        claims: [{ type: 'fact', role: 'primary_answer', text: '第二条事实', evidenceIds: ['ev_latest'], answers: ['direct_answer'] }], recommendedNextAction: 'final_answer',
       },
     });
     source.status = 'concluded';
@@ -232,11 +243,11 @@ test('experience records stale or invisible same-scope history as rejected conte
     store.addMessage(source, { role: 'helper', body: '历史回复', replyToMessageId: user.id });
     store.addRun(source, {
       id: 'run_stale', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_stale', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      request: { caseId: source.id, runId: 'run_stale', workspaceId: 'current', claudeSessionId: source.claudeSessionId, answerGoal: answerGoal(user.body), userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
       result: {
         status: 'concluded', summary: '历史结论', missingInfo: [],
         evidence: [{ id: 'ev_stale', kind: 'knowledge', source: 'faq.md', summary: '旧知识', confidence: 'high', validation: { status: 'active', visibility: 'internal', lastVerifiedAt: '2020-01-01T00:00:00Z', quality: 'ok' } }],
-        claims: [{ type: 'fact', text: '历史事实', evidenceIds: ['ev_stale'] }], recommendedNextAction: 'final_answer',
+        claims: [{ type: 'fact', role: 'primary_answer', text: '历史事实', evidenceIds: ['ev_stale'], answers: ['direct_answer'] }], recommendedNextAction: 'final_answer',
       },
     });
     source.status = 'concluded';
@@ -266,8 +277,8 @@ test('experience matching is isolated by tenant and user', () => {
     store.addMessage(source, { role: 'helper', body: '跨租户回复', replyToMessageId: user.id });
     store.addRun(source, {
       id: 'run_other', caseId: source.id, status: 'concluded',
-      request: { caseId: source.id, runId: 'run_other', workspaceId: 'current', claudeSessionId: source.claudeSessionId, userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
-      result: { status: 'concluded', summary: 'other', missingInfo: [], evidence: [{ id: 'ev_other', kind: 'workspace', source: 'other', summary: 'other', confidence: 'high' }], claims: [{ type: 'fact', text: 'other', evidenceIds: ['ev_other'] }], recommendedNextAction: 'final_answer' },
+      request: { caseId: source.id, runId: 'run_other', workspaceId: 'current', claudeSessionId: source.claudeSessionId, answerGoal: answerGoal(user.body), userGoal: user.body, knownFacts: [], unknowns: [], constraints: [], allowedMcpToolIds: [] },
+      result: { status: 'concluded', summary: 'other', missingInfo: [], evidence: [{ id: 'ev_other', kind: 'workspace', source: 'other', summary: 'other', confidence: 'high' }], claims: [{ type: 'fact', role: 'primary_answer', text: 'other', evidenceIds: ['ev_other'], answers: ['direct_answer'] }], recommendedNextAction: 'final_answer' },
     });
     source.status = 'concluded';
     store.saveCase(source);
@@ -278,7 +289,7 @@ test('experience matching is isolated by tenant and user', () => {
   }
 });
 
-test('experience match is rejected when historical answer misses current answer contract requirements', () => {
+test('experience match is rejected when historical answer misses current answer goal requirements', () => {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-experience-contract-'));
   try {
     const store = new FileMemoryStore(root);
@@ -303,6 +314,7 @@ test('experience match is rejected when historical answer misses current answer 
         runId: 'run_entry_only',
         workspaceId: prior.workspaceId,
         claudeSessionId: prior.claudeSessionId,
+        answerGoal: answerGoal(priorUser.body, ['entry_path']),
         userGoal: priorUser.body,
         knownFacts: [],
         unknowns: [],
@@ -337,20 +349,20 @@ test('experience match is rejected when historical answer misses current answer 
           confidence: 'high',
           validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' },
         }],
-        claims: [{ id: 'claim_entry', type: 'fact', text: '班课在后台管理中配置。', evidenceIds: ['ev_entry'] }],
+        claims: [{ id: 'claim_entry', type: 'fact', role: 'primary_answer', text: '班课在后台管理中配置。', evidenceIds: ['ev_entry'], answers: ['entry_path'] }],
         recommendedNextAction: 'final_answer',
       },
     });
     prior.status = 'concluded';
     store.saveCase(prior);
     const current = caseSession({ createdAt: '', updatedAt: '' });
-    const answerContract = buildAnswerContract({ originalQuestion: '班课在哪配置的', resolvedQuestion: '班课在哪配置的' });
+    const goal = answerGoal('班课在哪配置的', ['entry_path', 'permission_or_role']);
 
     const match = findExperienceMatch({
       store,
       currentCase: current,
       userMessage: '班课在哪配置的',
-      answerContract,
+      answerGoal: goal,
     });
 
     assert.equal(match, undefined);
@@ -358,9 +370,9 @@ test('experience match is rejected when historical answer misses current answer 
       store,
       currentCase: current,
       userMessage: '班课在哪配置的',
-      answerContract,
+      answerGoal: goal,
     });
-    assert.equal(rejected[0].rejectionReason, 'answer_contract_not_covered');
+    assert.equal(rejected[0].rejectionReason, 'answer_goal_not_covered');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -392,9 +404,9 @@ test('operations presentation answers feature overview without forced bug classi
       },
     ],
     claims: [
-      { id: 'claim_plan', type: 'fact', text: '支持学习计划制定。', evidenceIds: ['ev_feature_overview'] },
-      { id: 'claim_reminder', type: 'fact', text: '支持督学提醒。', evidenceIds: ['ev_feature_overview'] },
-      { id: 'claim_qa', type: 'fact', text: '支持学习问答和题目答疑。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_plan', type: 'fact', role: 'primary_answer', text: '支持学习计划制定。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
+      { id: 'claim_reminder', type: 'fact', role: 'primary_answer', text: '支持督学提醒。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
+      { id: 'claim_qa', type: 'fact', role: 'primary_answer', text: '支持学习问答和题目答疑。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
@@ -422,10 +434,10 @@ test('feature overview presentation stays answer-first for support customer and 
       },
     ],
     claims: [
-      { id: 'claim_plan', type: 'fact', text: '支持学习计划制定。', evidenceIds: ['ev_feature_overview'] },
-      { id: 'claim_reminder', type: 'fact', text: '支持督学提醒。', evidenceIds: ['ev_feature_overview'] },
-      { id: 'claim_qa', type: 'fact', text: '支持学习问答和题目答疑。', evidenceIds: ['ev_feature_overview'] },
-      { id: 'claim_diagnosis', type: 'fact', text: '支持知识点诊断。', evidenceIds: ['ev_feature_overview'] },
+      { id: 'claim_plan', type: 'fact', role: 'primary_answer', text: '支持学习计划制定。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
+      { id: 'claim_reminder', type: 'fact', role: 'primary_answer', text: '支持督学提醒。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
+      { id: 'claim_qa', type: 'fact', role: 'primary_answer', text: '支持学习问答和题目答疑。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
+      { id: 'claim_diagnosis', type: 'fact', role: 'primary_answer', text: '支持知识点诊断。', evidenceIds: ['ev_feature_overview'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
@@ -456,13 +468,13 @@ test('presentation combines reviewed partial RAG context and worker conclusion w
       { id: 'ev_cmd_1', kind: 'workspace', source: 'src/Command/RefreshStudentStatisticsCommand.php', summary: '命令支持按月份刷新统计。', confidence: 'high' },
     ],
     claims: [
-      { id: 'claim_rag_1', type: 'fact', text: '学员统计由定时任务生成。', evidenceIds: ['ev_rag_1'] },
-      { id: 'claim_cmd_1', type: 'fact', text: '可以通过统计刷新命令按月份补齐学员统计。', evidenceIds: ['ev_cmd_1'] },
+      { id: 'claim_rag_1', type: 'fact', role: 'supporting_context', text: '学员统计由定时任务生成。', evidenceIds: ['ev_rag_1'], answers: [] },
+      { id: 'claim_cmd_1', type: 'fact', role: 'primary_answer', text: '可以通过统计刷新命令按月份补齐学员统计。', evidenceIds: ['ev_cmd_1'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
   const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
-    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
+    answerGoal: answerGoal(userGoal),
     ragAnswerability: {
       answerability: 'partial',
       selectedEvidenceIds: ['ev_rag_1'],
@@ -498,16 +510,14 @@ test('case_a52adc7f class lesson overview answers definition and capabilities', 
       { id: 'ev_class_management', kind: 'knowledge', source: 'knowledge/whitepapers/edusoho-training/class-management.md', summary: '班课管理说明。', confidence: 'high' },
     ],
     claims: [
-      { id: 'claim_definition', type: 'fact', text: '班课是以班级形式按照特定时间安排所进行的课程。', evidenceIds: ['ev_definition'] },
-      { id: 'claim_product_library', type: 'fact', text: '产品库用于管理相同课程内容的不同班课，并查看产品经营状况。', evidenceIds: ['ev_product_library'] },
-      { id: 'claim_class_management', type: 'fact', text: '班课管理支持日常维护管理和班课巡检。', evidenceIds: ['ev_class_management'] },
+      { id: 'claim_definition', type: 'fact', role: 'primary_answer', text: '班课是以班级形式按照特定时间安排所进行的课程。', evidenceIds: ['ev_definition'], answers: ['direct_answer'] },
+      { id: 'claim_product_library', type: 'fact', role: 'primary_answer', text: '产品库用于管理相同课程内容的不同班课，并查看产品经营状况。', evidenceIds: ['ev_product_library'], answers: ['direct_answer'] },
+      { id: 'claim_class_management', type: 'fact', role: 'primary_answer', text: '班课管理支持日常维护管理和班课巡检。', evidenceIds: ['ev_class_management'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
 
-  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
-    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
-  });
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal);
 
   assert.match(reply, /班课.*(是|课程)/);
   assert.match(reply, /产品库|经营状况/);
@@ -528,16 +538,14 @@ test('case_73f80bc4 class lesson config preserves entry permission and configura
       { id: 'ev_items', kind: 'workspace', source: 'menu.zh_CN.yml', summary: '班课配置项。', confidence: 'high' },
     ],
     claims: [
-      { id: 'claim_entry', type: 'fact', text: '班课配置入口是后台管理 → 教务 → 参数设置。', evidenceIds: ['ev_entry'] },
-      { id: 'claim_route', type: 'fact', text: '该入口对应路由 /multi_class/setting，权限节点是 admin_v2_multi_class_setting_manage。', evidenceIds: ['ev_route'] },
-      { id: 'claim_items', type: 'fact', text: '可配置项包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等。', evidenceIds: ['ev_items'] },
+      { id: 'claim_entry', type: 'fact', role: 'primary_answer', text: '班课配置入口是后台管理 → 教务 → 参数设置。', evidenceIds: ['ev_entry'], answers: ['direct_answer'] },
+      { id: 'claim_route', type: 'fact', role: 'primary_answer', text: '该入口对应路由 /multi_class/setting，权限节点是 admin_v2_multi_class_setting_manage。', evidenceIds: ['ev_route'], answers: ['direct_answer'] },
+      { id: 'claim_items', type: 'fact', role: 'primary_answer', text: '可配置项包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等。', evidenceIds: ['ev_items'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
 
-  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
-    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
-  });
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal);
 
   assert.match(reply, /后台管理\s*→\s*教务\s*→\s*参数设置/);
   assert.match(reply, /路由|权限/);
@@ -557,15 +565,13 @@ test('case_4e905fbc statistics backfill preserves partial RAG context and comman
       { id: 'ev_cmd_1', kind: 'workspace', source: 'src/Command/RefreshStudentStatisticsCommand.php', summary: '命令支持指定月份刷新统计。', confidence: 'high' },
     ],
     claims: [
-      { id: 'claim_rag_1', type: 'fact', text: '学员数据统计由定时任务生成。', evidenceIds: ['ev_rag_1'] },
-      { id: 'claim_cmd_1', type: 'fact', text: '可以通过统计刷新命令补齐指定月份的学员统计。', evidenceIds: ['ev_cmd_1'] },
+      { id: 'claim_rag_1', type: 'fact', role: 'supporting_context', text: '学员数据统计由定时任务生成。', evidenceIds: ['ev_rag_1'], answers: [] },
+      { id: 'claim_cmd_1', type: 'fact', role: 'primary_answer', text: '可以通过统计刷新命令补齐指定月份的学员统计。', evidenceIds: ['ev_cmd_1'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
 
-  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal, {
-    answerContract: buildAnswerContract({ originalQuestion: userGoal, resolvedQuestion: userGoal }),
-  });
+  const reply = ruleBasedReviewAndFormat(result, 'operations', userGoal);
 
   assert.match(reply, /6月|月份|指定月份/);
   assert.match(reply, /命令|补齐|统计刷新/);
@@ -588,8 +594,8 @@ test('customer presentation translates code-review causes without leaking intern
       },
     ],
     claims: [
-      { id: 'claim_null_config', type: 'fact', text: '生成学习计划接口在读取 studyPlanConfig.frequency 前没有判空。', evidenceIds: ['ev_code_null_config'] },
-      { id: 'claim_500_reason', type: 'inference', text: '当课程未配置学习计划规则时，这个空配置会触发 TypeError 并导致 500。', evidenceIds: ['ev_code_null_config'] },
+      { id: 'claim_null_config', type: 'fact', role: 'supporting_context', text: '生成学习计划接口在读取 studyPlanConfig.frequency 前没有判空。', evidenceIds: ['ev_code_null_config'], answers: [] },
+      { id: 'claim_500_reason', type: 'inference', role: 'primary_answer', text: '当课程未配置学习计划规则时，这个空配置会触发 TypeError 并导致 500。', evidenceIds: ['ev_code_null_config'], answers: ['direct_answer'] },
     ],
     recommendedNextAction: 'final_answer',
   };
@@ -605,6 +611,8 @@ test('model presentation reply is used and preserves multiple reviewed claims', 
   const root = mkdtempSync(join(tmpdir(), 'super-helper-model-presentation-'));
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => chatResponse(JSON.stringify({
+    answerTarget: '班课在哪配置的',
+    directAnswer: '班课配置入口：后台管理 → 教务 → 参数设置。',
     reply: [
       '**班课配置入口：** 后台管理 → 教务 → 参数设置。',
       '',
@@ -614,6 +622,7 @@ test('model presentation reply is used and preserves multiple reviewed claims', 
     ].join('\n'),
     claimIds: ['claim_1', 'claim_3'],
     evidenceIds: ['ev_01', 'ev_02', 'ev_03', 'ev_05'],
+    directAnswerClaimIds: ['claim_1', 'claim_3'],
   }));
   try {
     const worker = {
@@ -631,9 +640,9 @@ test('model presentation reply is used and preserves multiple reviewed claims', 
               { id: 'ev_05', kind: 'workspace', source: 'app/Resources/translations/menu.zh_CN.yml:390-437', summary: '教师端班课设置包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等。', confidence: 'medium' },
             ],
             claims: [
-              { id: 'claim_1', type: 'fact', text: '班课配置入口：后台管理 → 教务 → 参数设置（路由 /multi_class/setting，权限 admin_v2_multi_class_setting_manage）', evidenceIds: ['ev_01', 'ev_02', 'ev_03'] },
-              { id: 'claim_2', type: 'fact', text: '班课业务配置由 ClassroomSetting 类处理，继承自 AbstractSetting', evidenceIds: ['ev_04'] },
-              { id: 'claim_3', type: 'fact', text: '教师端班课设置包括：基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等', evidenceIds: ['ev_05'] },
+              { id: 'claim_1', type: 'fact', role: 'primary_answer', text: '班课配置入口：后台管理 → 教务 → 参数设置（路由 /multi_class/setting，权限 admin_v2_multi_class_setting_manage）', evidenceIds: ['ev_01', 'ev_02', 'ev_03'], answers: ['direct_answer'] },
+              { id: 'claim_2', type: 'fact', role: 'supporting_context', text: '班课业务配置由 ClassroomSetting 类处理，继承自 AbstractSetting', evidenceIds: ['ev_04'], answers: [] },
+              { id: 'claim_3', type: 'fact', role: 'primary_answer', text: '教师端班课设置包括：基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理等', evidenceIds: ['ev_05'], answers: ['direct_answer'] },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -661,9 +670,12 @@ test('unsafe model presentation reply falls back to reviewed local formatting', 
   const root = mkdtempSync(join(tmpdir(), 'super-helper-model-presentation-safe-'));
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => chatResponse(JSON.stringify({
+    answerTarget: '班课在哪配置的',
+    directAnswer: '班课配置入口在后台教务参数设置。',
     reply: '请查看 src/private.ts，并把 caseId/runId 发给用户。',
     claimIds: ['claim_1'],
     evidenceIds: ['ev_01'],
+    directAnswerClaimIds: ['claim_1'],
   }));
   try {
     const worker = {
@@ -674,7 +686,7 @@ test('unsafe model presentation reply falls back to reviewed local formatting', 
             summary: '已找到配置入口。',
             missingInfo: [],
             evidence: [{ id: 'ev_01', kind: 'workspace', source: 'src/private.ts', summary: '配置入口证据。', confidence: 'high' }],
-            claims: [{ id: 'claim_1', type: 'fact', text: '班课配置入口在后台教务参数设置。', evidenceIds: ['ev_01'] }],
+            claims: [{ id: 'claim_1', type: 'fact', role: 'primary_answer', text: '班课配置入口在后台教务参数设置。', evidenceIds: ['ev_01'], answers: ['direct_answer'] }],
             recommendedNextAction: 'final_answer',
           },
           trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"ok"}', stderr: '', exitCode: 0 },
@@ -696,9 +708,12 @@ test('model presentation reply must preserve every selected claim signal', async
   const root = mkdtempSync(join(tmpdir(), 'super-helper-model-presentation-complete-'));
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => chatResponse(JSON.stringify({
+    answerTarget: '班课在哪配置的',
+    directAnswer: '班课配置入口在后台教务参数设置。',
     reply: '班课配置入口在后台教务参数设置。',
     claimIds: ['claim_1', 'claim_2'],
     evidenceIds: ['ev_01', 'ev_02'],
+    directAnswerClaimIds: ['claim_1', 'claim_2'],
   }));
   try {
     const worker = {
@@ -713,8 +728,8 @@ test('model presentation reply must preserve every selected claim signal', async
               { id: 'ev_02', kind: 'workspace', source: 'menu.zh_CN.yml', summary: '可配置基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理。', confidence: 'high' },
             ],
             claims: [
-              { id: 'claim_1', type: 'fact', text: '班课配置入口在后台教务参数设置。', evidenceIds: ['ev_01'] },
-              { id: 'claim_2', type: 'fact', text: '可配置项包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理。', evidenceIds: ['ev_02'] },
+              { id: 'claim_1', type: 'fact', role: 'primary_answer', text: '班课配置入口在后台教务参数设置。', evidenceIds: ['ev_01'], answers: ['direct_answer'] },
+              { id: 'claim_2', type: 'fact', role: 'primary_answer', text: '可配置项包括基本信息、价格、封面、服务、班主任、教师、助教、课程管理、学员管理。', evidenceIds: ['ev_02'], answers: ['direct_answer'] },
             ],
             recommendedNextAction: 'final_answer',
           },
@@ -753,7 +768,7 @@ test('runtime ignores a model attempt to promote a frozen partial result', async
           result: {
             status: 'partial', summary: 'worker 未确认', missingInfo: ['服务日志'],
             evidence: [{ id: 'ev_partial', kind: 'workspace', source: 'src/router.ts', summary: '只定位到入口', confidence: 'medium' }],
-            claims: [{ type: 'inference', text: '目前只能确认请求经过该入口。', evidenceIds: ['ev_partial'] }],
+            claims: [{ type: 'inference', role: 'supporting_context', text: '目前只能确认请求经过该入口。', evidenceIds: ['ev_partial'], answers: [] }],
             recommendedNextAction: 'ask_user',
           },
           trace: { command: 'claude -p', cwd: process.cwd(), stdout: '{"result":"partial"}', stderr: '', exitCode: 0 },
@@ -782,10 +797,10 @@ test('deterministic validation rejects duplicate, missing, and low-confidence fa
       { id: 'ev_unknown', kind: 'unknown', source: 'unknown', summary: '未知来源', confidence: 'high' },
     ],
     claims: [
-      { id: 'claim_low', type: 'fact', text: '低置信度事实', evidenceIds: ['ev_low'] },
-      { id: 'claim_missing', type: 'fact', text: '不存在证据', evidenceIds: ['ev_missing'] },
-      { id: 'claim_unknown', type: 'fact', text: '未知来源事实', evidenceIds: ['ev_unknown'] },
-      { id: 'claim_invalid', type: 'invented', text: '非法类型', evidenceIds: ['ev_unknown'] },
+      { id: 'claim_low', type: 'fact', role: 'primary_answer', text: '低置信度事实', evidenceIds: ['ev_low'], answers: ['direct_answer'] },
+      { id: 'claim_missing', type: 'fact', role: 'primary_answer', text: '不存在证据', evidenceIds: ['ev_missing'], answers: ['direct_answer'] },
+      { id: 'claim_unknown', type: 'fact', role: 'primary_answer', text: '未知来源事实', evidenceIds: ['ev_unknown'], answers: ['direct_answer'] },
+      { id: 'claim_invalid', type: 'invented', role: 'unknown', text: '非法类型', evidenceIds: ['ev_unknown'], answers: [] },
     ],
     recommendedNextAction: 'final_answer',
   });

@@ -18,7 +18,6 @@ import { assertHostCommandAllowed, readOnlyTools } from '../dist/workers/claude/
 import { buildClaudeSystemPrompt, buildClaudeUserPrompt } from '../dist/workers/claude/claude-prompts.js';
 import { buildDiagnosticRequestContext } from '../dist/sessions/context-builder.js';
 import { buildDiagnosticRequest, buildFollowUpDiagnosticRequest } from '../dist/runtime/request-builder.js';
-import { buildAnswerContract } from '../dist/runtime/answer-contract.js';
 import { buildLocalPreflightDecision, isGenericWorkspaceFollowUp, summarizePreflightDecision } from '../dist/runtime/preflight-gate.js';
 import {
   caseStatusFromDiagnosticResult,
@@ -26,6 +25,8 @@ import {
   decisionFromReviewOutcome,
   shouldRunFollowUp,
 } from '../dist/runtime/review-gate.js';
+import { validateDiagnosticResult } from '../dist/runtime/result-validator.js';
+import { sessionSummary } from '../dist/gateway/dto.js';
 import { formatPreflightQuestion, personaGuide, personaName, ruleBasedReviewAndFormat } from '../dist/runtime/presenter.js';
 import { listPublicAgentConfigs, loadAgentRegistry, resolveAgentConfig } from '../dist/runtime/agent-configs.js';
 import { judgeKnowledgeEvidence } from '../dist/runtime/evidence-judge.js';
@@ -126,6 +127,105 @@ test('composer sends on Enter and keeps Shift+Enter for newline', () => {
   assert.match(html, /event\.key === 'Enter'/);
   assert.match(html, /!event\.shiftKey/);
   assert.match(html, /event\.preventDefault\(\)/);
+});
+
+test('partial fallback leads with accepted inference instead of generic downgrade summary', () => {
+  const reply = ruleBasedReviewAndFormat({
+    status: 'concluded',
+    summary: '问题根因是短信防御模块拦截了该学员的请求。',
+    missingInfo: ['短信防御命中日志或可复核的发送流水'],
+    evidence: [
+      {
+        id: 'ev_sms_defense',
+        kind: 'workspace',
+        source: 'src/Topxia/WebBundle/Controller/LoginController.php',
+        summary: '短信防御 deny 分支会返回 ACK=ok 且 allowance=0，前端可能显示发送成功但实际未发送。',
+        confidence: 'medium',
+      },
+    ],
+    claims: [
+      {
+        type: 'inference',
+        role: 'supporting_context',
+        text: '短信防御模块可能拦截了该学员的请求，前端仍显示发送成功，导致实际短信未发出。',
+        evidenceIds: ['ev_sms_defense'],
+        answers: [],
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  }, 'operations', '学员pc端手机号快捷登录收不到验证码，这个是什么问题');
+
+  assert.match(reply, /^\*\*初步判断：短信防御模块可能拦截了该学员的请求/m);
+  assert.doesNotMatch(reply, /^(\*\*)?结论：诊断结果包含未通过证据校验的内容/m);
+  assert.match(reply, /\*\*证据状态：当前证据不足，不能作为最终结论。\*\*/);
+  assert.match(reply, /\*\*仍需确认：.*短信防御命中日志.*可验证的 medium\/high confidence 证据/);
+});
+
+test('final worker result without claim role and answers is downgraded instead of shown as concluded', () => {
+  const result = {
+    status: 'concluded',
+    summary: '学员PC端手机号快捷登录功能入口为 /login/sms，收不到验证码的常见原因包括云短信配置、额度、锁定或发送频率限制。',
+    missingInfo: [],
+    evidence: [
+      {
+        id: 'ev_sms_login',
+        kind: 'workspace',
+        source: 'src/AppBundle/Controller/LoginController.php',
+        summary: '短信登录入口和云短信配置检查。',
+        confidence: 'high',
+      },
+    ],
+    claims: [
+      {
+        id: 'claim_sms_common',
+        type: 'fact',
+        text: '收不到验证码的常见原因包括 cloud_sms 未启用、短信签名未配置、短信额度用尽、服务被锁定或发送频率限制。',
+        evidenceIds: ['ev_sms_login'],
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  };
+
+  const validation = validateDiagnosticResult(result, {
+    rawUserQuestion: '学员pc端手机号快捷登录收不到验证码，这个是什么问题',
+    resolvedQuestion: '学员pc端手机号快捷登录收不到验证码，这个是什么问题',
+    answerObject: '手机号快捷登录验证码',
+    mustAnswerItems: ['observed_symptom', 'cause_or_likely_cause', 'next_action'],
+    diagnosticObjective: '排查短信发送失败原因',
+    sourceMessageIds: ['msg_user'],
+  });
+
+  assert.equal(validation.result.status, 'partial');
+  assert.equal(validation.result.recommendedNextAction, 'ask_user');
+  assert.equal(validation.acceptedPrimaryAnswerClaimIds.length, 0);
+  assert.equal(validation.issues.some((issue) => issue.code === 'missing_claim_role'), true);
+
+  assert.equal(caseStatusFromDiagnosticResult(validation.result), 'partial');
+  assert.equal(decisionFromDiagnosticResult(validation.result), 'ask_user');
+
+  const summary = sessionSummary({
+    id: 'case_035d82a6',
+    claudeSessionId: 'claude-session',
+    tenantId: 'local',
+    userId: 'local-user',
+    workspaceId: 'current',
+    title: '学员pc端手机号快捷登录收不到验证码，这个是什么问题',
+    status: 'concluded',
+    userPersona: 'operations',
+    messages: [],
+    runs: [
+      {
+        id: 'run_01',
+        caseId: 'case_035d82a6',
+        status: 'concluded',
+        result,
+      },
+    ],
+    logs: [],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  });
+  assert.equal(summary.status, 'partial');
 });
 
 test('app exposes a model settings and test entry', () => {
@@ -955,7 +1055,7 @@ const result = {
   summary: 'retry succeeded',
   missingInfo: [],
   evidence: [{ id: 'ev_01', kind: 'workspace', source: 'package.json', summary: 'read-only evidence', confidence: 'high' }],
-  claims: [{ type: 'fact', text: 'retry succeeded after busy session', evidenceIds: ['ev_01'] }],
+  claims: [{ type: 'fact', role: 'primary_answer', text: 'retry succeeded after busy session', evidenceIds: ['ev_01'], answers: ['direct_answer'] }],
   recommendedNextAction: 'final_answer'
 };
 console.log(JSON.stringify({ result: JSON.stringify(result) }));
@@ -1031,13 +1131,21 @@ console.log(JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', to
   }
 });
 
-test('worker prompt includes answer contract and partial rag escalation focus', () => {
+test('worker prompt includes answer goal and partial rag escalation focus', () => {
   const userGoal = '学员统计缺少6月份如何补上，有没有命令行处理';
   const request = {
     caseId: 'case_worker_prompt_contract',
     runId: 'run_worker_prompt_contract',
     workspaceId: 'current',
     claudeSessionId: 'claude_worker_prompt_contract',
+    answerGoal: {
+      rawUserQuestion: userGoal,
+      resolvedQuestion: userGoal,
+      answerObject: '学员统计缺少6月份如何补上，有没有命令行处理',
+      mustAnswerItems: ['direct_answer'],
+      diagnosticObjective: userGoal,
+      sourceMessageIds: ['msg_worker_prompt_contract'],
+    },
     userGoal,
     knownFacts: [],
     unknowns: [],
@@ -1049,10 +1157,6 @@ test('worker prompt includes answer contract and partial rag escalation focus', 
       currentUserMessage: userGoal,
       recentMessages: [],
       previousRuns: [],
-      answerContract: buildAnswerContract({
-        originalQuestion: userGoal,
-        resolvedQuestion: userGoal,
-      }),
       knowledge: {
         evidence: [],
         judge: {
@@ -1088,8 +1192,8 @@ test('worker prompt includes answer contract and partial rag escalation focus', 
 
   const prompt = `${buildClaudeSystemPrompt()}\n${buildClaudeUserPrompt(request)}`;
 
-  assert.match(prompt, /DiagnosticRequest\.context\.answerContract/);
-  assert.match(prompt, /missing mustAnswer/);
+  assert.match(prompt, /DiagnosticRequest\.answerGoal/);
+  assert.match(prompt, /answerGoal\.mustAnswerItems/);
   assert.match(prompt, /查找统计补数命令和月份参数/);
   assert.match(prompt, /学员统计由定时任务生成/);
 });
@@ -1196,7 +1300,7 @@ test('Claude worker helper modules parse output, downgrade failures, and narrow 
     summary: 'parsed result',
     missingInfo: [],
     evidence: [{ id: 'ev_01', kind: 'workspace', source: 'package.json', summary: 'read evidence', confidence: 'high' }],
-    claims: [{ type: 'fact', text: 'parsed', evidenceIds: ['ev_01'] }],
+    claims: [{ type: 'fact', role: 'primary_answer', text: 'parsed', evidenceIds: ['ev_01'], answers: ['direct_answer'] }],
     recommendedNextAction: 'final_answer',
   };
 
@@ -1317,7 +1421,7 @@ test('runtime answers directly from knowledge evidence before calling the worker
           summary: 'worker should not be called for answerable knowledge',
           missingInfo: [],
           evidence: [{ id: 'ev_worker', kind: 'workspace', source: 'worker', summary: 'worker called', confidence: 'low' }],
-          claims: [{ type: 'fact', text: 'worker called', evidenceIds: ['ev_worker'] }],
+          claims: [{ type: 'fact', role: 'primary_answer', text: 'worker called', evidenceIds: ['ev_worker'], answers: ['direct_answer'] }],
           recommendedNextAction: 'final_answer',
         },
         trace: {
@@ -1437,7 +1541,7 @@ test('runtime carries partial RAG claims into code escalation instead of discard
     } catch {
       payload = {};
     }
-    if (payload.answerContract && Array.isArray(payload.evidence)) {
+    if (payload.answerGoal && Array.isArray(payload.evidence)) {
       const evidenceId = payload.evidence[0].id;
       return chatResponse(JSON.stringify({
         answerability: 'partial',
@@ -1470,8 +1574,8 @@ test('runtime carries partial RAG claims into code escalation instead of discard
             { id: 'ev_code_items', kind: 'workspace', source: 'learning-plan.ts', summary: '代码确认学习计划入口和验证方式。', confidence: 'high' },
           ],
           claims: [
-            { id: 'claim_rag_entry', type: 'fact', text: '知识库确认学员加入课程后可以通过 AI 伴学助手制定学习计划。', evidenceIds: ['ev_rag_entry'] },
-            { id: 'claim_code_items', type: 'fact', text: '代码确认学习计划入口会保存学习时间段、每周学习日，并可通过计划生成结果验证。', evidenceIds: ['ev_code_items'] },
+            { id: 'claim_rag_entry', type: 'fact', role: 'supporting_context', text: '知识库确认学员加入课程后可以通过 AI 伴学助手制定学习计划。', evidenceIds: ['ev_rag_entry'], answers: [] },
+            { id: 'claim_code_items', type: 'fact', role: 'primary_answer', text: '代码确认学习计划入口会保存学习时间段、每周学习日，并可通过计划生成结果验证。', evidenceIds: ['ev_code_items'], answers: ['direct_answer'] },
           ],
           recommendedNextAction: 'final_answer',
         },
@@ -1607,7 +1711,7 @@ test('runtime runs rag answerability even when evidence judge blocks direct answ
     } catch {
       payload = {};
     }
-    if (payload.answerContract && Array.isArray(payload.evidence)) {
+    if (payload.answerGoal && Array.isArray(payload.evidence)) {
       const evidenceId = payload.evidence[0].id;
       return chatResponse(JSON.stringify({
         answerability: 'partial',
@@ -1841,7 +1945,7 @@ test('runtime applies deep query pivot on one retry after insufficient code evid
           summary: '第二轮 pivot 到 controller/service 后找到实现证据。',
           missingInfo: [],
           evidence: [{ id: 'ev_controller', kind: 'workspace', source: 'src/controller.ts', summary: 'controller 调用 service。', confidence: 'high' }],
-          claims: [{ type: 'fact', text: '实现证据已找到。', evidenceIds: ['ev_controller'] }],
+          claims: [{ type: 'fact', role: 'primary_answer', text: '实现证据已找到。', evidenceIds: ['ev_controller'], answers: ['direct_answer'] }],
           recommendedNextAction: 'final_answer',
         },
         trace: {
@@ -2225,9 +2329,9 @@ test('case curator keeps high-risk drafts restricted and refuses unsupported fac
         missingInfo: ['当前支付渠道状态'],
         evidence: [{ id: 'ev_pay', kind: 'knowledge', source: 'knowledge/faq/payment/refund.md', summary: '退款配置 runbook', confidence: 'medium' }],
         claims: [
-          { type: 'fact', text: '有证据的事实可沉淀', evidenceIds: ['ev_pay'] },
-          { type: 'fact', text: '无证据根因不应沉淀', evidenceIds: [] },
-          { type: 'unknown', text: '当前支付渠道状态未知', evidenceIds: [] },
+          { type: 'fact', role: 'primary_answer', text: '有证据的事实可沉淀', evidenceIds: ['ev_pay'], answers: ['direct_answer'] },
+          { type: 'fact', role: 'supporting_context', text: '无证据根因不应沉淀', evidenceIds: [], answers: [] },
+          { type: 'unknown', role: 'unknown', text: '当前支付渠道状态未知', evidenceIds: [], answers: [] },
         ],
         recommendedNextAction: 'final_answer',
       },
@@ -2357,8 +2461,10 @@ test('sync and async chat flows use the same runtime pipeline', async () => {
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '同步和异步路径都调用了同一个诊断 worker 端口。',
                 evidenceIds: ['ev_pipeline'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -2746,8 +2852,10 @@ test('agent model runs before Claude dispatch and after Claude returns', async (
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '存在可验证证据',
                 evidenceIds: ['ev_01'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -2819,8 +2927,10 @@ test('agent falls back to local reviewed formatting when presentation model retu
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '部门创建入口按 15 级限制展示。',
                 evidenceIds: ['ev_depth'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -2970,8 +3080,10 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '已基于 workspace 证据定位。',
                 evidenceIds: ['ev_01'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -3085,10 +3197,17 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     });
     assert.equal(request.runId, 'run_01');
     assert.equal(request.userPersona, 'developer');
+    assert.equal(request.answerGoal.rawUserQuestion, '请解释 package.json 的脚本配置，需要引用文件证据。');
+    assert.equal(request.answerGoal.resolvedQuestion, '请解释 package.json 的脚本配置，需要引用文件证据。');
+    assert.equal(request.answerGoal.answerObject, 'package.json');
+    assert.deepEqual(request.answerGoal.sourceMessageIds, [caseSession.messages.at(-1).id]);
+    assert.equal(request.answerGoal.mustAnswerItems.length > 0, true);
+    assert.match(request.answerGoal.diagnosticObjective, /package\.json/);
     assert.deepEqual(request.allowedMcpToolIds, ['readonly-docs']);
     assert.equal(request.context.isFollowUp, false);
     assert.match(request.constraints.join('\n'), /开发视角/);
     assert.match(request.constraints.join('\n'), /问题位置、确认方式、下一步排查/);
+    assert.match(request.constraints.join('\n'), /DiagnosticRequest\.answerGoal/);
 
     const operationsCase = store.createCase({
       tenantId: 'local',
@@ -3123,8 +3242,10 @@ test('runtime helper modules expose stable context, request, preflight, review, 
       claims: [
         {
           type: 'fact',
+          role: 'supporting_context',
           text: 'package.json 是当前判断的证据来源。',
           evidenceIds: ['ev_package'],
+          answers: [],
         },
       ],
       recommendedNextAction: 'continue_diagnosis',
@@ -3142,7 +3263,10 @@ test('runtime helper modules expose stable context, request, preflight, review, 
       previousResult: result,
     });
     assert.equal(followUp.runId, 'run_02');
-    assert.match(followUp.userGoal, /继续追查/);
+    assert.equal(followUp.answerGoal.resolvedQuestion, request.answerGoal.resolvedQuestion);
+    assert.equal(followUp.answerGoal.rawUserQuestion, request.answerGoal.rawUserQuestion);
+    assert.match(followUp.answerGoal.diagnosticObjective, /继续追查/);
+    assert.doesNotMatch(followUp.userGoal, /继续追查/);
     assert.match(followUp.constraints.join('\n'), /Resolve follow-up references/);
 
     const blockedCase = store.createCase({
@@ -3158,8 +3282,22 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     assert.equal(isGenericWorkspaceFollowUp('请补充这是哪个产品或代码库？', ['产品名称']), true);
     assert.equal(isGenericWorkspaceFollowUp('请补充 traceId 和时间范围', ['traceId']), false);
 
-    assert.equal(caseStatusFromDiagnosticResult({ ...result, status: 'concluded', recommendedNextAction: 'final_answer' }), 'concluded');
-    assert.equal(decisionFromDiagnosticResult({ ...result, status: 'concluded', recommendedNextAction: 'final_answer' }), 'final');
+    const finalResult = {
+      ...result,
+      status: 'concluded',
+      recommendedNextAction: 'final_answer',
+      claims: [
+        {
+          type: 'fact',
+          role: 'primary_answer',
+          text: 'package.json 是当前判断的证据来源。',
+          evidenceIds: ['ev_package'],
+          answers: ['direct_answer'],
+        },
+      ],
+    };
+    assert.equal(caseStatusFromDiagnosticResult(finalResult), 'concluded');
+    assert.equal(decisionFromDiagnosticResult(finalResult), 'final');
     assert.equal(decisionFromReviewOutcome('ask_user', result), 'partial');
     assert.equal(shouldRunFollowUp({ reply: '继续', decision: 'partial' }, result, { command: '', cwd: '', stdout: '', stderr: '', startedAt: '', finishedAt: '' }), true);
 
@@ -3174,7 +3312,13 @@ test('runtime helper modules expose stable context, request, preflight, review, 
         { id: 'ev_player', kind: 'workspace', source: 'src/player.ts', summary: '播放器初始化读取 enablePlaybackRates 配置。', confidence: 'high' },
       ],
       claims: [
-        { type: 'fact', text: '倍速开关由播放器初始化配置控制。', evidenceIds: ['ev_player'] },
+        {
+          type: 'fact',
+          role: 'primary_answer',
+          text: '倍速开关由播放器初始化配置控制。',
+          evidenceIds: ['ev_player'],
+          answers: ['direct_answer'],
+        },
       ],
       recommendedNextAction: 'final_answer',
     };
@@ -3183,13 +3327,14 @@ test('runtime helper modules expose stable context, request, preflight, review, 
     const supportReply = ruleBasedReviewAndFormat(reviewedResult, 'support');
     const customerReply = ruleBasedReviewAndFormat(reviewedResult, 'customer');
     assert.match(operationsReply, /\*\*结论：/);
-    assert.match(operationsReply, /系统 bug|设计使然|配置或使用问题|目前不能确认/);
-    assert.match(operationsReply, /\*\*对业务的影响：\*\*/);
+    assert.match(operationsReply, /倍速开关由播放器初始化配置控制/);
+    assert.doesNotMatch(operationsReply, /系统 bug|设计使然|配置或使用问题|目前不能确认/);
+    assert.doesNotMatch(operationsReply, /\*\*对业务的影响：\*\*/);
     assert.doesNotMatch(operationsReply, /支撑证据：/);
     assert.doesNotMatch(operationsReply, /src\/player\.ts/);
     assert.match(developerReply, /\*\*结论：/);
     assert.match(developerReply, /\*\*定位依据：\*\*/);
-    assert.match(developerReply, /\*\*下一步排查：\*\*/);
+    assert.doesNotMatch(developerReply, /\*\*下一步排查：\*\*/);
     assert.match(supportReply, /\*\*建议处理：\*\*/);
     assert.match(customerReply, /\*\*你现在可以这样做：\*\*/);
     assert.notEqual(operationsReply, developerReply);
@@ -3258,8 +3403,10 @@ test('model preflight cannot block an inspectable workspace question with generi
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '问题可以通过当前 workspace 先做只读排查。',
                 evidenceIds: ['ev_01'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -3354,8 +3501,10 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
               claims: [
                 {
                   type: 'inference',
+                  role: 'supporting_context',
                   text: '可能需要继续查播放器配置。',
                   evidenceIds: ['ev_01'],
+                  answers: [],
                 },
               ],
               recommendedNextAction: 'continue_diagnosis',
@@ -3389,8 +3538,10 @@ test('agent can run one follow-up Claude turn when evidence review asks to conti
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '倍速开关由播放器初始化配置控制。',
                 evidenceIds: ['ev_02'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -3566,8 +3717,10 @@ test('local preflight can dispatch general project questions, not only diagnosti
             claims: [
               {
                 type: 'fact',
+                role: 'primary_answer',
                 text: '项目通过 package.json 暴露脚本。',
                 evidenceIds: ['ev_01'],
+                answers: ['direct_answer'],
               },
             ],
             recommendedNextAction: 'final_answer',
@@ -3653,6 +3806,14 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
         runId: 'run_prior',
         workspaceId: prior.workspaceId,
         claudeSessionId: prior.claudeSessionId,
+        answerGoal: {
+          rawUserQuestion: priorUser.body,
+          resolvedQuestion: priorUser.body,
+          answerObject: priorUser.body,
+          mustAnswerItems: ['direct_answer'],
+          diagnosticObjective: priorUser.body,
+          sourceMessageIds: [priorUser.id],
+        },
         userGoal: priorUser.body,
         knownFacts: [],
         unknowns: [],
@@ -3672,9 +3833,9 @@ test('experience agent reuses a prior reviewed answer without dispatching Claude
           validation: { status: 'active', visibility: 'internal', lastVerifiedAt: new Date().toISOString(), quality: 'ok' },
         }],
         claims: [
-          { type: 'fact', text: '现象是课程任务保存失败。', evidenceIds: ['ev_prior'] },
-          { type: 'fact', text: '原因是任务配置缺失会导致课程任务保存失败。', evidenceIds: ['ev_prior'] },
-          { type: 'fact', text: '下一步建议检查任务配置和接口返回。', evidenceIds: ['ev_prior'] },
+          { type: 'fact', role: 'supporting_context', text: '现象是课程任务保存失败。', evidenceIds: ['ev_prior'], answers: [] },
+          { type: 'fact', role: 'primary_answer', text: '原因是任务配置缺失会导致课程任务保存失败。', evidenceIds: ['ev_prior'], answers: ['direct_answer'] },
+          { type: 'fact', role: 'supporting_context', text: '下一步建议检查任务配置和接口返回。', evidenceIds: ['ev_prior'], answers: [] },
         ],
         recommendedNextAction: 'final_answer',
       },

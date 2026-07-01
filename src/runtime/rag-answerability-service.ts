@@ -1,4 +1,4 @@
-import type { AnswerContract } from '../domain.js';
+import type { AnswerGoal } from '../domain.js';
 import type { KnowledgeEvidenceResult } from '../knowledge/index.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { parseAgentModelJson } from './agent-model-review.js';
@@ -41,7 +41,7 @@ export class RagAnswerabilityService {
   ) {}
 
   async evaluate(input: {
-    contract: AnswerContract;
+    answerGoal: AnswerGoal;
     evidence: KnowledgeEvidenceResult[];
   }): Promise<RagAnswerabilityResult> {
     const topEvidence = input.evidence.slice(0, this.topN);
@@ -60,13 +60,13 @@ Return JSON only. Do not include markdown, comments, explanations, or text outsi
     try {
       const response = await this.model.complete([
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: JSON.stringify({ answerContract: input.contract, evidence: evidencePayload }, null, 2) },
+        { role: 'user', content: JSON.stringify({ answerGoal: input.answerGoal, evidence: evidencePayload }, null, 2) },
       ], { json: true });
       const parsed = parseAgentModelJson<ParsedRagAnswerability>(response);
-      return validateRagAnswerability(parsed, new Set(topEvidence.map((item) => item.evidence_id)), input.contract);
+      return validateRagAnswerability(parsed, new Set(topEvidence.map((item) => item.evidence_id)), input.answerGoal);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return conservativeUnknown(input.contract, `rag answerability evaluation failed: ${message}`);
+      return conservativeUnknown(input.answerGoal, `rag answerability evaluation failed: ${message}`);
     }
   }
 }
@@ -74,11 +74,11 @@ Return JSON only. Do not include markdown, comments, explanations, or text outsi
 function validateRagAnswerability(
   parsed: ParsedRagAnswerability,
   validEvidenceIds: Set<string>,
-  contract: AnswerContract,
+  answerGoal: AnswerGoal,
 ): RagAnswerabilityResult {
   const answerability = normalizeAnswerability(parsed.answerability);
   if (answerability === 'unknown') {
-    return conservativeUnknown(contract, 'unknown or missing answerability');
+    return conservativeUnknown(answerGoal, 'unknown or missing answerability');
   }
 
   const selectedEvidenceIds = safeStringArray(parsed.selectedEvidenceIds);
@@ -90,35 +90,34 @@ function validateRagAnswerability(
   ]);
   for (const evidenceId of allEvidenceIds) {
     if (!validEvidenceIds.has(evidenceId)) {
-      return conservativeUnknown(contract, `invalid evidence id: ${evidenceId}`);
+      return conservativeUnknown(answerGoal, `invalid evidence id: ${evidenceId}`);
     }
   }
   if (answerability === 'full' && coveredClaims.length === 0) {
-    return conservativeUnknown(contract, 'full answerability requires covered claims');
+    return conservativeUnknown(answerGoal, 'full answerability requires covered claims');
   }
   if ((answerability === 'full' || answerability === 'partial') && selectedEvidenceIds.length === 0) {
-    return conservativeUnknown(contract, `${answerability} answerability requires selected evidence`);
+    return conservativeUnknown(answerGoal, `${answerability} answerability requires selected evidence`);
   }
   if (answerability === 'partial' && coveredClaims.length === 0) {
-    return conservativeUnknown(contract, 'partial answerability requires covered claims');
+    return conservativeUnknown(answerGoal, 'partial answerability requires covered claims');
   }
   if (answerability === 'full' && missingElements.length > 0) {
-    return conservativeUnknown(contract, 'full answerability cannot include missing elements');
+    return conservativeUnknown(answerGoal, 'full answerability cannot include missing elements');
   }
   if (answerability === 'full' && parsed.shouldEscalate === true) {
-    return conservativeUnknown(contract, 'full answerability cannot request escalation');
+    return conservativeUnknown(answerGoal, 'full answerability cannot request escalation');
   }
   if (answerability === 'full') {
     const coveredRequirementIds = new Set(coveredClaims.flatMap((claim) => claim.coveredRequirementIds));
-    const missingRequirementIds = contract.mustAnswer
-      .map((requirement) => requirement.id)
+    const missingRequirementIds = answerGoal.mustAnswerItems
       .filter((id) => !coveredRequirementIds.has(id));
     if (missingRequirementIds.length > 0) {
-      return conservativeUnknown(contract, `full answerability missing mustAnswer requirements: ${missingRequirementIds.join(', ')}`);
+      return conservativeUnknown(answerGoal, `full answerability missing mustAnswerItems: ${missingRequirementIds.join(', ')}`);
     }
   }
   if ((answerability === 'partial' || answerability === 'none') && parsed.shouldEscalate === false) {
-    return conservativeUnknown(contract, 'partial/none answerability must escalate');
+    return conservativeUnknown(answerGoal, 'partial/none answerability must escalate');
   }
 
   return {
@@ -127,19 +126,19 @@ function validateRagAnswerability(
     coveredClaims: answerability === 'none' ? [] : coveredClaims,
     missingElements,
     shouldEscalate: answerability !== 'full' || parsed.shouldEscalate === true,
-    escalationFocus: typeof parsed.escalationFocus === 'string' ? parsed.escalationFocus : defaultEscalationFocus(contract),
+    escalationFocus: typeof parsed.escalationFocus === 'string' ? parsed.escalationFocus : defaultEscalationFocus(answerGoal),
     reason: typeof parsed.reason === 'string' ? parsed.reason : '',
   };
 }
 
-function conservativeUnknown(contract: AnswerContract, reason: string): RagAnswerabilityResult {
+function conservativeUnknown(answerGoal: AnswerGoal, reason: string): RagAnswerabilityResult {
   return {
     answerability: 'unknown',
     selectedEvidenceIds: [],
     coveredClaims: [],
-    missingElements: contract.mustAnswer.map((item) => item.label),
-    shouldEscalate: contract.missingTolerance === 'partial_allowed_with_escalation' || contract.questionType !== 'definition',
-    escalationFocus: defaultEscalationFocus(contract),
+    missingElements: [...answerGoal.mustAnswerItems],
+    shouldEscalate: true,
+    escalationFocus: defaultEscalationFocus(answerGoal),
     reason,
   };
 }
@@ -169,6 +168,6 @@ function safeClaims(value: unknown): RagCoveredClaim[] {
   });
 }
 
-function defaultEscalationFocus(contract: AnswerContract): string {
-  return `补齐这些答案要素：${contract.mustAnswer.map((item) => item.label).join('、')}`;
+function defaultEscalationFocus(answerGoal: AnswerGoal): string {
+  return `补齐这些答案要素：${answerGoal.mustAnswerItems.join('、')}`;
 }

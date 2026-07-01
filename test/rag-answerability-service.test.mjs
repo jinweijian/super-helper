@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RagAnswerabilityService } from '../dist/runtime/rag-answerability-service.js';
-import { buildAnswerContract } from '../dist/runtime/answer-contract.js';
 
 const evidence = [{
   evidence_id: 'ev_stat_task',
@@ -18,11 +17,22 @@ function model(json) {
   return { complete: async () => json };
 }
 
+function answerGoal(question, mustAnswerItems = ['direct_answer']) {
+  return {
+    rawUserQuestion: question,
+    resolvedQuestion: question,
+    answerObject: question,
+    mustAnswerItems,
+    diagnosticObjective: question,
+    sourceMessageIds: ['msg_test'],
+  };
+}
+
 test('rag answerability extracts partial covered claims and requests escalation', async () => {
-  const contract = buildAnswerContract({
-    originalQuestion: '学员数据统计缺少6月份，如何补上，有没有命令行处理',
-    resolvedQuestion: '学员数据统计缺少6月份，如何补上，有没有命令行处理',
-  });
+  const goal = answerGoal(
+    '学员数据统计缺少6月份，如何补上，有没有命令行处理',
+    ['generation_source', 'command_or_entry'],
+  );
   const service = new RagAnswerabilityService(model(JSON.stringify({
     answerability: 'partial',
     selectedEvidenceIds: ['ev_stat_task'],
@@ -39,7 +49,7 @@ test('rag answerability extracts partial covered claims and requests escalation'
     reason: '知识库只说明生成来源，未覆盖补数命令。',
   })), 'agent spec');
 
-  const result = await service.evaluate({ contract, evidence });
+  const result = await service.evaluate({ answerGoal: goal, evidence });
 
   assert.equal(result.answerability, 'partial');
   assert.equal(result.shouldEscalate, true);
@@ -49,10 +59,7 @@ test('rag answerability extracts partial covered claims and requests escalation'
 });
 
 test('rag answerability rejects nonexistent evidence ids', async () => {
-  const contract = buildAnswerContract({
-    originalQuestion: '班课在哪配置的',
-    resolvedQuestion: '班课在哪配置的',
-  });
+  const goal = answerGoal('班课在哪配置的');
   const service = new RagAnswerabilityService(model(JSON.stringify({
     answerability: 'full',
     selectedEvidenceIds: ['ev_missing'],
@@ -69,7 +76,7 @@ test('rag answerability rejects nonexistent evidence ids', async () => {
     reason: 'bad ids',
   })), 'agent spec');
 
-  const result = await service.evaluate({ contract, evidence });
+  const result = await service.evaluate({ answerGoal: goal, evidence });
 
   assert.equal(result.answerability, 'unknown');
   assert.equal(result.shouldEscalate, true);
@@ -77,10 +84,7 @@ test('rag answerability rejects nonexistent evidence ids', async () => {
 });
 
 test('rag answerability rejects full results that do not cover every mustAnswer requirement', async () => {
-  const contract = buildAnswerContract({
-    originalQuestion: '班课在哪配置的',
-    resolvedQuestion: '班课在哪配置的',
-  });
+  const goal = answerGoal('班课在哪配置的', ['entry_path', 'permission_or_role']);
   const service = new RagAnswerabilityService(model(JSON.stringify({
     answerability: 'full',
     selectedEvidenceIds: ['ev_stat_task'],
@@ -97,7 +101,7 @@ test('rag answerability rejects full results that do not cover every mustAnswer 
     reason: '错误地认为已覆盖全部问题。',
   })), 'agent spec');
 
-  const result = await service.evaluate({ contract, evidence });
+  const result = await service.evaluate({ answerGoal: goal, evidence });
 
   assert.equal(result.answerability, 'unknown');
   assert.equal(result.shouldEscalate, true);

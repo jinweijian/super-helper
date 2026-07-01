@@ -42,31 +42,13 @@ export interface ContextUsage {
   available: boolean;
 }
 
-export type AnswerQuestionType =
-  | 'definition'
-  | 'feature_overview'
-  | 'configuration_location'
-  | 'operation_procedure'
-  | 'troubleshooting_cause'
-  | 'rule_explanation'
-  | 'bug_or_behavior'
-  | 'unknown';
-
-export interface AnswerRequirement {
-  id: string;
-  label: string;
-  description: string;
-}
-
-export interface AnswerContract {
-  originalQuestion: string;
+export interface AnswerGoal {
+  rawUserQuestion: string;
   resolvedQuestion: string;
-  questionType: AnswerQuestionType;
-  userNeed: string;
-  mustAnswer: AnswerRequirement[];
-  usefulContext: AnswerRequirement[];
-  missingTolerance: 'full_required' | 'partial_allowed_with_escalation';
-  finalAnswerExpectation: string;
+  answerObject: string;
+  mustAnswerItems: string[];
+  diagnosticObjective: string;
+  sourceMessageIds: string[];
 }
 
 export interface WorkspaceConfig {
@@ -129,6 +111,7 @@ export interface DiagnosticRequest {
   runId: string;
   workspaceId: string;
   claudeSessionId: string;
+  answerGoal: AnswerGoal;
   userGoal: string;
   knownFacts: string[];
   unknowns: string[];
@@ -141,7 +124,6 @@ export interface DiagnosticRequest {
 export interface DiagnosticRequestContext {
   isFollowUp: boolean;
   currentUserMessage: string;
-  answerContract?: AnswerContract;
   recentMessages: Array<{
     id?: string;
     role: CaseMessage['role'];
@@ -320,9 +302,19 @@ export interface Evidence {
 export interface DiagnosticClaim {
   id?: string;
   type: ClaimType;
+  role: DiagnosticClaimRole;
   text: string;
   evidenceIds: string[];
+  answers: string[];
 }
+
+export type DiagnosticClaimRole =
+  | 'primary_answer'
+  | 'supporting_context'
+  | 'evidence_locator'
+  | 'process_note'
+  | 'next_action'
+  | 'unknown';
 
 export interface DiagnosticResult {
   status: 'need_input' | 'partial' | 'concluded';

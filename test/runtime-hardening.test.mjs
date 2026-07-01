@@ -610,8 +610,10 @@ test('operations persona final reply hides internal whitepaper source paths whil
       {
         id: 'claim_whitepaper_source',
         type: 'fact',
+        role: 'primary_answer',
         text: '规则来自 knowledge/_sources/whitepapers/ai-companion.docx 的审核资料。',
         evidenceIds: ['ev_whitepaper_source'],
+        answers: ['direct_answer'],
       },
     ],
     recommendedNextAction: 'final_answer',

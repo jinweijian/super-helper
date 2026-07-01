@@ -1,6 +1,6 @@
 import type { CaseSession, DiagnosticRequest, HelperAgentConfig } from '../domain.js';
-import { buildAnswerContract } from './answer-contract.js';
-import { ANSWER_CONTRACT_CONSTRAINT } from './request-builder.js';
+import { buildAnswerGoal } from './answer-goal.js';
+import { ANSWER_GOAL_CONSTRAINT } from './request-builder.js';
 import { buildResolvedTurnContext } from './resolved-turn.js';
 
 export interface PreflightInput {
@@ -95,10 +95,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
     caseSession: input.caseSession,
     latestUserMessage: input.userMessage,
   });
-  const answerContract = buildAnswerContract({
-    originalQuestion: input.userMessage,
-    resolvedQuestion: resolvedTurn.resolvedQuery,
-  });
+  const answerGoal = buildAnswerGoal({ rawUserQuestion: input.userMessage, resolvedTurn });
   const knownFacts = resolvedTurn.confirmedFacts.map((fact) => fact.text);
 
   return {
@@ -108,6 +105,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
       runId: `run_${String(latestRunNumber).padStart(2, '0')}`,
       workspaceId: input.caseSession.workspaceId,
       claudeSessionId: input.caseSession.claudeSessionId,
+      answerGoal,
       userGoal: resolvedTurn.resolvedQuery,
       knownFacts,
       unknowns: Array.from(new Set([
@@ -119,7 +117,7 @@ export function preflight(input: PreflightInput): PreflightDecision {
         'Handle both troubleshooting requests and general project questions.',
         'Return structured evidence, assumptions, missing information, and recommended next action.',
         'Do not make final claims without evidence.',
-        ANSWER_CONTRACT_CONSTRAINT,
+        ANSWER_GOAL_CONSTRAINT,
       ],
       allowedMcpToolIds: input.allowedMcpToolIds ?? [],
       context: {
@@ -133,7 +131,6 @@ export function preflight(input: PreflightInput): PreflightDecision {
         })),
         previousRuns: [],
         resolvedTurn,
-        answerContract,
       },
     },
   };
