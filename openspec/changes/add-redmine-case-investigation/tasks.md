@@ -1,138 +1,87 @@
-## 1. 历史案例配置与 MCP capability
+## 1. 配置与能力合同
 
-- [ ] 1.1 先写旧配置兼容、historicalCaseSources round-trip 和非法引用拒绝测试
-- [ ] 1.2 为 MCP server 增加可选 historical_case/redmine capability 合同
-- [ ] 1.3 为 workspace 增加可选 serverId、projectAliases 和私有备注策略
-- [ ] 1.4 在配置加载边界校验 read-only、tool allowlist、server 引用和项目列表
-- [ ] 1.5 保证 onboarding 配置提交保留 historicalCaseSources
-- [ ] 1.6 运行配置、onboarding 和类型专项验证
+- [ ] 1.1 在 `test/historical-case-config.test.mjs` 先写失败测试：旧 workspace 无字段可读；配置 source 可 round-trip；未知/disabled/read_write/未 allowlist server、错误 capability、多 source 均拒绝。完成证据：构建后专项测试因合同缺失而失败，失败原因与预期一致。
+- [ ] 1.2 在 `src/contracts/base.ts`、`src/config/contracts.ts`、`src/mcp/contracts.ts` 增加 `HistoricalCaseSourceConfig` 与 `historical_case/redmine` capability；source 只含 `serverId`，不含项目或私有备注开关。完成证据：类型定义不包含 URL、project、credential、`includePrivateNotes`。
+- [ ] 1.3 在 `src/config/io.ts` 和 `src/onboarding/config-commit.ts` 实现配置校验与保留逻辑；`src/config/defaults.ts` 保持历史来源默认未配置。完成证据：`pnpm build && node --test test/historical-case-config.test.mjs test/onboarding.test.mjs` 通过。
 
-## 2. Redmine REST 只读适配
+## 2. Redmine 搜索协议与固定范围 Client
 
-- [ ] 2.1 先写 API Key header、固定 base URL、GET-only 和安全错误失败测试
-- [ ] 2.2 定义 Redmine 原始 issue/search/pagination Zod 协议
-- [ ] 2.3 实现带超时和安全错误码的 GET-only Redmine client
-- [ ] 2.4 先写 rest_search 项目二次校验和 bounded paging 测试
-- [ ] 2.5 实现启动时固定的 rest_search backend
-- [ ] 2.6 先写 issues_scan 的 status_id=*、历史窗口、分页和缓存测试
-- [ ] 2.7 实现启动时固定的 issues_scan backend
-- [ ] 2.8 验证 backend 请求期间不会静默切换或扩大范围
+- [ ] 2.1 在 `test/redmine-api-client.test.mjs` 先写失败测试：Search/Issues API GET 参数、`status_id=*`、固定 origin/project、候选项目复核、有界分页、timeout/401/403/429/5xx/非法 schema 安全错误。完成证据：测试先因方法/schema 缺失而红。
+- [ ] 2.2 扩展 `src/mcp-servers/redmine/redmine-api/protocol.ts` 与 `client.ts`，增加搜索页、候选字段、公开 journal/status changes/relations/attachment metadata 的严格 Zod schema 和 GET 方法；保留 probe 现有最小接口。完成证据：所有请求方法为 GET，输入无法设置 URL/method/header/project。
+- [ ] 2.3 新建 `src/mcp-servers/redmine/redmine-api/search.ts`，实现启动时固定的 `rest_search | issues_scan` backend、固定项目复核、历史窗口、页预算和 5 分钟进程缓存。完成证据：专项测试证明请求期间不切换 backend、不扩大项目范围、缓存不落盘。
 
-## 3. Redmine 隐私与结构化预算
+## 3. 永久隐私过滤与结构化预算
 
-- [ ] 3.1 先写人员匿名、私有备注默认删除和附件元数据测试
-- [ ] 3.2 实现候选与详情字段白名单归一化
-- [ ] 3.3 实现进程 salt 下稳定的匿名人员 ID
-- [ ] 3.4 实现服务端与 workspace 双重私有备注门禁
-- [ ] 3.5 先写 48,000 字符内保持合法 JSON 和完整 evidence block 的失败测试
-- [ ] 3.6 实现按完整 journal/attachment/字段收缩的结构化 bounding
-- [ ] 3.7 验证输出不含姓名、邮箱、用户名、网络标识、下载 URL 或凭证
+- [ ] 3.1 新建 `test/redmine-normalizer.test.mjs` 和敏感 fixtures，先写失败测试覆盖 private journals、姓名/用户名/邮箱/IP/手机号/人员 ID、附件文件名/URL/token/body、未知 custom fields 和 raw error。完成证据：测试先证明未实现路径会泄漏诱饵。
+- [ ] 3.2 新建 `src/mcp-servers/redmine/redmine-api/normalizer.ts`，仅输出候选/详情白名单；私有备注永久删除，人员字段全部删除，附件只保留 MIME/size/count。完成证据：序列化结果不含任何诱饵或 `includePrivateNotes` 分支。
+- [ ] 3.3 新建 `src/mcp-servers/redmine/redmine-api/bounding.ts`，按完整 evidence block 将三条详情收缩到 48,000 Unicode 字符并返回 omitted/truncated metadata。完成证据：超限 fixture 仍是合法 schema，任何 block 不被半截切断。
 
-## 4. Redmine MCP Server 与 transports
+## 4. 两个 Redmine MCP 工具与 stdio transport
 
-- [ ] 4.1 先写两个且仅两个 MCP 工具的 schema/输出合同测试
-- [ ] 4.2 实现 searchId 候选授权、TTL 和唯一候选集合
-- [ ] 4.3 实现 redmine_search_issues 并强制最大 10 条
-- [ ] 4.4 实现 redmine_get_issue_case_details 并强制 searchId 和最大 3 条
-- [ ] 4.5 先写 stdio 与 HTTP tool schema 一致性测试
-- [ ] 4.6 实现 stdio transport
-- [ ] 4.7 实现带独立 Bearer 认证的 Streamable HTTP transport
-- [ ] 4.8 先写缺 URL、API Key、项目映射和非法预算的配置失败测试
-- [ ] 4.9 实现 Redmine MCP 启动配置与薄 main.ts
-- [ ] 4.10 增加 super-helper-redmine-mcp package bin 并验证构建产物
+- [ ] 4.1 在 `test/redmine-mcp-server.test.mjs` 先写失败测试：只发现两个工具、输入 schema 禁止 transport/project/credential、search 最多 10、detail 只接受 live grant 中最多 3 个唯一 ID。完成证据：测试先因 server/grant 缺失而红。
+- [ ] 4.2 新建 `src/mcp-servers/redmine/candidate-grants.ts`、`tools/search-issues.ts`、`tools/get-issue-case-details.ts` 和 `server.ts`，实现 TTL grant、固定项目复核和安全错误。完成证据：未知/过期/重复/越限 ID 在 Redmine detail fetch 前被拒绝。
+- [ ] 4.3 新建 `src/mcp-servers/redmine/config.ts`、`transports/stdio.ts` 和薄 `main.ts`；进程只接收 materialized `REDMINE_API_KEY` 与有界 backend/预算配置，不读取 secrets 文件。完成证据：`test/redmine-mcp-stdio.test.mjs` 通过真实 MCP SDK stdio transport 完成 listTools/search/detail fixture 流程。
+- [ ] 4.4 更新 `package.json` bin/scripts 和 build contract，增加 `super-helper-redmine-mcp`、`acceptance:redmine:offline`、`acceptance:redmine:real`。完成证据：`pnpm build` 后 `dist/mcp-servers/redmine/main.js` 存在且普通 `super-helper` bin 不变。
 
-## 5. 主应用 historical-case MCP 证据边界
+## 5. 主应用 HistoricalCaseEvidence 边界
 
-- [ ] 5.1 先写 legacy 20K 归一化不变和 historical-case 48K JSON 完整性测试
-- [ ] 5.2 根据显式 MCP capability 选择 schema-aware historical-case normalizer
-- [ ] 5.3 先写 workspace/server/project allowlist 与 search 状态映射测试
-- [ ] 5.4 实现 HistoricalCaseEvidenceService.search
-- [ ] 5.5 先写同一 searchId、最多 3 条详情和 evidence provenance 测试
-- [ ] 5.6 实现 HistoricalCaseEvidenceService.getDetails
-- [ ] 5.7 验证 timeout、failed、no_hit 不互相转换且 historical-case 不能直接生成最终答复
+- [ ] 5.1 在 `test/historical-case-evidence-service.test.mjs` 先写失败测试：配置/allowlist、search→detail 同一 grant、状态映射、48K structured result、provenance 和历史结果不得直接生成 final answer。完成证据：测试因 service/capability 缺失而红。
+- [ ] 5.2 扩展 `src/mcp/normalizer.ts`，仅对显式 `historical_case/redmine` capability 使用 schema-aware 48K 路径；普通 MCP 保持 20K。完成证据：legacy MCP 专项与 historical structured 专项同时通过。
+- [ ] 5.3 新建 `src/mcp/historical-case-evidence-service.ts`，通过 `executeMcpTool` 调用两个工具并返回 `completed | no_hit | timeout | failed`、有界 payload、Evidence 和 current-run coverage envelopes。完成证据：timeout/failed/no_hit 不互换，readOnly/allowlisted/completed provenance 可验证。
 
-## 6. Product Agents 与严格模型服务
+## 6. 四个 Product Agent 与模型服务
 
-- [ ] 6.1 先写 Planner 有效、非法、超时、未知项目和 fallback schema 测试
-- [ ] 6.2 创建 Evidence Source Planner Agent 配置和模型 service
-- [ ] 6.3 先写候选重排只能选择搜索结果内最多 3 个 ID 的测试
-- [ ] 6.4 创建 Historical Case Analyzer Agent 配置并实现 reranker service
-- [ ] 6.5 先写 Analyzer evidence ID、冲突和只读计划 schema 测试
-- [ ] 6.6 实现 Historical Case Analyzer service
-- [ ] 6.7 先写 Current Evidence Assessor 的 worker_needed/worker_not_needed 测试
-- [ ] 6.8 创建 Current Evidence Assessor Agent 配置和 service
-- [ ] 6.9 先写 Verifier 禁止新增事实和未知 evidence ID 测试
-- [ ] 6.10 创建 Historical Case Verifier Agent 配置和 service
-- [ ] 6.11 补齐 AgentStage、registry、README 和公共 Agent 列表
+- [ ] 6.1 新建四个 Agent 配置：`historical-search-query-planner.md`、`historical-case-reranker.md`、`historical-case-analyzer.md`、`historical-case-verifier.md`，并更新 `src/agents/registry.json`、`README.md` 与 Agent stage 类型。完成证据：全部 `mayProduceUserFacingText=false`，不存在 Current Evidence Assessor。
+- [ ] 6.2 在 `test/historical-case-model-services.test.mjs` 先写失败测试：query planner fallback 仍查询、reranker 只能选候选 3 个、Analyzer 绑定 evidence/check/action、Verifier 不新增事实或未知 ID。完成证据：每个模型服务至少一次合法、非法 JSON、schema 越界和模型异常红绿循环。
+- [ ] 6.3 在 `src/runtime/case-investigation/` 新建 `contracts.ts`、`query-planner-service.ts`、`candidate-reranker-service.ts`、`historical-case-analyzer-service.ts`、`historical-case-verifier-service.ts`；使用集中 Agent config 和严格 Zod/确定性校验。完成证据：模型 reason/raw output 不进入返回给持久化层的对象。
 
-## 7. 无提前呈现的证据 collectors
+## 7. Evidence-only collectors
 
-- [ ] 7.1 先写 Knowledge collect 不修改共享 request、不创建 Run/回复的测试
-- [ ] 7.2 从 KnowledgeTurnService 拆出 evidence-only collect 并保持 answer 行为
-- [ ] 7.3 先写 Experience collect 不短路、不创建 Run/回复的测试
-- [ ] 7.4 从 ExperienceTurnService 拆出 evidence-only collect 并保持 fast answer 行为
-- [ ] 7.5 先写 Worker ephemeral request、sanitized persisted request 和单次执行测试
-- [ ] 7.6 从 WorkerDiagnosisService 拆出 collectEvidence 并保持普通 deep-query follow-up 行为
-- [ ] 7.7 在 Worker 派发前确定性拒绝写操作或不完整的匹配/反匹配计划
+- [ ] 7.1 在 `test/case-investigation-collectors.test.mjs` 先写失败测试：Knowledge collect、Experience collect、Worker collect 都不创建 Run、Review、Presentation 或 helper reply，也不并发修改共享 request。完成证据：现有 answer/diagnose 路径保持原回归。
+- [ ] 7.2 从 `src/runtime/knowledge-turn.ts` 拆出 `collect()`，返回 route/evidence/judge/answerability/provenance/context patch；`answer()` 复用 collect。完成证据：Knowledge 可回答时 collect 仍只返回 evidence。
+- [ ] 7.3 从 `src/runtime/experience-turn.ts` 拆出 `collect()`，返回可复用和 rejected candidates；`answer()` 保持 legacy 行为。完成证据：配置案例调查时 Experience 不短路。
+- [ ] 7.4 从 `src/runtime/worker-diagnosis.ts` 拆出 `collectEvidence()`，只调用一次 worker、不运行 deep-query follow-up、不 Review/Presentation；校验 action allowlist 和 match/mismatch。完成证据：ephemeral request 含 checks，persisted request/Case 不含完整计划或历史正文。
 
-## 8. 并行来源采集
+## 8. 并行调查编排与自动 Worker
 
-- [ ] 8.1 用 deferred Promise 先写 Knowledge 与完整 Redmine 分支同时启动的测试
-- [ ] 8.2 实现 Promise.allSettled collection barrier
-- [ ] 8.3 先写 Redmine search→rerank→details 严格串行和 10→3 预算测试
-- [ ] 8.4 实现 Redmine branch 与同一 searchId 详情调用
-- [ ] 8.5 先写单来源 timeout/failed/no_hit/not_planned 的组合测试
-- [ ] 8.6 实现独立来源状态与 sourceGaps 聚合
+- [ ] 8.1 在 `test/case-investigation-runtime.test.mjs` 用 deferred Promise 先写失败测试：Knowledge、Experience、完整 Redmine 分支同时启动；任何快分支不能提前回复；barrier 保留每个 terminal status。完成证据：测试在 collector 缺失时红。
+- [ ] 8.2 新建 `src/runtime/case-investigation/parallel-source-collector.ts` 与 `redmine-branch.ts`，实现 `Promise.allSettled` barrier 和 Redmine 内部 search→rerank→detail。完成证据：每个 configured dispatch 恰好一次 search，最多一次 detail call。
+- [ ] 8.3 新建 `worker-verification.ts`，把所有有效 leads 合成一次 bounded read-only Worker request；任何 write/unknown action 阻止派发。完成证据：三条历史案例仍只调用一个 Worker。
+- [ ] 8.4 新建 `case-investigation-turn-service.ts` 并修改 `src/runtime/diagnostic-runtime.ts`：Preflight dispatch 后、旧 early-return 前进入 collaborator；无 source 时走旧路径。完成证据：配置 workspace 的 Experience/Knowledge 不早停，legacy workspace 行为不变。
 
-## 9. 同因确定性门禁与结果构建
+## 9. 历史证据门禁、结果构建与一次呈现
 
-- [ ] 9.1 先写当前 workspace/log + 本轮 Redmine 双侧证据通过测试
-- [ ] 9.2 先写仅 user claim、仅历史、来源失败和非当前 envelope 降级测试
-- [ ] 9.3 先写 Worker 反证和 Knowledge 冲突阻止同因测试
-- [ ] 9.4 实现 historical-case gate 与稳定 Review blockers
-- [ ] 9.5 实现只使用已引用 evidence 的 DiagnosticResult builder
-- [ ] 9.6 扩展 ReviewPresentation context 接收 upstream blockers
-- [ ] 9.7 验证降级时保留有证据的初步判断但不表达最终同因
+- [ ] 9.1 在 `test/historical-case-gate.test.mjs` 先写失败测试：双侧当前/历史 evidence 通过；仅历史、旧 envelope、user claim、source failure、Worker 反证、Knowledge 冲突均降级。完成证据：测试明确区分 `same_root_cause_likely`、`diagnostic_lead_only`、`same_symptom_different_cause`。
+- [ ] 9.2 新建 `historical-case-gate.ts` 与 `result-builder.ts`，只使用本轮已引用 evidence 构建带 role/answers 的 claims，并向既有 Review 提供稳定 upstream blockers。完成证据：accepted primary coverage 仍由现有 AnswerGoal/Review 冻结。
+- [ ] 9.3 在 turn service 中只创建一个 sanitized Run，并只调用一次 `ReviewPresentationService.reviewAndFormat()` 与 `completePresentedTurn()`。完成证据：多来源+Worker 场景只有一个正式 helper reply，public DTO shape 不变。
 
-## 10. Case Investigation Runtime 编排
+## 10. 安全事件与 Dashboard 进度
 
-- [ ] 10.1 先写 Planner fast_answer 保持旧快速路径的测试
-- [ ] 10.2 先写案例路径中 Experience/Knowledge 不早停和单次呈现测试
-- [ ] 10.3 实现 CaseInvestigationTurnService 的 Planner、collector、Analyzer、Assessor、Verifier 编排
-- [ ] 10.4 按 Assessor 结果接入最多一次 Worker collect
-- [ ] 10.5 接入 gate、Result、一次 Review/Presentation 和 completePresentedTurn
-- [ ] 10.6 在 Preflight 后、Experience 早停前把 collaborator 接入 DiagnosticRuntime
-- [ ] 10.7 保持 DiagnosticRuntime 不超过 300 行并抽出通用 MCP 完成 helper
-- [ ] 10.8 验证同步 200 与 async 202 API 顶层 shape 不变
+- [ ] 10.1 在 `test/case-investigation-observability.test.mjs` 先写失败测试：Agent/MCP/Worker actor 身份正确，event detail 不含 query、signals、body、identity、URL、key、reason、plan、raw error。完成证据：敏感诱饵对 Case JSON 和 `/api/logs` 均不可见。
+- [ ] 10.2 新建 `src/runtime/event-recorder/case-investigation.ts` 并在各阶段记录白名单状态、耗时、数量、IDs、degraded 和 Worker flag；更新 recorder index。完成证据：observability 只转换展示，不参与决策。
+- [ ] 10.3 更新 `src/observability/`、Dashboard 进度映射、`docs/standards/development.md`、`docs/standards/module-boundaries.md`、`docs/architecture/overview.md` 与 `docs/architecture/agents.md`。完成证据：UI 测试显示查询工单、分析案例、验证当前项目、交叉审核四类进度。
 
-## 11. 安全可观测性与 Dashboard 进度
+## 11. 离线验收、隐私与兼容
 
-- [ ] 11.1 先写案例调查 Agent identity 和 MCP/Worker actor 区分测试
-- [ ] 11.2 新增 case-investigation event recorder 与四个 Agent identities
-- [ ] 11.3 先写事件 detail 禁止 query、body、人员、URL、token、reason 和 raw error 的测试
-- [ ] 11.4 在各编排阶段记录状态、耗时、数量和 evidence ID 白名单事件
-- [ ] 11.5 为 observability log blocks 增加安全中文阶段标签
-- [ ] 11.6 先写 Dashboard 新 phase 到进度标题的映射测试
-- [ ] 11.7 增加来源规划、并行采集、案例分析、当前验证和同因核验进度
-- [ ] 11.8 更新 development.md 事件列表并让 runtime-hardening 扫描全部 recorder 文件
+- [ ] 11.1 新建 `test/redmine-case-investigation-offline.test.mjs`，使用真实 MCP SDK stdio fixture + 正式 Runtime 覆盖 resolved/not-resolved/direction-helpful 三类结构门禁。完成证据：`pnpm acceptance:redmine:offline` 在无网络/无真实 key 时通过。
+- [ ] 11.2 增加模块边界、仅两个读工具、无 Redmine write endpoint、默认测试不联网、Case/DTO 泄漏和旧配置/旧 Case 兼容扫描。完成证据：专项测试与 `pnpm test` 同时通过。
+- [ ] 11.3 新建 `docs/operations/redmine-case-investigation.md`，写明配置、SecretRef、stdio 启动、预算、灰度、回滚、真实 E2E manifest 和故障定位；示例不得包含真实工单正文或凭证。
 
-## 12. 边界、公共安全与运维文档
+## 12. 真实项目三类 E2E
 
-- [ ] 12.1 先写 src/mcp-servers 禁止导入 runtime/gateway/worker/session/knowledge 的边界测试
-- [ ] 12.2 更新 module-boundaries、architecture overview 和 agents 架构文档
-- [ ] 12.3 先写 session/log DTO 不含 investigation internals 或 Redmine 原文的测试
-- [ ] 12.4 确保调查状态仅 turn-local 且持久化 request 经过清洗
-- [ ] 12.5 创建 Redmine MCP 配置、部署、烟测、灰度和回滚 runbook
-- [ ] 12.6 创建仅显式运行且只读输出的真实 Redmine 验收脚本
-- [ ] 12.7 确认默认 pnpm test 不读取真实 Redmine URL 或凭证
+- [ ] 12.1 新建 `scripts/verify-redmine-case-investigation-real.mjs`：显式读取用户目录 manifest 和现有 SecretRef，校验真实 workspace/git、真实模型、真实 Worker、正式 MCP stdio/Runtime；缺任一前置条件非零退出，不允许 fake fallback。
+- [ ] 12.2 在不打印正文的情况下用真实 Redmine 搜索与真实 EduSoho workspace 建立三个稳定场景：`resolved_by_ticket`、`not_resolved_by_ticket`、`direction_helpful`。manifest 存在用户目录且不提交；完成证据只记录 scenario ID 与安全结构预期。
+- [ ] 12.3 运行 `pnpm acceptance:redmine:real -- --manifest <absolute-path> --workspace /Users/king/website/edusoho`。完成证据：三类均 PASS；resolved 同时有 current+redmine evidence；not-resolved 无历史冒充结论；direction-helpful 有初步方向且无确认根因。
+- [ ] 12.4 审计真实运行的 Redmine HTTP methods、工具名、Case JSON、logs 和报告。完成证据：全部 Redmine 请求为 GET；只调用两个读工具；无私有备注、身份、raw payload、URL、key 或 write action；安全结果写入 `implementation-notes.md`。
 
-## 13. 全量验证与收尾
+## 13. Anti-Fake-Complete Audit / 回头重新思考
 
-- [ ] 13.1 运行 pnpm lint 并修复文档/术语问题
-- [ ] 13.2 运行 pnpm typecheck 并修复 TypeScript/Vue 类型问题
-- [ ] 13.3 运行 pnpm build 并确认两个 bin 构建产物
-- [ ] 13.4 运行 pnpm test 并修复全量 Node 回归
-- [ ] 13.5 运行 pnpm test:web 并修复 Dashboard 回归
-- [ ] 13.6 运行所有 redmine、historical-case、case-investigation 离线专项测试
-- [ ] 13.7 扫描生产代码，确认只注册两个 Redmine 读工具且无 create/update/delete
-- [ ] 13.8 对照设计、规格和实施计划完成最终代码审查
+- [ ] 13.1 逐入口追踪真实数据：CLI/配置 → MCP stdio → Redmine REST → search grant → details → Analyzer → Worker → gate → Review → Presentation，确认没有只建接口未接生产 composition。完成证据：在 `implementation-notes.md` 列出每个边界的生产调用证据。
+- [ ] 13.2 审计 mock 假绿风险：默认 offline tests 使用正式 SDK/Runtime 边界；真实 E2E 不注入 fake client/evidence/model/worker；三类期望不能按实际输出自动改写。完成证据：脚本源代码和运行参数复核记录。
+- [ ] 13.3 审计模块边界、旧 artifact/cache/schema、默认联网/费用、secrets/正文/用户数据泄漏和外部 API 假设；发现问题必须反向修改 design/spec/tasks/代码并重新验证，不能只记录“已检查”。
+
+## 14. 全量验证与 master 收尾
+
+- [ ] 14.1 运行 `openspec status --change add-redmine-case-investigation --json`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、所有 Redmine/案例调查专项、`pnpm test`、`pnpm test:web`、offline acceptance。完成证据：命令 exit 0，完整计数写入 `implementation-notes.md`。
+- [ ] 14.2 重新运行三类真实 E2E 和生产隐私/写操作扫描；检查 `/Users/king/website/edusoho` 与外部 `codex/redmine-case-investigation` 工作树均无本任务写入。完成证据：三个场景 exit 0、外部 worktree dirty diff 与实施前一致。
+- [ ] 14.3 对照 proposal/design/spec/tasks/实施计划逐条审计完成度，所有 checkbox 有直接证据后再提交到 `master`；不得用局部测试或技术 probe 代替完整目标。

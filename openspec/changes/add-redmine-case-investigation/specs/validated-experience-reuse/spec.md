@@ -1,18 +1,17 @@
 ## ADDED Requirements
 
-### Requirement: Experience SHALL not short-circuit case investigation
-The Experience service SHALL expose an evidence-only collection path and, while case-investigation mode is active, SHALL treat reusable and rejected prior-session matches as candidates rather than a final answer.
+### Requirement: Experience SHALL not short-circuit configured case investigation
+Experience SHALL expose evidence-only collection and treat reusable/rejected prior-session matches as candidates while historical-case investigation is configured.
 
-#### Scenario: Reusable Experience match exists in case-investigation mode
-- **WHEN** Experience finds a match that would be reusable on the fast path
-- **THEN** Runtime SHALL add its bounded history evidence to the investigation
-- **AND** it SHALL continue Redmine collection, current-evidence assessment, deterministic Review, and Presentation
+#### Scenario: Reusable Experience match exists
+- **WHEN** a match would normally satisfy the fast path
+- **THEN** Runtime SHALL add its bounded current-revalidated history evidence to the aggregator
+- **AND** it SHALL continue Redmine collection, Worker verification when leads exist, Review, and Presentation
 
 #### Scenario: No Experience match exists
-- **WHEN** Experience finds no reusable answer
-- **THEN** the investigation SHALL continue without creating an Experience helper reply
+- **WHEN** no candidate exists
+- **THEN** collection SHALL return no-hit without creating a helper reply
 
-#### Scenario: Fast path uses Experience
-- **WHEN** case-investigation mode is not active and an Experience match passes existing validation
-- **THEN** the existing reviewed Experience short-circuit behavior SHALL remain available
-
+#### Scenario: Legacy workspace has no historical source
+- **WHEN** case investigation is not configured
+- **THEN** existing reviewed Experience reuse SHALL remain compatible

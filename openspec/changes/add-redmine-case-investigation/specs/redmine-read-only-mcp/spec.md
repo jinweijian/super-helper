@@ -1,120 +1,92 @@
 ## ADDED Requirements
 
-### Requirement: Redmine MCP SHALL be an independent read-only server
-The system SHALL provide a standalone Redmine MCP server that exposes only historical-case read operations and does not import runtime, gateway, worker, session, or knowledge orchestration.
+### Requirement: Redmine MCP SHALL be an independent stdio read-only server
+The system SHALL provide a standalone stdio MCP server that exposes exactly two historical-case read tools and does not import runtime, gateway, worker, session, or knowledge orchestration.
 
-#### Scenario: Development uses stdio
-- **WHEN** the server is configured with `transport=stdio`
-- **THEN** it SHALL expose the same tool names and schemas through `StdioServerTransport`
+#### Scenario: Server starts with valid configuration
+- **WHEN** `super-helper-redmine-mcp` starts with a materialized API Key
+- **THEN** it SHALL expose `redmine_search_issues` and `redmine_get_issue_case_details`
+- **AND** no other Redmine tool SHALL be discoverable
 
-#### Scenario: Production uses Streamable HTTP
-- **WHEN** the server is configured with `transport=http`
-- **THEN** it SHALL expose the same tool names and schemas through Streamable HTTP
-- **AND** it SHALL reject a request with an absent or invalid configured transport Bearer token
+#### Scenario: API Key is missing
+- **WHEN** the server starts without the required materialized key
+- **THEN** it SHALL fail with a stable safe configuration error
+- **AND** it SHALL not read the user's secrets file directly
 
-### Requirement: Redmine REST access SHALL be GET-only and fixed-scope
-The Redmine adapter MUST issue only GET requests against one configured base URL and MUST send the dedicated API Key only through `X-Redmine-API-Key`.
+### Requirement: Redmine access SHALL be GET-only and fixed-scope
+The adapter MUST use only GET against `https://redmine.codeages.work` and the `itsupportknowledge` project, with the API Key only in `X-Redmine-API-Key`.
 
-#### Scenario: Tool input attempts to select a URL or method
-- **WHEN** a caller supplies an arbitrary URL, HTTP method, header, or credential
-- **THEN** the tool schema SHALL reject the input before any Redmine request
+#### Scenario: Tool input attempts to choose transport details
+- **WHEN** input includes URL, method, header, credential, project identifier, or project ID
+- **THEN** schema validation SHALL reject it before a Redmine request
 
-#### Scenario: Adapter reads Redmine
-- **WHEN** the adapter sends a valid search or issue-detail request
-- **THEN** the request method SHALL be GET
-- **AND** its origin SHALL equal the configured base URL origin
-- **AND** no Redmine API Key SHALL appear in the URL, response, event, or error
+#### Scenario: Adapter sends a request
+- **WHEN** any project/search/detail request is issued
+- **THEN** method SHALL be GET, redirect SHALL be rejected, origin SHALL remain fixed, and no key SHALL appear in URL/result/error
 
-### Requirement: Redmine search SHALL remain inside the configured project allowlist
-The server SHALL own an alias-to-numeric-project-ID mapping and SHALL return only issues whose numeric project ID belongs to the requested aliases and the server mapping.
+### Requirement: Search backend SHALL be explicit, bounded, and project-safe
+The server SHALL use one startup-resolved `rest_search` or `issues_scan` backend and SHALL validate every candidate against the fixed project's numeric ID.
 
-#### Scenario: Model selects an allowed subset
-- **WHEN** a search requests one or more configured project aliases
-- **THEN** the server SHALL search only those aliases and validate every returned candidate's numeric project ID
+#### Scenario: Issues scan is selected
+- **WHEN** the server uses `issues_scan`
+- **THEN** it SHALL call `/issues.json` with fixed `project_id`, `status_id=*`, bounded history/page limits, and stable sort
+- **AND** normalized pages MAY be cached in memory for at most 5 minutes
 
-#### Scenario: Search returns an issue from another project
-- **WHEN** a Redmine search result belongs to a numeric project outside the selected mapping
-- **THEN** the server SHALL omit it from the MCP result
+#### Scenario: Backend fails during a request
+- **WHEN** the selected backend fails or times out
+- **THEN** the call SHALL return a stable safe failure
+- **AND** it MUST NOT switch backend or expand scope during the request
 
-### Requirement: Redmine search backend SHALL be explicit and bounded
-The server SHALL use one startup-resolved backend, either `rest_search` or `issues_scan`, and SHALL apply configured page, history-window, cache, result, and timeout limits.
+### Requirement: Search SHALL return at most ten bounded candidates
+`redmine_search_issues` SHALL accept only bounded query/signals/status/limit and return a live search ID, at most 10 candidates, and truncation metadata.
 
-#### Scenario: REST search backend is selected
-- **WHEN** startup configuration selects `rest_search`
-- **THEN** the adapter SHALL use `/search.json` with issue filtering
-- **AND** it SHALL validate candidate project membership through controlled issue reads
+#### Scenario: Search succeeds with candidates
+- **WHEN** allowed fixed-project issues match
+- **THEN** each candidate SHALL contain only issue ID, technical subject/excerpt, non-person status/tracker/priority, timestamps, and safe source locator
 
-#### Scenario: Issues scan backend is selected
-- **WHEN** startup configuration selects `issues_scan`
-- **THEN** the adapter SHALL call `/issues.json` per allowed numeric project with `status_id=*`
-- **AND** it SHALL stop at the configured page and time budgets
+#### Scenario: Search succeeds without candidates
+- **WHEN** no issue matches
+- **THEN** candidates SHALL be empty and status SHALL be no-hit
+- **AND** no historical conclusion SHALL be fabricated
 
-#### Scenario: Selected backend fails during a request
-- **WHEN** the startup-resolved backend returns an error or timeout
-- **THEN** the request SHALL return a safe failure
-- **AND** it MUST NOT silently switch backend or expand project scope
+### Requirement: Detail reads SHALL be authorized by the current search grant
+`redmine_get_issue_case_details` MUST accept one live search ID and 1–3 unique candidate issue IDs from that grant.
 
-### Requirement: Search tool SHALL return at most ten bounded candidates
-The server SHALL expose `redmine_search_issues` with a schema-bounded query, signals, project aliases, status scope, optional update time, and limit no greater than 10.
+#### Scenario: Caller reads authorized candidates
+- **WHEN** IDs belong to the live grant
+- **THEN** the server SHALL fetch only those details and revalidate fixed-project membership
 
-#### Scenario: Search succeeds
-- **WHEN** the caller invokes `redmine_search_issues` with valid allowed projects
-- **THEN** the result SHALL contain a new `searchId`, no more than 10 candidates, and a truncation indicator
-- **AND** each candidate SHALL contain only the approved candidate field whitelist
+#### Scenario: Caller reads unknown or expired candidates
+- **WHEN** an ID is absent, duplicated, over-limit, or the grant expired
+- **THEN** the server SHALL reject before making a detail request
 
-#### Scenario: Search has no candidates
-- **WHEN** no allowed issue matches the bounded search
-- **THEN** the result SHALL contain an empty candidates array
-- **AND** it SHALL NOT fabricate a historical case or conclusion
+### Requirement: Redmine output SHALL permanently enforce data minimization
+The server MUST drop private journals, person identity, attachment names/URLs/bodies, unallowlisted custom fields, and raw errors before MCP output.
 
-### Requirement: Detail tool SHALL be authorized by the current search candidates
-The server SHALL expose `redmine_get_issue_case_details` and MUST accept only 1 to 3 unique issue IDs covered by a live `searchId` grant.
+#### Scenario: Private and identity fields are present
+- **WHEN** a fixture contains private notes, names, usernames, emails, IPs, phone numbers, or person IDs
+- **THEN** none SHALL appear in normalized candidates/details, serialized MCP output, error, or logs
 
-#### Scenario: Caller reads selected candidates
-- **WHEN** a valid `searchId` and up to three candidate issue IDs are supplied
-- **THEN** the server SHALL fetch only those issues
-- **AND** it SHALL revalidate their project membership
+#### Scenario: Attachments are present
+- **WHEN** details contain attachments
+- **THEN** output MAY retain MIME, size, and counts
+- **AND** it MUST omit filename, bytes, URL, token, and cookie
 
-#### Scenario: Caller reads an unsearched or expired issue
-- **WHEN** an issue ID is absent from the grant or the `searchId` has expired
-- **THEN** the server SHALL reject the request before making a Redmine detail request
+### Requirement: Historical details SHALL be structurally bounded
+The combined details result SHALL not exceed 48,000 Unicode characters and MUST preserve valid JSON and complete evidence blocks.
 
-### Requirement: Redmine MCP output SHALL enforce privacy and data minimization
-The server MUST anonymize people, omit private notes unless explicitly enabled by server and workspace policy, and return attachment metadata without attachment body or download credential.
+#### Scenario: Normalized details exceed budget
+- **WHEN** low-priority journals or attachment metadata exceed the budget
+- **THEN** the server SHALL remove complete blocks and report omitted counts/truncated fields
+- **AND** it MUST NOT slice serialized JSON arbitrarily
 
-#### Scenario: Private notes are disabled
-- **WHEN** issue details contain private journals and private-note access is not enabled
-- **THEN** those journals SHALL be absent from the result
+### Requirement: Default verification SHALL remain offline
+Default build/test commands MUST use fixtures or fake transports and MUST NOT require Redmine credentials or network.
 
-#### Scenario: Identity fields are present
-- **WHEN** an issue, journal, assignment, or observer includes a person's name, email, username, or network identifier
-- **THEN** the result SHALL contain only a stable anonymous ID
+#### Scenario: Default suite runs
+- **WHEN** `pnpm test` runs without Redmine configuration
+- **THEN** all Redmine tests SHALL execute offline
 
-#### Scenario: Issue has attachments
-- **WHEN** issue details contain attachments
-- **THEN** the result MAY include approved metadata such as filename, MIME type, size, and creation time
-- **AND** it MUST NOT include attachment bytes, download URLs, cookies, or tokens
-
-### Requirement: Historical case results SHALL be structurally bounded
-The server SHALL keep each details result at or below 48,000 characters by removing or truncating complete schema fields and MUST NOT cut serialized JSON at an arbitrary character.
-
-#### Scenario: Details exceed the output budget
-- **WHEN** normalized details exceed 48,000 characters
-- **THEN** the server SHALL preserve valid JSON and complete evidence-block records
-- **AND** it SHALL report omitted counts or truncated fields
-
-#### Scenario: Redmine returns a sensitive raw error
-- **WHEN** Redmine returns an authentication, authorization, rate, timeout, transport, or server error containing raw payload
-- **THEN** the MCP result SHALL expose only a stable safe error code
-
-### Requirement: Redmine MCP verification SHALL be offline by default
-Default build and test commands MUST use fixtures or fake transports and MUST NOT require a real Redmine URL or credential.
-
-#### Scenario: Default test suite runs
-- **WHEN** `pnpm test` executes without Redmine environment variables
-- **THEN** all Redmine MCP tests SHALL run offline
-
-#### Scenario: Operator requests a real smoke test
-- **WHEN** the explicit real-acceptance script runs with required environment variables
-- **THEN** it SHALL perform only tool discovery, bounded search, and authorized detail reads
-
+#### Scenario: Real acceptance is explicitly invoked
+- **WHEN** the opt-in command runs with the saved SecretRef
+- **THEN** it SHALL perform only fixed-scope GET search/detail calls and safe Runtime/Worker reads

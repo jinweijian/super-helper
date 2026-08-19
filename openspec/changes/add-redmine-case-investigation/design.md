@@ -1,183 +1,192 @@
 ## Context
 
-super-helper 已有通用 MCP Client、workspace/tool allowlist、Knowledge-first 诊断、Experience 复用、Claude Code Worker、Evidence Review 和同步/异步 Gateway。现有 Runtime 采用 Experience → Knowledge → MCP → Worker 的串行早停；通用 MCP 一次只按配置顺序调用工具，不能表达历史案例调查的两阶段协议。
+权威产品设计为 `docs/superpowers/specs/2026-08-20-redmine-first-case-investigation-design.md`。它取代 2026-07-31 设计中与以下决策冲突的部分：Redmine 查询不再由模型选择；私有备注永久关闭；形成有效历史线索后固定运行一次只读 Worker；第一阶段只支持 `itsupportknowledge`。
 
-Redmine 既包含有价值的历史根因、排查过程和解决动作，也包含人员身份、私有备注、附件和可能过时的结论。历史工单只能作为证据源，不能直接成为当前问题的最终诊断。完整产品设计见 `docs/superpowers/specs/2026-07-31-redmine-mcp-case-investigation-design.md`，逐步实施计划见 `docs/superpowers/plans/2026-07-31-redmine-mcp-case-investigation.md`。
+当前已具备：
 
-当前没有可用于开发的真实 Redmine URL 或凭证，因此实现和默认验收必须完全基于 fixture/fake fetch/MCP transport；真实联调作为显式部署步骤。
+- 通用 MCP Client、workspace/tool allowlist、stdio/HTTP/SSE transport 和 20K 普通结果归一化。
+- Knowledge、Experience、Claude Code Worker、Evidence Review、同步/异步 Gateway。
+- 固定 Redmine origin/project 的 GET-only client、隐藏密钥录入和真实 probe。
+- 本机真实 workspace `/Users/king/website/edusoho`，用于显式 E2E；该路径不能硬编码进生产代码或默认测试。
+
+Redmine 官方依据（访问日期 2026-08-20）：
+
+- REST API 认证：<https://www.redmine.org/projects/redmine/wiki/REST_Api>
+- Issues API：<https://www.redmine.org/projects/redmine/wiki/rest_issues>
+- Search API：<https://www.redmine.org/projects/redmine/wiki/Rest_Search>
+- Journals：<https://www.redmine.org/projects/redmine/wiki/Rest_IssueJournals>
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- 用独立、只读、最小权限的 Redmine MCP 对接历史工单。
-- 让模型根据 AnswerGoal 和当前 Case 语义决定是否进行案例调查，不使用关键词触发器。
-- 并行采集 Knowledge 与 Redmine，完成搜索 10 条、模型选择 3 条、读取详情的受限流程。
-- 比较历史症状、根因、排查方向与当前环境；当前证据不足时由模型决定是否运行一次只读 Worker。
-- 用确定性门禁保证同因判断同时引用当前证据和本轮历史工单证据。
-- 保持现有 Gateway response shape、旧配置、旧 Case JSON 和普通快速路径兼容。
-- 全程限制、匿名化和脱敏数据，提供可观察但不泄密的异步进度。
+- 对启用来源的 workspace，每个 Preflight `dispatch` 回合恰好执行一次有界 Redmine 搜索。
+- Knowledge、Experience 与 Redmine 并行采证，Redmine 使用 10→3 两阶段读取。
+- 历史工单只生成 evidence-bound 排查线索；有效线索固定触发一次只读 Worker 验证。
+- 当前结论由本轮 workspace/log evidence 支撑；历史 evidence 不能冒充当前事实。
+- Redmine 失败时 fail-open，但保留准确来源缺口。
+- 默认离线测试与真实三类 E2E 同时成立。
 
 **Non-Goals:**
 
-- 不创建、更新、评论、关闭或删除 Redmine 工单。
-- 不下载或解析附件正文。
-- 不把全部 Redmine 工单同步到 Knowledge。
-- 不让 MCP 或 Worker 直接生成用户最终回复。
-- 不仅凭相似工单确认当前根因。
-- 不在本 change 同时实现 Jira、禅道或其他工单 adapter。
-- 不要求真实 Redmine 环境进入默认 CI。
+- Redmine 创建、更新、评论、关闭、删除或附件下载。
+- 私有备注、人员身份、附件文件名或正文进入模型。
+- 多项目选择、Jira/禅道 adapter、工单全量同步。
+- 为了通过 E2E 注入假的历史结论、假的 Worker evidence 或测试专用生产分支。
+- 在当前 change 强制交付 Streamable HTTP transport；本地和真实验收使用 stdio，远程部署另行变更。
 
 ## Decisions
 
-### 1. Redmine MCP 是独立进程
+### 1. Preflight dispatch 后强制进入案例调查
 
-新增 `src/mcp-servers/redmine/`，通过第二个 package bin `super-helper-redmine-mcp` 启动。该模块只依赖 MCP SDK、Zod、Node 标准库和自身 Redmine REST adapter，不导入 Runtime、Gateway、Worker、Session 或 Knowledge。
+`DiagnosticRuntime` 在 Preflight `dispatch` 后调用 `CaseInvestigationTurnService.answer()`。只要 workspace 配置了可用 historical-case source，就不能再让 Experience 或 Knowledge 提前结束回合。
 
-这样可以在开发环境使用 stdio、生产环境使用内网 Streamable HTTP，并把 API Key、项目映射和私有备注策略留在服务端安全边界。
+模型 `Historical Search Query Planner` 只输出 `query`、`signals`、固定 `status=all`、`candidateLimit=10` 和 `detailLimit=3`。失败时使用 `answerGoal.resolvedQuestion` 与空 signals，仍执行一次搜索。代码不得重新使用中文关键词或问题类型决定是否查询。
 
-**Alternatives considered:**
+旧 workspace 无 historical source 时继续可读并走旧链路；目标 workspace 缺少来源配置不得算作真实验收通过。
 
-- 把 Redmine API 调用直接写入 Runtime：会让 Runtime 持有协议、凭证和 HTTP 细节，违反模块边界。
-- 复用 `src/knowledge/redmine-card.ts`：该模块属于离线 Knowledge 导入，包含知识卡转换职责，不能承担实时 API adapter。
-- 用 Skill 连接 Redmine：Skill 适合流程指导，不适合稳定的认证、权限、schema 和 transport 合同。
+### 2. Redmine MCP 固定范围且仅两个工具
 
-### 2. MCP 只暴露两个只读工具
+`src/mcp-servers/redmine/` 是独立边界，不导入 Runtime、Gateway、Worker、Session 或 Knowledge。
 
-- `redmine_search_issues`：接收模型生成的 query/signals 和 workspace 已授权的 project aliases，最多返回 10 条候选。
-- `redmine_get_issue_case_details`：接收 `searchId`、最多 3 个候选 issue IDs 和字段 include 列表。
+- origin 固定为 `https://redmine.codeages.work`。
+- project identifier 固定为 `itsupportknowledge`，启动时解析并冻结数值 ID。
+- API Key 只通过 `X-Redmine-API-Key` 发送。
+- 工具 input 不接受 URL、method、headers、project 或凭证。
+- 只暴露 `redmine_search_issues` 与 `redmine_get_issue_case_details`。
+- `searchId` 保存短 TTL 候选授权；详情只接受本轮候选中的 1–3 个唯一 ID。
 
-详情调用必须携带第一步返回的 `searchId`。服务端保存短 TTL 的 `searchId → candidate IDs` 授权；详情 ID 不在候选集、授权过期或超过 3 条时，在发出 Redmine 请求前拒绝。
+本地/真实验收使用 stdio transport。`super-helper-redmine-mcp` bin 从环境中的 `REDMINE_API_KEY` 读取已经由主应用 SecretRef materialize 的值，不自行读取用户 secrets 文件。
 
-`searchId` 是必要的服务端约束，因为通用 MCP Client 每次调用可重建连接，HTTP transport 也不能依赖会话内内存上下文来证明详情 ID 来自本轮搜索。
+### 3. Search backend、缓存和错误语义
 
-### 3. Redmine adapter 固定 GET、base URL 和搜索 backend
+启动配置固定一个 backend：
 
-Client 只提供内部 GET 方法，固定 base URL，只把 API Key 放入 `X-Redmine-API-Key`。工具输入不能提供 URL、method、headers 或凭证。
+- `rest_search`：`/search.json` 后对候选做数值项目 ID 复核。
+- `issues_scan`：`/issues.json?project_id=<id>&status_id=*&sort=updated_on:desc`，有界页数/历史窗口后本地词法召回。
 
-支持两个启动时冻结的 backend：
+请求期间不能静默切换 backend 或扩大项目范围。`issues_scan` 归一化页结果允许进程内缓存 5 分钟，不落盘。
 
-- `rest_search`：调用 `/search.json` 搜索，再受控读取候选 issue 验证数值项目 ID。
-- `issues_scan`：按允许项目调用 `/issues.json`，显式 `status_id=*`，有界分页和历史窗口，再对模型生成的 query/signals 做本地词法召回。
+安全状态为 `completed | no_hit | timeout | failed`；只有成功空结果才是 `no_hit`。401/403/非法 schema 不重试，429/5xx 最多一次且不能突破来源预算。
 
-backend 在启动 smoke/配置中确定，请求期间不临时猜测或静默切换。这样失败语义稳定，也防止每次请求因权限或版本差异走不同范围。
+### 4. 隐私过滤先于 MCP 输出
 
-### 4. 隐私归一化先于 MCP 输出
+永久规则：
 
-只返回字段白名单：
+- 删除 `private_notes=true` 的 journals，无配置开关。
+- 删除姓名、用户名、邮箱、IP、手机号和人员数值 ID。
+- 附件只保留 MIME、大小和数量；删除文件名、URL、token、cookie 和正文。
+- 自定义字段使用显式 allowlist；未知字段删除。
+- 原始 payload、原始错误和 API Key 不进入 MCP result、Case、日志、fixture 或 E2E 记录。
 
-- 候选：issue ID、项目 alias、subject、description excerpt、状态、tracker、priority、fixed version、时间和 source locator。
-- 详情：允许的 facts、description/custom fields/journals/status transitions/relations/attachment metadata evidence blocks。
+三条详情总预算 48,000 Unicode 字符。通过删除完整低优先级 evidence block 收缩，不能切断序列化 JSON；必须返回完整 block 和 truncation metadata。
 
-人员标识使用服务进程 salt 生成稳定匿名 ID；私有备注默认删除，只能由服务启动配置和 workspace policy 同时允许；附件只返回文件名、MIME、大小和时间，不返回下载 URL、token 或正文。
-
-结构化输出最大 48,000 字符，通过删除完整旧 journal block、附件 metadata 和最终 Unicode 文本收缩实现，不能对 JSON 字符串直接切片。通用 MCP 继续使用现有 20,000 字符路径。
-
-### 5. 模型负责语义判断，Runtime 负责预算和权限
-
-新增四个 Product Agent：
-
-- Evidence Source Planner
-- Historical Case Analyzer（同时为候选重排提供行为约束）
-- Current Evidence Assessor
-- Historical Case Verifier
-
-所有 Agent 都登记在 `src/agents/registry.json`，`mayProduceUserFacingText=false`。模型输出使用严格 JSON schema；Runtime 只做 schema、allowlist、数量、超时、只读操作和 evidence ID 验证。
-
-Planner 不使用代码关键词。如果模型失败、超时或输出非法，Runtime 生成唯一的保守 fallback：Knowledge 正常查询，Redmine 对 workspace 全部允许项目执行一次搜索，query 使用 `answerGoal.resolvedQuestion`，signals 为空，限制仍为 10→3。
-
-### 6. 案例调查是专用 Runtime collaborator
-
-新增 `CaseInvestigationTurnService.tryAnswer()`，在 Preflight 成功后、Experience 早停前调用：
-
-```text
-Planner
-  ├─ fast_answer → 返回 undefined，继续旧快速路径
-  └─ case_investigation
-       → Knowledge / Redmine 并行采证
-       → Experience 候选采证
-       → Analyzer
-       → Current Evidence Assessor
-       → 可选单次 read-only Worker
-       → Verifier
-       → deterministic historical-case gate
-       → 一次 Review / Presentation / complete
-```
-
-不直接在 `DiagnosticRuntime` 中堆 `Promise.all`。现有 Knowledge、Experience、Worker service 都混合了采证、Run、Review 和 Presentation；专用 collaborator 通过新的 collect 方法取得证据，避免重复 Run、重复回复和提前结束。
-
-### 7. Knowledge 与完整 Redmine 分支并行
+### 5. 并行 evidence-only collection
 
 `ParallelSourceCollector` 使用 `Promise.allSettled` 同时启动：
 
-- Knowledge branch
-- Redmine branch：search → model rerank → details
+- Knowledge collect：返回 route、evidence pack、judge、answerability、provenance 和 context patch；不创建 Run/回复。
+- Experience collect：返回可复用/被拒绝候选 evidence；不创建 Run/回复。
+- Redmine branch：search → schema-constrained rerank → detail；分支内部严格串行。
 
-每个来源返回 `completed | no_hit | timeout | failed | not_planned`，来源失败彼此独立；timeout/failed 不得转换成 no_hit。collector 等待 barrier 后才进入 Analyzer，任何快来源不得提前完成用户回合。
+各分支返回独立 outcome，不并发修改共享 `DiagnosticRequest`。Barrier 完成后再聚合；任何来源先完成都不能创建正式回复。
 
-### 8. 调查状态仅在当前 turn 内存在
+### 6. 四个 Product Agent
 
-Planner 原始 reason、工单详情、Analyzer reason、verification plan 和 Verifier reasoning 只存在于 turn-local `CaseInvestigationState`。最终 Run 只持久化：
+- `historical-search-query-planner`：生成查询，不决定是否查。
+- `historical-case-reranker`：只能选择搜索候选内最多 3 个唯一 ID。
+- `historical-case-analyzer`：提取历史事实、冲突、假设和 expected-match/expected-mismatch 只读 checks。
+- `historical-case-verifier`：只引用已有 evidence ID，分类为 `same_root_cause_likely | same_symptom_different_cause | diagnostic_lead_only | irrelevant`。
 
-- 经过安全裁剪的 `DiagnosticRequest`
-- 经过 Review 的 `DiagnosticResult`
-- 已选 evidence/claim IDs
-- 安全来源状态和事件
+全部配置在 `src/agents/` 并登记到 `registry.json`，`mayProduceUserFacingText=false`。不存在决定是否启动 Worker 的 Assessor Agent。
 
-不新增持久化 `context.caseInvestigation`。这样避免 `/api/session`、`/api/logs` 和 FileMemoryStore 通过完整 Run 暴露内部材料，也无需 Case JSON 迁移。
+### 7. 有效历史线索固定触发一次 Worker
 
-### 9. Worker 使用 ephemeral request 与 sanitized persisted request
+Analyzer 输出通过 schema、evidence ID 和 action allowlist 校验后，只要至少一条 lead 有非空 checks，Runtime 固定调用一次 `DiagnosticWorker`：
 
-需要当前证据时，Assessor 输出结构化只读验证计划，必须同时包含预期匹配与预期不匹配检查。Runtime 确定性验证 action allowlist 后：
+- ephemeral request 包含有界历史假设和只读 checks。
+- persisted request 删除历史正文、模型 reason 和完整验证计划。
+- Worker 同时寻找支持条件与反证，不查询 Redmine、不分类同因、不直接 Review/Presentation。
+- 案例验证不执行普通 deep-query follow-up。
+- Analyzer 无有效 lead 时，仍可根据 Knowledge 缺口走既有普通 Worker 路径。
 
-- `workerRequest` 包含有界验证计划，只传给 Worker。
-- `persistedRequest` 删除 Redmine 正文、模型 reason 和验证计划，写入正式 Run。
+允许 action 仅为 `read_file | search_workspace | inspect_config | inspect_log | run_read_only_command`。任何写文件、数据库写、网络写或 Redmine 写在派发前拒绝。
 
-案例调查 Worker 最多运行一次，不执行通用 deep-query follow-up，不查询 Redmine，不做同因分类，不触发 Review/Presentation。现有普通 `diagnose()` 行为和一次 follow-up 保持不变。
+### 8. 确定性历史证据门禁和一次呈现
 
-### 10. 同因结论有独立确定性门禁
+`same_root_cause_likely` 只有在以下条件同时成立时才能进入既有 Review：
 
-Verifier 先输出结构化 relation 和 evidence IDs，随后 `historical-case-gate.ts` 检查：
+- 至少一个本轮有效 `workspace` 或 `log` coverage envelope。
+- 至少一个本轮 read-only、allowlisted、completed 的 Redmine `mcp` envelope。
+- 所有 claim/evidence ID 存在于本轮集合。
+- 没有 Worker 反证或关键 Knowledge/版本/配置冲突。
 
-- 至少一个本轮有效 `workspace` 或 `log` coverage evidence。
-- 至少一个本轮有效、read-only、allowlisted、completed 的 Redmine `mcp` coverage evidence。
-- 引用 ID 存在于当前结果与当前 run envelopes。
-- 没有关键冲突或 Worker 反证。
-- Redmine 来源不是 timeout/failed。
+只有历史 evidence 时降级为 `diagnostic_lead_only`。Redmine timeout/failed 时不能说“没有类似工单”。所有来源与 Worker 只采证，Runtime 最终只创建一个 Run、一次 Review、一次 Presentation 和一条正式回复。
 
-用户陈述、Knowledge、Experience、旧 Run 或只有历史相似度都不能充当当前证据。门禁失败时降级为 `diagnostic_lead_only`，保留有证据的初步排查方向，并把稳定 blocker 交给既有 Review；Presentation 只能表达冻结的 accepted primary claims。
+### 9. Turn-local 状态、兼容与可观测性
 
-### 11. 复用现有异步 Gateway 和 Dashboard
+搜索 query/signals、未选候选、未引用工单详情、模型 reason 和 ephemeral Worker plan 只在当前 turn 内存在。正式 Run 只持久化清洗后的 request、被 Review 使用的有界 evidence/claims、来源状态/数量/耗时和安全错误码。
 
-Dashboard 已使用 `async:true → 202 → session polling`，无需新增 route、DTO 或状态机。同步 API 继续等待同一 Runtime pipeline，保持兼容。
+Gateway response shape、旧 Case JSON 和旧配置保持兼容。Dashboard 复用现有 async 202 与 session polling，增加“查询知识与工单、分析案例、验证当前环境、交叉审核”进度标签。事件 detail 不记录 query、正文、身份、URL、token、reason、验证计划或 raw error。
 
-新增安全 lifecycle events 和 phase label。Agent 高层事件带真实 Agent identity；Redmine 调用仍标记为 `actor='mcp'`。event detail 只记录状态、耗时、数量、选择的 issue IDs 和 evidence IDs，不记录 query/signals/body/人员/URL/token/reason/raw error。
+### 10. 预算
+
+| 阶段 | 默认上限 |
+| --- | ---: |
+| Query planner | 6 秒 |
+| Redmine 搜索 | 8 秒 |
+| Candidate rerank | 6 秒 |
+| Redmine 详情 | 10 秒 |
+| Redmine 分支总预算 | 25 秒 |
+| Knowledge/Experience/Redmine barrier | 30 秒 |
+| Worker | 现有配置，案例验证最多一次 |
+
+### 11. 真实三类 E2E 是完成门禁
+
+真实验收必须使用：
+
+- 真实 `redmine.codeages.work` 只读 API。
+- 固定 `itsupportknowledge` 项目。
+- 真实 `/Users/king/website/edusoho` workspace 或通过显式参数传入的等价真实项目路径。
+- 正式 `DiagnosticRuntime`、正式 MCP stdio transport、正式模型和正式只读 Worker。
+
+三类场景：
+
+1. `resolved_by_ticket`：历史线索产生 checks，Worker 在当前项目找到支持证据，最终结论同时绑定 Redmine 与 current evidence。
+2. `not_resolved_by_ticket`：没有相关工单或历史 evidence 不足/冲突，系统不能把工单包装成解决方案，并继续使用其他证据或显式保留 unknown。
+3. `direction_helpful`：历史 evidence 形成有用排查方向，但当前证据不足以确认根因，最终只能输出初步方向。
+
+场景输入存放在用户目录的显式 manifest 或命令参数中，不提交真实工单正文。验收记录只保存 scenario ID、分类、source status、evidence kinds/IDs、Review decision、HTTP method 计数和安全错误码。
+
+E2E 必须检查 Redmine 请求全部为 GET、没有写工具、没有私有备注/身份/原始正文泄漏。任一场景未达到预期分类或 evidence gate 均失败，不能用人工主观判断替代。
 
 ## Risks / Trade-offs
 
-- **[模型可能误触发或漏触发案例调查]** → 使用严格 schema、可观察阶段、受限 fallback 和离线 fixture；触发不提升结论置信度。
-- **[历史工单相似但已过时]** → Analyzer 比较版本/配置/冲突，Verifier 必须结合当前证据，同因有确定性双侧门禁。
-- **[Redmine Search API 在实例中不可用]** → 提供启动时冻结的 `issues_scan` backend，不在请求中扩大范围或动态切换。
-- **[扫描 backend 产生负载]** → 项目 allowlist、历史窗口、每项目页数、每页大小、总超时和 5 分钟进程缓存全部有界。
-- **[MCP 两次调用越权读取任意 issue]** → `searchId` 候选授权、TTL、最多 3 条和项目二次校验。
-- **[工单内容或内部模型状态泄漏到 Case/API]** → turn-local state、sanitized persisted request、事件 detail 白名单和 API 泄漏测试。
-- **[Knowledge/Redmine 并行造成共享 request 竞态]** → collect 返回独立 outcome/context patch，由 aggregator 在 barrier 后统一组合，不并发修改 `DiagnosticRequest`。
-- **[重构 collect 破坏旧快速路径]** → `answer()`/`diagnose()` 作为兼容薄包装，专项与全量回归同时验证。
-- **[48K 历史详情超出模型有效上下文]** → MCP 先结构化收缩，Analyzer 读取有界详情，最终 Coverage 只接收实际引用且单块受限的 evidence。
-- **[HTTP MCP 服务被未授权访问]** → 生产 transport 可配置独立 Bearer token；它与 Redmine API Key 分离，二者都不进入工具 schema。
+- **每题查询增加延迟**：并行 collector、有界预算、5 分钟内存缓存和异步进度。
+- **历史案例相似但过时**：当前 evidence 必需、反证 checks 和确定性门禁。
+- **Search API 不可用**：启动时固定 `issues_scan`，运行期不动态扩大范围。
+- **真实 E2E 随外部数据变化**：manifest 使用稳定问题意图与结构化门禁，不断言工单正文；失败时记录来源状态，不能自动改期望。
+- **现有独立工作树有未提交修改**：保持只读，实施基于最新 master 重新实现或经审计后摘取，禁止覆盖用户改动。
 
 ## Migration Plan
 
-1. 合并可选配置合同、MCP capability 和旧配置兼容验证；此时功能默认关闭。
-2. 部署离线可测的 Redmine MCP Server；开发使用 stdio fixture。
-3. 在测试 workspace 增加 MCP server、两个 tool allowlist、historicalCaseSources 和项目 alias。
-4. 启用 Runtime 案例调查分支，先观察安全事件与来源状态。
-5. 在测试 Redmine 环境执行显式真实验收，确认 read-only 账号、backend、项目范围、隐私与负载。
-6. 生产部署内网 HTTP MCP，配置 transport Bearer 和专用 Redmine read-only API Key。
-7. 分 workspace 灰度添加 historicalCaseSources。
+1. 修订 OpenSpec 并保留现有脏工作树。
+2. 合并 workspace historical source 配置和兼容验证，功能默认未配置。
+3. 实现离线 Redmine MCP、stdio transport 和固定范围工具。
+4. 实现 Runtime collectors、Agents、自动 Worker 和 gate。
+5. 增加 Dashboard 进度、runbook、offline acceptance 和 E2E harness。
+6. 将本机 current workspace 配置为 `company-redmine`，SecretRef 指向 `integrations.redmine.apiKey`。
+7. 运行三类真实 E2E、全量验证和 anti-fake-complete audit。
+8. 所有证据通过后提交到 `master`；不 push，除非用户另行要求。
 
-回滚不需要数据迁移：从 workspace 删除 `historicalCaseSources` 或禁用 MCP server 后，Planner 看不到历史来源，Runtime 自动保留旧快速路径；Redmine MCP 进程可独立停止。
+回滚时删除 workspace 的 `historicalCaseSources` 或禁用 MCP server；旧 Runtime 链路继续可用，无 Case 数据迁移。
 
-## Open Questions
+## Completion Gate
 
-没有阻塞实现的问题。真实 Redmine 地址、项目 alias→数值 ID、实例支持的搜索 backend、私有备注开关和生产凭证在部署联调阶段由用户提供，不影响离线实现。
+- `openspec status --change add-redmine-case-investigation --json` 可解析且 artifacts 完整。
+- 新行为全部经过 TDD red/green 证据。
+- `pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm test:web` 全部通过。
+- offline acceptance 不联网且覆盖权限、隐私、并行和分类门禁。
+- 三类真实 E2E 全部通过，记录到 `implementation-notes.md`，不包含敏感正文。
+- 生产代码和默认测试无 Redmine write endpoint、write tool 或真实 secret。
+- 当前 master 工作区干净，目标提交可追溯，现有外部工作树未被修改。
