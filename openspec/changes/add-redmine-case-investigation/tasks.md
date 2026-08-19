@@ -6,9 +6,9 @@
 
 ## 2. Redmine 搜索协议与固定范围 Client
 
-- [ ] 2.1 在 `test/redmine-api-client.test.mjs` 先写失败测试：Search/Issues API GET 参数、`status_id=*`、固定 origin/project、候选项目复核、有界分页、timeout/401/403/429/5xx/非法 schema 安全错误。完成证据：测试先因方法/schema 缺失而红。
-- [ ] 2.2 扩展 `src/mcp-servers/redmine/redmine-api/protocol.ts` 与 `client.ts`，增加搜索页、候选字段、公开 journal/status changes/relations/attachment metadata 的严格 Zod schema 和 GET 方法；保留 probe 现有最小接口。完成证据：所有请求方法为 GET，输入无法设置 URL/method/header/project。
-- [ ] 2.3 新建 `src/mcp-servers/redmine/redmine-api/search.ts`，实现启动时固定的 `rest_search | issues_scan` backend、固定项目复核、历史窗口、页预算和 5 分钟进程缓存。完成证据：专项测试证明请求期间不切换 backend、不扩大项目范围、缓存不落盘。
+- [x] 2.1 在 `test/redmine-api-client.test.mjs` 先写失败测试：Search/Issues API GET 参数、`status_id=*`、固定 origin/project、候选项目复核、有界分页、timeout/401/403/429/5xx/非法 schema 安全错误。完成证据：测试先因方法/schema 缺失而红。
+- [x] 2.2 扩展 `src/mcp-servers/redmine/redmine-api/protocol.ts` 与 `client.ts`，增加搜索页、候选字段、公开 journal/status changes/relations/attachment metadata 的严格 Zod schema 和 GET 方法；保留 probe 现有最小接口。完成证据：所有请求方法为 GET，输入无法设置 URL/method/header/project。
+- [x] 2.3 新建 `src/mcp-servers/redmine/redmine-api/search.ts`，实现启动时固定的 `rest_search | issues_scan` backend、固定项目复核、历史窗口、页预算和 5 分钟进程缓存。完成证据：专项测试证明请求期间不切换 backend、不扩大项目范围、缓存不落盘。
 
 ## 3. 永久隐私过滤与结构化预算
 

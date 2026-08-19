@@ -6,7 +6,13 @@ import {
   type RedmineReadonlyClient,
 } from '../contracts.js';
 import { codeForStatus, RedmineProbeError, type RedmineOperation } from './error-mapping.js';
-import { IssueResponseSchema, IssuesResponseSchema, ProjectResponseSchema } from './protocol.js';
+import {
+  IssueResponseSchema,
+  IssuesResponseSchema,
+  ProjectResponseSchema,
+  SearchResponseSchema,
+  type RedmineRawIssue,
+} from './protocol.js';
 
 export interface CreateRedmineReadonlyClientOptions {
   apiKey: string;
@@ -14,9 +20,20 @@ export interface CreateRedmineReadonlyClientOptions {
   timeoutMs?: number;
 }
 
+export interface RedmineApiClient extends RedmineReadonlyClient {
+  listIssuePage(input: {
+    projectId: number;
+    offset: number;
+    limit: number;
+    updatedOnGte?: string;
+  }): Promise<{ issues: RedmineRawIssue[]; totalCount: number }>;
+  searchIssueIds(query: string, limit: number): Promise<number[]>;
+  getRawIssue(issueId: number): Promise<RedmineRawIssue>;
+}
+
 export function createRedmineReadonlyClient(
   options: CreateRedmineReadonlyClientOptions,
-): RedmineReadonlyClient {
+): RedmineApiClient {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? REDMINE_TIMEOUT_MS;
 
@@ -32,31 +49,39 @@ export function createRedmineReadonlyClient(
       throw new RedmineProbeError('project_scope_mismatch');
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Response;
-    try {
-      response = await fetchImpl(url, {
-        method: 'GET',
-        redirect: 'error',
-        headers: {
-          Accept: 'application/json',
-          'X-Redmine-API-Key': options.apiKey,
-        },
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new RedmineProbeError('timeout');
+    let response: Response | undefined;
+    let previousTransient: RedmineProbeError | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        response = await fetchImpl(url, {
+          method: 'GET',
+          redirect: 'error',
+          headers: {
+            Accept: 'application/json',
+            'X-Redmine-API-Key': options.apiKey,
+          },
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (previousTransient) throw previousTransient;
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new RedmineProbeError('timeout');
+        }
+        throw new RedmineProbeError('service_unavailable');
+      } finally {
+        clearTimeout(timer);
       }
-      throw new RedmineProbeError('service_unavailable');
-    } finally {
-      clearTimeout(timer);
+
+      if (response.ok) break;
+      const mapped = new RedmineProbeError(codeForStatus(response.status, operation));
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === 1) throw mapped;
+      previousTransient = mapped;
     }
 
-    if (!response.ok) {
-      throw new RedmineProbeError(codeForStatus(response.status, operation));
-    }
+    if (!response?.ok) throw previousTransient ?? new RedmineProbeError('service_unavailable');
     if (response.redirected || (response.url && new URL(response.url).origin !== REDMINE_ORIGIN)) {
       throw new RedmineProbeError('service_unavailable');
     }
@@ -126,6 +151,53 @@ export function createRedmineReadonlyClient(
         relationCount: result.issue.relations.length,
         attachmentCount: result.issue.attachments.length,
       };
+    },
+
+    async listIssuePage(input) {
+      const query: Array<readonly [string, string]> = [
+        ['project_id', String(input.projectId)],
+        ['status_id', '*'],
+        ['sort', 'updated_on:desc'],
+        ['limit', String(input.limit)],
+        ['offset', String(input.offset)],
+      ];
+      if (input.updatedOnGte) query.push(['updated_on', `>=${input.updatedOnGte}`]);
+      const result = await request('/issues.json', query, IssuesResponseSchema, 'issues');
+      if (result.issues.some((issue) => issue.project.id !== input.projectId)) {
+        throw new RedmineProbeError('project_scope_mismatch');
+      }
+      return {
+        issues: result.issues,
+        totalCount: result.total_count ?? result.issues.length,
+      };
+    },
+
+    async searchIssueIds(query, limit) {
+      const result = await request(
+        '/search.json',
+        [
+          ['q', query],
+          ['issues', '1'],
+          ['limit', String(limit)],
+        ],
+        SearchResponseSchema,
+        'issues',
+      );
+      return result.results
+        .filter((item) => item.type === 'issue')
+        .slice(0, limit)
+        .map((item) => item.id);
+    },
+
+    async getRawIssue(issueId) {
+      const result = await request(
+        `/issues/${issueId}.json`,
+        [['include', 'journals,relations,attachments']],
+        IssueResponseSchema,
+        'detail',
+      );
+      if (result.issue.id !== issueId) throw new RedmineProbeError('project_scope_mismatch');
+      return result.issue;
     },
   };
 }
