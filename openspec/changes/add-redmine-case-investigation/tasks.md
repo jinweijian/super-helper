@@ -31,9 +31,9 @@
 
 ## 6. 四个 Product Agent 与模型服务
 
-- [ ] 6.1 新建四个 Agent 配置：`historical-search-query-planner.md`、`historical-case-reranker.md`、`historical-case-analyzer.md`、`historical-case-verifier.md`，并更新 `src/agents/registry.json`、`README.md` 与 Agent stage 类型。完成证据：全部 `mayProduceUserFacingText=false`，不存在 Current Evidence Assessor。
-- [ ] 6.2 在 `test/historical-case-model-services.test.mjs` 先写失败测试：query planner fallback 仍查询、reranker 只能选候选 3 个、Analyzer 绑定 evidence/check/action、Verifier 不新增事实或未知 ID。完成证据：每个模型服务至少一次合法、非法 JSON、schema 越界和模型异常红绿循环。
-- [ ] 6.3 在 `src/runtime/case-investigation/` 新建 `contracts.ts`、`query-planner-service.ts`、`candidate-reranker-service.ts`、`historical-case-analyzer-service.ts`、`historical-case-verifier-service.ts`；使用集中 Agent config 和严格 Zod/确定性校验。完成证据：模型 reason/raw output 不进入返回给持久化层的对象。
+- [x] 6.1 新建四个 Agent 配置：`historical-search-query-planner.md`、`historical-case-reranker.md`、`historical-case-analyzer.md`、`historical-case-verifier.md`，并更新 `src/agents/registry.json`、`README.md` 与 Agent stage 类型。完成证据：全部 `mayProduceUserFacingText=false`，不存在 Current Evidence Assessor。
+- [x] 6.2 在 `test/historical-case-model-services.test.mjs` 先写失败测试：query planner fallback 仍查询、reranker 只能选候选 3 个、Analyzer 绑定 evidence/check/action、Verifier 不新增事实或未知 ID。完成证据：每个模型服务至少一次合法、非法 JSON、schema 越界和模型异常红绿循环。
+- [x] 6.3 在 `src/runtime/case-investigation/` 新建 `contracts.ts`、`query-planner-service.ts`、`candidate-reranker-service.ts`、`historical-case-analyzer-service.ts`、`historical-case-verifier-service.ts`；使用集中 Agent config 和严格 Zod/确定性校验。完成证据：模型 reason/raw output 不进入返回给持久化层的对象。
 
 ## 7. Evidence-only collectors
 

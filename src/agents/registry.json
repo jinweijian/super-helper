@@ -92,6 +92,46 @@
       "summary": "MCP Evidence Extractor 将归一化结果绑定为 evidence/claim，不能直接回复用户。"
     },
     {
+      "id": "historical-search-query-planner",
+      "role": "historical-ticket-search-query-planner",
+      "stage": "historical_search_query_planner",
+      "configPath": "historical-search-query-planner.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "历史工单查询规划 Agent，只生成 query/signals，不能决定是否查询。"
+    },
+    {
+      "id": "historical-case-reranker",
+      "role": "historical-ticket-candidate-reranker",
+      "stage": "historical_case_reranker",
+      "configPath": "historical-case-reranker.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "历史工单候选重排 Agent，只能从候选中选择最多三条。"
+    },
+    {
+      "id": "historical-case-analyzer",
+      "role": "historical-ticket-evidence-analyzer",
+      "stage": "historical_case_analyzer",
+      "configPath": "historical-case-analyzer.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "历史案例分析 Agent，生成 evidence-bound 假设和只读检查项。"
+    },
+    {
+      "id": "historical-case-verifier",
+      "role": "historical-and-current-evidence-verifier",
+      "stage": "historical_case_verifier",
+      "configPath": "historical-case-verifier.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "历史与当前证据交叉验证 Agent，只输出受约束分类和 evidence IDs。"
+    },
+    {
       "id": "case-curator",
       "role": "solved-case-curator",
       "stage": "case_curator",

@@ -14,6 +14,10 @@
 - `rag-answerability.md`: RAG 可回答性与有效信息萃取 Agent，负责判断知识库结果是否满足 AnswerGoal，并在 partial 时输出可保留 claim 和升级焦点。
 - `mcp-planner.md`: MCP 只读调用规划 Agent，受 Runtime 两次调用预算约束。
 - `mcp-evidence-extractor.md`: MCP evidence envelope 校验与 claim 绑定 Agent，不产生用户可见文本。
+- `historical-search-query-planner.md`: 历史工单查询词规划 Agent；每题是否查询由 Runtime 固定决定。
+- `historical-case-reranker.md`: 从搜索候选中选择最多三条详情的候选重排 Agent。
+- `historical-case-analyzer.md`: 从历史 evidence 生成假设与只读检查项的案例分析 Agent。
+- `historical-case-verifier.md`: 交叉比较历史和当前 evidence 的分类 Agent；最终权限属于确定性门禁。
 - `case-curator.md`: Case 沉淀 Agent，负责生成待复核 solved case 草稿。
 - `output-review.md`: 证据与输出审核 Agent。
 - `presentation.md`: 美化输出 / persona-aware presentation Agent。
