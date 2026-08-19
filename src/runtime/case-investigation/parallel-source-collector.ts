@@ -4,6 +4,7 @@ import type { ExperienceCollectionOutcome, ExperienceTurnService } from '../expe
 import type { KnowledgeCollectionOutcome, KnowledgeTurnService } from '../knowledge-turn.js';
 import type { RedmineBranch, RedmineBranchOutcome } from './redmine-branch.js';
 import { failedRedmineBranch } from './redmine-branch.js';
+import type { CaseRuntimeEventRecorder } from '../event-recorder.js';
 
 type FailedSource = { status: 'failed'; safeErrorCode: string };
 
@@ -18,13 +19,29 @@ export class ParallelSourceCollector {
     knowledge: Pick<KnowledgeTurnService, 'collect'>;
     experience: Pick<ExperienceTurnService, 'collect'>;
     redmine: Pick<RedmineBranch, 'collect'>;
+    events?: Pick<CaseRuntimeEventRecorder,
+      'historicalCaseSearchStarted' | 'historicalCaseSearchCompleted' |
+      'historicalCaseAnalysisStarted' | 'historicalCaseAnalysisCompleted'>;
   }) {}
 
   async collect(caseSession: StoredCase, request: DiagnosticRequest): Promise<ParallelSourceOutcome> {
     const [knowledge, experience, redmine] = await Promise.allSettled([
       this.sources.knowledge.collect(caseSession, request.userGoal, structuredClone(request)),
       this.sources.experience.collect(caseSession, structuredClone(request)),
-      this.sources.redmine.collect(structuredClone(request)),
+      this.sources.redmine.collect(structuredClone(request), {
+        searchStarted: () => this.sources.events?.historicalCaseSearchStarted(caseSession, { runId: request.runId }),
+        searchCompleted: (outcome, durationMs) => this.sources.events?.historicalCaseSearchCompleted(caseSession, {
+          runId: request.runId, status: outcome.status, candidateCount: outcome.candidates.length,
+          detailCount: outcome.details.length, evidenceIds: outcome.evidence.map((item) => item.id),
+          durationMs, degraded: Boolean(outcome.planDegraded || outcome.rerankDegraded),
+        }),
+        analysisStarted: (detailCount) => this.sources.events?.historicalCaseAnalysisStarted(caseSession, { runId: request.runId, detailCount }),
+        analysisCompleted: (outcome, durationMs) => this.sources.events?.historicalCaseAnalysisCompleted(caseSession, {
+          runId: request.runId, status: outcome.status, leadCount: outcome.leads.length,
+          leadIds: outcome.leads.map((item) => item.id), evidenceIds: outcome.evidence.map((item) => item.id),
+          durationMs, degraded: Boolean(outcome.analysisDegraded),
+        }),
+      }),
     ]);
     return {
       knowledge: knowledge.status === 'fulfilled'

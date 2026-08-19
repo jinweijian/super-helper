@@ -107,6 +107,9 @@ src/providers/
 - Redmine API adapter 只接收已 materialize 的 credential，不得读取 `FileSecretsRepository`、环境变量或普通配置文件。
 - CLI 可以从 SecretRef materialize 当前命令需要的密钥，再把最小运行时值传给 adapter；CLI 不得拼接 `X-Redmine-API-Key`、Redmine URL 或响应 schema。
 - Redmine 只读连通性 probe 固定单一 HTTPS origin 和 project identifier，不得演变为接受任意 URL、任意项目或任意 issue ID 的通用 HTTP 客户端。
+- 正式 Redmine MCP Server 只能暴露 `redmine_search_issues` 和 `redmine_get_issue_case_details`；search grant、最多十条候选、最多三条详情、固定项目复核、永久隐私过滤和结构预算属于 `src/mcp-servers/redmine/`。
+- `src/mcp/historical-case-evidence-service.ts` 只负责通用 MCP policy 下的 search→detail 调用、状态映射、Evidence/provenance 转换；query/rerank/analyze/verify/gate 属于 `src/runtime/case-investigation/`。
+- `src/runtime/case-investigation/` 只消费脱敏后的 MCP structured result，不得 import Redmine REST client、拼装 Redmine URL/header 或读取 secret。
 - 外部工具 adapter 不得 import `runtime`、`gateway`、`agents` 或 `ui`，也不得生成用户最终回复。
 
 ## 文件拆分规则
@@ -277,6 +280,8 @@ src/retrieval/
 - knowledge indexer 调远程 provider。
 - runtime 解析 HTTP DTO 或拼接 provider request body。
 - worker 或 MCP 工具直接生成用户最终回复。
+- 历史工单只凭相似症状或仅历史 evidence 被提升为当前项目最终根因。
+- 把工单 query、正文、人员身份、URL、模型 reason 或 Worker 核验计划写入 runtime 事件或 Case JSON。
 - smoke test 默认联网或默认消耗真实额度。
 - 错误信息、日志、fixture 泄漏 secret、原始向量或完整用户文本。
 

@@ -47,14 +47,27 @@ export class CaseInvestigationTurnService {
     const knowledgeResult = 'result' in sources.knowledge ? sources.knowledge.result : undefined;
     const experienceMatch = 'match' in sources.experience ? sources.experience.match : undefined;
     const needsFallbackWorker = sources.redmine.leads.length === 0 && !knowledgeResult && !experienceMatch;
+    const workerInvoked = sources.redmine.leads.length > 0 || needsFallbackWorker;
+    const workerStartedAt = Date.now();
+    this.events.currentProjectVerificationStarted(caseSession, {
+      runId: request.runId, workerInvoked, leadCount: sources.redmine.leads.length,
+    });
     const worker = await this.workerVerification.collect({
       request: mergedRequest,
       leads: sources.redmine.leads,
       needsFallbackWorker,
     });
+    const workerEvidence = worker.status === 'completed' ? worker.response.result.evidence : [];
+    this.events.currentProjectVerificationCompleted(caseSession, {
+      runId: request.runId, status: worker.status, workerInvoked,
+      evidenceCount: workerEvidence.length, evidenceIds: workerEvidence.map((item) => item.id),
+      durationMs: Date.now() - workerStartedAt,
+    });
     const currentEvidence = worker.status === 'completed'
       ? worker.response.result.evidence.filter((item) => item.kind === 'workspace' || item.kind === 'log')
       : [];
+    const verificationStartedAt = Date.now();
+    this.events.historicalCrossReviewStarted(caseSession, { runId: request.runId, leadCount: sources.redmine.leads.length });
     const verification = sources.redmine.leads.length > 0
       ? await this.verifier.verify({
           leads: sources.redmine.leads,
@@ -62,6 +75,20 @@ export class CaseInvestigationTurnService {
           currentEvidence,
         })
       : { verifications: [], degraded: false };
+    const classifications = verification.verifications.map((item) => item.classification);
+    this.events.historicalCrossReviewCompleted(caseSession, {
+      runId: request.runId,
+      verificationCount: verification.verifications.length,
+      classificationCounts: {
+        sameRootCauseLikely: classifications.filter((item) => item === 'same_root_cause_likely').length,
+        sameSymptomDifferentCause: classifications.filter((item) => item === 'same_symptom_different_cause').length,
+        diagnosticLeadOnly: classifications.filter((item) => item === 'diagnostic_lead_only').length,
+        irrelevant: classifications.filter((item) => item === 'irrelevant').length,
+      },
+      evidenceIds: [...new Set(verification.verifications.flatMap((item) => [...item.supportingEvidenceIds, ...item.conflictingEvidenceIds]))],
+      durationMs: Date.now() - verificationStartedAt,
+      degraded: verification.degraded,
+    });
     const evidence = uniqueEvidence([
       ...(knowledgeResult?.evidence ?? []),
       ...(experienceMatch?.result.evidence ?? []),

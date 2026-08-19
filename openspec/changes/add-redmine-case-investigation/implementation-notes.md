@@ -18,7 +18,7 @@
 | Historical evidence service | build 成功；专项因 service 模块不存在退出 1 | historical + legacy MCP + stdio 专项 `25/25 pass`；同一 MCP 会话保持 grant，48K JSON 合法 | `2a91dee` |
 | Model services | build 成功；专项因四个 model service 模块不存在退出 1 | model service `5/5 pass`；agent/knowledge/MCP 回归 `51/51 pass` | `2ef59b0` |
 | Collectors/runtime/gate | collectors 专项 `0/2`，缺少 `collect`/`collectEvidence` 方法；runtime/gate 专项因模块缺失退出 1 | collector/runtime/gate `15/15 pass`；生产 `DiagnosticRuntime` 证明配置来源后恰好一次搜索、一次 fallback Worker、一个 Run 和一个 helper reply | `73a7d3c` + 当前提交 |
-| Observability/UI | `not_run` | `not_run` | `not_committed` |
+| Observability/UI | observability 专项先因 recorder 方法缺失 `0/1` | runtime/observability/owner 专项 `20/20 pass`；Web `13 files / 54 tests pass`；四阶段 Dashboard 映射和文档更新完成 | 当前提交 |
 
 ## Offline Verification
 

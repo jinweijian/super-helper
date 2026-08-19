@@ -7,14 +7,15 @@ import { createKnowledgeEvents, type KnowledgeEvents } from './knowledge.js';
 import { createPreflightEvents, type PreflightEvents } from './preflight.js';
 import { createReviewEvents, type ReviewEvents } from './review.js';
 import { createWorkerEvents, type WorkerEvents } from './worker.js';
+import { createCaseInvestigationEvents, type CaseInvestigationEvents } from './case-investigation.js';
 
 export interface CaseRuntimeEventRecorder
-  extends RuntimeEventRecorder, ConversationEvents, PreflightEvents, KnowledgeEvents, ReviewEvents, CuratorEvents, WorkerEvents {}
+  extends RuntimeEventRecorder, ConversationEvents, PreflightEvents, KnowledgeEvents, ReviewEvents, CuratorEvents, WorkerEvents, CaseInvestigationEvents {}
 
 export class CaseRuntimeEventRecorder {
   constructor(cases: Pick<CaseRepository, 'addLogEvent'>) {
     const sink = createEventRecorderSink(cases);
-    Object.assign(this, sink, createConversationEvents(sink), createPreflightEvents(sink), createKnowledgeEvents(sink), createReviewEvents(sink), createCuratorEvents(sink), createWorkerEvents(sink));
+    Object.assign(this, sink, createConversationEvents(sink), createPreflightEvents(sink), createKnowledgeEvents(sink), createReviewEvents(sink), createCuratorEvents(sink), createWorkerEvents(sink), createCaseInvestigationEvents(sink));
   }
 }
 

@@ -19,6 +19,8 @@ export const agentIdentities = {
   caseCurator: { agentId: 'case-curator', agentRole: 'solved-case-curator', agentName: 'Case 沉淀 Agent' },
   outputReview: { agentId: 'output-review', agentRole: 'evidence-and-output-review', agentName: '输出审核 Agent' },
   presentation: { agentId: 'presentation', agentRole: 'persona-aware-presentation', agentName: '美化输出 Agent' },
+  historicalAnalyzer: { agentId: 'historical-case-analyzer', agentRole: 'historical-case-analysis', agentName: '历史案例分析 Agent' },
+  historicalVerifier: { agentId: 'historical-case-verifier', agentRole: 'historical-current-evidence-verification', agentName: '历史案例验证 Agent' },
 } satisfies Record<string, AgentIdentity>;
 
 export interface EventRecorderSink {

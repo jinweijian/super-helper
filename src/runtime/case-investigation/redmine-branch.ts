@@ -13,6 +13,13 @@ export interface RedmineBranchOutcome extends HistoricalCaseEvidenceOutcome {
   analysisDegraded?: boolean;
 }
 
+export interface RedmineBranchProgress {
+  searchStarted(): void;
+  searchCompleted(outcome: RedmineBranchOutcome, durationMs: number): void;
+  analysisStarted(detailCount: number): void;
+  analysisCompleted(outcome: RedmineBranchOutcome, durationMs: number): void;
+}
+
 export class RedmineBranch {
   constructor(private readonly services: {
     planner: Pick<QueryPlannerService, 'plan'>;
@@ -21,7 +28,9 @@ export class RedmineBranch {
     analyzer: Pick<HistoricalCaseAnalyzerService, 'analyze'>;
   }) {}
 
-  async collect(request: DiagnosticRequest): Promise<RedmineBranchOutcome> {
+  async collect(request: DiagnosticRequest, progress?: RedmineBranchProgress): Promise<RedmineBranchOutcome> {
+    const searchStartedAt = Date.now();
+    progress?.searchStarted();
     const plan = await this.services.planner.plan({ answerGoal: request.answerGoal });
     let rerankDegraded = false;
     const outcome = await this.services.evidence.investigate({
@@ -35,19 +44,27 @@ export class RedmineBranch {
       },
     });
     if (outcome.status !== 'completed') {
-      return { ...outcome, leads: [], planDegraded: plan.degraded, rerankDegraded };
+      const result = { ...outcome, leads: [], planDegraded: plan.degraded, rerankDegraded };
+      progress?.searchCompleted(result, Date.now() - searchStartedAt);
+      return result;
     }
+    const searched = { ...outcome, leads: [], planDegraded: plan.degraded, rerankDegraded };
+    progress?.searchCompleted(searched, Date.now() - searchStartedAt);
+    const analysisStartedAt = Date.now();
+    progress?.analysisStarted(outcome.details.length);
     const analysis = await this.services.analyzer.analyze({
       details: outcome.details,
       evidence: outcome.evidence,
     });
-    return {
+    const result = {
       ...outcome,
       leads: analysis.leads,
       planDegraded: plan.degraded,
       rerankDegraded,
       analysisDegraded: analysis.degraded,
     };
+    progress?.analysisCompleted(result, Date.now() - analysisStartedAt);
+    return result;
   }
 }
 

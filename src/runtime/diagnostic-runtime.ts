@@ -126,6 +126,7 @@ export class DiagnosticRuntime {
         knowledge: this.knowledgeTurn,
         experience: this.experienceTurn,
         redmine: redmineBranch,
+        events: this.events,
       }),
       workerVerification: new WorkerVerification(this.workerDiagnosis),
       verifier: historicalVerifier,

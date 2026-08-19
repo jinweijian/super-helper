@@ -22,6 +22,10 @@
 | Knowledge Router | 知识检索前 | 识别 module、intent、keywords、代码升级信号 | 不直接产生 |
 | Evidence Judge | 知识证据门禁 | 判断知识证据是否足够直答或必须升级 | 不直接产生 |
 | RAG Answerability | 知识覆盖判断 | 判断 evidence 是否覆盖 `AnswerGoal`，partial 时萃取 covered claims | 不直接产生 |
+| Historical Search Query Planner | 历史案例查询前 | 只从 `AnswerGoal` 生成一次有界查询和非身份 signals；失败时仍使用确定性 fallback 查询 | 不直接产生 |
+| Historical Case Reranker | 历史候选筛选 | 只能从 search 返回候选中选择最多三条详情，不得引入新 issue ID | 不直接产生 |
+| Historical Case Analyzer | 历史详情分析 | 把已脱敏详情转换为 evidence-bound hypothesis 和只读 match/mismatch checks | 不直接产生 |
+| Historical Case Verifier | 当前项目核验后 | 只用历史 evidence 与当前 workspace/log evidence 分类同根因、不同原因、方向或无关 | 不直接产生 |
 | Output Review | 证据审核 | 校验 claim/evidence，冻结 outcome 和 accepted IDs | 不直接产生 |
 | Presentation | 表达 | 基于 accepted claim/evidence 写中文回复 | 可产生 |
 | Case Curator | 解决后沉淀 | 用户确认解决后生成 `review_required` solved case 草稿 | 不直接产生 |
@@ -32,7 +36,8 @@
 用户问题
   -> Main Agent 持有 AnswerGoal
   -> Input Review 决定追问或派发
-  -> Experience / Knowledge / Worker 产生 evidence 和 claims
+  -> 无历史来源：Experience / Knowledge / Worker 产生 evidence 和 claims
+  -> 有历史来源：Experience / Knowledge / Redmine 并行收集 -> 一个 Worker 验证 -> Historical Verifier
   -> Output Review 冻结 accepted claim IDs
   -> Presentation 表达冻结结果
   -> Case Curator 在用户确认解决后沉淀草稿
@@ -66,6 +71,10 @@
 - [`src/agents/knowledge-router.md`](../../src/agents/knowledge-router.md)
 - [`src/agents/evidence-judge.md`](../../src/agents/evidence-judge.md)
 - [`src/agents/rag-answerability.md`](../../src/agents/rag-answerability.md)
+- [`src/agents/historical-search-query-planner.md`](../../src/agents/historical-search-query-planner.md)
+- [`src/agents/historical-case-reranker.md`](../../src/agents/historical-case-reranker.md)
+- [`src/agents/historical-case-analyzer.md`](../../src/agents/historical-case-analyzer.md)
+- [`src/agents/historical-case-verifier.md`](../../src/agents/historical-case-verifier.md)
 - [`src/agents/output-review.md`](../../src/agents/output-review.md)
 - [`src/agents/presentation.md`](../../src/agents/presentation.md)
 - [`src/agents/case-curator.md`](../../src/agents/case-curator.md)

@@ -56,7 +56,7 @@ flowchart LR
 | --- | --- |
 | Workspace | 当前项目/服务目录，是代码和 MCP 检查边界 |
 | MCP | 每个 workspace allowlist；默认只读 |
-| Redmine 只读连通性 | `src/mcp-servers/redmine/` 只验证固定 Redmine 项目的 GET 认证、列表和详情能力；当前不进入 Runtime 答案来源 |
+| Redmine 历史案例 | `src/mcp-servers/redmine/` 提供固定项目、仅 GET 的两个 MCP 工具；配置来源的 workspace 会在 Runtime 中并行检索并交叉验证 |
 | Claude Code Worker | 每次 run 接收结构化 `DiagnosticRequest`，返回 `DiagnosticResult + WorkerTrace` |
 | Knowledge Root | 默认在配置的 knowledge root 下按 workspace 隔离，不写入项目源码目录 |
 | Provider | Embedding 与 rerank 在 `src/providers/` 下是同级能力 |
@@ -64,22 +64,25 @@ flowchart LR
 | Deep Query Planner | 代码升级线索由 `src/runtime/deep-query-planner.ts` 按知识 module 候选、projectType 和过滤后的 anchor terms 生成；路径提示不得硬编码为单一 `src/**` 假设 |
 | Observability | Runtime 记录事件，`src/observability/` 只做展示转换 |
 
-## Redmine 只读连通性穿刺
+## Redmine 历史案例调查
 
-当前 Redmine 能力是正式 MCP 案例调查接入之前的底层技术穿刺：
+Redmine 以受限 MCP Server 的方式进入正式 Runtime：
 
 ```text
-CLI materialize SecretRef
-  -> Redmine readonly probe
-  -> Redmine REST adapter
-  -> 固定项目 itsupportknowledge
+Preflight dispatch
+  -> Knowledge / Experience / Redmine 并行收集
+  -> Redmine query planner -> 一次 search -> 最多三条 detail -> analyzer
+  -> 一个只读 Worker 批量验证当前项目
+  -> historical verifier / deterministic gate
+  -> 一次 Review / Presentation
 ```
 
-- CLI 只负责隐藏录入密钥、解析本地 SecretRef 和输出安全状态。
-- `src/mcp-servers/redmine/redmine-api/` 只负责固定 origin 的 GET 请求、最小 schema 和安全错误映射。
-- probe 只返回项目数值 ID、是否取到一条样本以及 journal/relation/attachment 数量，不返回工单正文、人员或附件定位。
-- 该能力尚未进入 `Experience -> Knowledge -> MCP -> Worker` 的答案来源链路，不会被产品 Agent 自动调用，也不能生成用户最终回复。
-- 完整历史案例调查仍以 `docs/superpowers/specs/2026-07-31-redmine-mcp-case-investigation-design.md` 为准。
+- `historicalCaseSources` 每个 workspace 最多配置一个来源；来源只能引用同 workspace allowlist 中启用、只读、声明 `historical_case/redmine` capability 的 server。
+- MCP Server 启动时固定 HTTPS origin、项目和搜索 backend；请求不能传 URL、项目、credential 或 HTTP method。
+- 工具面只有 `redmine_search_issues` 与 `redmine_get_issue_case_details`。详情调用受当前会话 search grant 约束，最多读取三条已返回候选。
+- 私有备注、人员身份、附件文件名/URL/body 永久删除；详情按完整 evidence block 收缩到 48,000 Unicode 字符。
+- 历史案例不能直接生成最终回复。只有本轮 Redmine evidence 与本轮 workspace/log evidence 经 Verifier 和既有 Review 同时接受时，才能形成“较可能同根因”；其余情况保持初步方向或不同原因。
+- 日志只记录阶段、状态、耗时、数量和安全 ID；查询词、signals、正文、身份、URL、凭证、模型 reason、Worker plan 和 raw error 不进入 Case 或 `/api/logs`。
 
 ## 继续阅读
 

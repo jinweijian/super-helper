@@ -133,15 +133,18 @@ export function serializeSession(
 
 function recentAgentActivity(caseSession: StoredCase): AgentActivityItem[] {
   return (caseSession.logs ?? [])
-    .filter((event) => event.actor === 'agent' && Boolean(event.agentId))
+    .filter((event) => (
+      (event.actor === 'agent' && Boolean(event.agentId)) ||
+      /^(historical_case_search|current_project_verification)_/.test(event.phase)
+    ))
     .slice(-8)
     .reverse()
     .map((event) => ({
       id: event.id,
       createdAt: event.createdAt,
-      agentId: event.agentId ?? 'agent',
-      agentName: event.agentName ?? event.agentId ?? 'Agent',
-      agentRole: event.agentRole ?? 'agent',
+      agentId: event.agentId ?? (event.actor === 'mcp' ? 'redmine-mcp' : 'claude-worker'),
+      agentName: event.agentName ?? (event.actor === 'mcp' ? 'Redmine 工单源' : 'Claude Code Worker'),
+      agentRole: event.agentRole ?? (event.actor === 'mcp' ? 'historical-case-source' : 'current-project-verification'),
       phase: event.phase,
       label: event.label ?? event.phase,
       summary: event.summary,

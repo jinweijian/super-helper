@@ -82,9 +82,10 @@ Gateway chat route
   -> DiagnosticRuntime.startUserTurn
   -> ResolvedTurnContext builder
   -> Preflight Gate
-  -> Experience Agent
-  -> Knowledge Router / Retrieval / Evidence Judge / RAG Answerability
-  -> DiagnosticWorker port
+  -> 无 historical source：Experience Agent -> Knowledge -> MCP -> DiagnosticWorker
+  -> 有 historical source：Experience Agent + Knowledge + Redmine 并行收集
+       -> 一次有界只读 DiagnosticWorker 核验
+       -> Historical Case Verifier / deterministic gate
   -> Result Validator / Review Gate
   -> Presentation / Presenter
   -> RuntimeEventRecorder
@@ -103,6 +104,8 @@ Rules:
 - Runtime code must map worker output through `review-gate.ts` and `presenter.ts`.
 - Runtime code must resolve product Agent configs through `src/agents/registry.json` using `src/runtime/agent-configs.ts`.
 - Same-case async turns must be serialized so every accepted user message receives its own helper reply.
+- 配置 `historicalCaseSources` 的 workspace 必须在 Preflight dispatch 后、任何 Experience/Knowledge early return 前进入案例调查编排；一次回合只能创建一个正式 Run、调用一次 Review 并生成一条 helper reply。
+- Redmine query planner、reranker、analyzer、verifier 都是不可见 Product Agent；它们不得绕过 `DiagnosticResult`、Evidence Review 或 Presentation。
 
 ## Gateway Contract
 
@@ -262,6 +265,14 @@ Preserve established phases unless a documented migration is added:
 - `knowledge_router_started`
 - `knowledge_search_result`
 - `knowledge_search_started`
+- `historical_case_search_started`
+- `historical_case_search_completed`
+- `historical_case_analysis_started`
+- `historical_case_analysis_completed`
+- `current_project_verification_started`
+- `current_project_verification_completed`
+- `historical_cross_review_started`
+- `historical_cross_review_completed`
 - `local_preflight_result`
 - `model_preflight_failed`
 - `model_preflight_overridden_by_local_dispatch`
@@ -280,6 +291,8 @@ Preserve established phases unless a documented migration is added:
 - `user_reply`
 
 Do not scatter ad hoc log event objects through unrelated modules.
+
+案例调查事件必须使用 `src/runtime/event-recorder/case-investigation.ts` 的白名单 DTO，只允许状态、耗时、数量、安全 ID、degraded 和 Worker 是否调用。query、signals、工单正文、人员身份、URL、凭证、模型 reason、核验 plan 和 raw error 不得进入 Case、Dashboard 或 `/api/logs`。
 
 ## Session Lifecycle Contract
 

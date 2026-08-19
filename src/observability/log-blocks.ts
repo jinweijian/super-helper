@@ -118,6 +118,10 @@ function labelForPhase(phase: string): string {
   if (/knowledge_search/.test(phase)) return '知识检索';
   if (/evidence_judge/.test(phase)) return '证据判断';
   if (/knowledge_answer/.test(phase)) return '知识直答';
+  if (/historical_case_search/.test(phase)) return '查询工单';
+  if (/historical_case_analysis/.test(phase)) return '分析案例';
+  if (/current_project_verification/.test(phase)) return '验证当前项目';
+  if (/historical_cross_review/.test(phase)) return '交叉审核';
   if (/code_escalation/.test(phase)) return '升级代码';
   if (/case_curator|resolution/.test(phase)) return 'Case 沉淀';
   if (/diagnostic|command|raw_output|follow_up/.test(phase)) return '调用 CC';

@@ -221,6 +221,11 @@ test('production DiagnosticRuntime routes a configured workspace through one Red
     assert.equal(workerCalls, 1);
     assert.equal(stored.runs.length, 1);
     assert.equal(stored.messages.filter((item) => item.role === 'helper').length, 1);
+    for (const phase of [
+      'historical_case_search_started', 'historical_case_search_completed',
+      'current_project_verification_started', 'current_project_verification_completed',
+      'historical_cross_review_started', 'historical_cross_review_completed',
+    ]) assert.equal(stored.logs.some((item) => item.phase === phase), true, phase);
     assert.equal(JSON.stringify(stored).includes('must-not-persist'), false);
   } finally {
     rmSync(root, { recursive: true, force: true });

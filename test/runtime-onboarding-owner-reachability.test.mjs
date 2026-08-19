@@ -10,7 +10,7 @@ const lines = (path) => read(path).split(/\r?\n/).length;
 test('event recorder phase owners are real production imports without a giant implementation', () => {
   assert.equal(existsSync(join(root, 'src/runtime/event-recorder-impl.ts')), false);
   const aggregator = read('src/runtime/event-recorder/index.ts');
-  for (const owner of ['conversation', 'preflight', 'knowledge', 'review', 'curator', 'worker']) {
+  for (const owner of ['conversation', 'preflight', 'knowledge', 'review', 'curator', 'worker', 'case-investigation']) {
     const path = `src/runtime/event-recorder/${owner}.ts`;
     const source = read(path);
     assert.ok(lines(path) >= 20, `${path} is still a marker`);

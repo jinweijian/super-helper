@@ -17,4 +17,18 @@ describe('问答进度模型', () => {
     expect(view.summary).toContain('连接已中断');
     expect(view.animated).toBe(false);
   });
+
+  it.each([
+    ['historical_case_search_started', '查询工单'],
+    ['historical_case_analysis_started', '分析案例'],
+    ['current_project_verification_started', '验证当前项目'],
+    ['historical_cross_review_started', '交叉审核'],
+  ])('把案例调查阶段 %s 显示为 %s', (phase, title) => {
+    const view = progressView({
+      state: 'running', startedAt: 1_000, lastActivityAt: 2_000,
+      session: { status: 'diagnosing', agentActivity: [{ phase, summary: title }] },
+    }, 3_000);
+    expect(view.title).toContain(title);
+    expect(view.steps).toContain(title);
+  });
 });

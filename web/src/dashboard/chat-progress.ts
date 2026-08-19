@@ -8,15 +8,21 @@ export interface ChatProgressState {
   error?: string;
 }
 
-const steps = ['理解问题', '知识路由', '检索证据', '证据判断', '生成答复'];
+const defaultSteps = ['理解问题', '知识路由', '检索证据', '证据判断', '生成答复'];
+const caseInvestigationSteps = ['查询工单', '分析案例', '验证当前项目', '交叉审核'];
 
 export function progressView(state: ChatProgressState, now = Date.now()) {
   const phase = state.session?.agentActivity?.[0]?.phase ?? '';
   let index = 0;
   let title = '正在理解你的问题';
+  let steps = defaultSteps;
+  if (/historical_case_search/.test(phase)) { steps = caseInvestigationSteps; index = 0; title = '正在查询工单'; }
+  if (/historical_case_analysis/.test(phase)) { steps = caseInvestigationSteps; index = 1; title = '正在分析案例'; }
+  if (/current_project_verification/.test(phase)) { steps = caseInvestigationSteps; index = 2; title = '正在验证当前项目'; }
+  if (/historical_cross_review/.test(phase)) { steps = caseInvestigationSteps; index = 3; title = '正在交叉审核'; }
   if (/knowledge_router/.test(phase)) { index = 1; title = '正在识别知识路径'; }
   if (/knowledge_search|retrieval/.test(phase)) { index = 2; title = '正在检索相关证据'; }
-  if (/judge|review|diagnostic|code_escalation/.test(phase) || (!phase && state.session?.status === 'diagnosing')) { index = 3; title = '正在判断证据并排查'; }
+  if (/judge|review|diagnostic|code_escalation/.test(phase) && !/historical_cross_review/.test(phase) || (!phase && state.session?.status === 'diagnosing')) { index = 3; title = '正在判断证据并排查'; }
   if (/presentation|user_reply/.test(phase)) { index = 4; title = '正在整理回答'; }
   const interrupted = state.state === 'interrupted';
   const reconnecting = state.state === 'reconnecting';

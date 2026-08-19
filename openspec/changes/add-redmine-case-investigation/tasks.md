@@ -57,9 +57,9 @@
 
 ## 10. 安全事件与 Dashboard 进度
 
-- [ ] 10.1 在 `test/case-investigation-observability.test.mjs` 先写失败测试：Agent/MCP/Worker actor 身份正确，event detail 不含 query、signals、body、identity、URL、key、reason、plan、raw error。完成证据：敏感诱饵对 Case JSON 和 `/api/logs` 均不可见。
-- [ ] 10.2 新建 `src/runtime/event-recorder/case-investigation.ts` 并在各阶段记录白名单状态、耗时、数量、IDs、degraded 和 Worker flag；更新 recorder index。完成证据：observability 只转换展示，不参与决策。
-- [ ] 10.3 更新 `src/observability/`、Dashboard 进度映射、`docs/standards/development.md`、`docs/standards/module-boundaries.md`、`docs/architecture/overview.md` 与 `docs/architecture/agents.md`。完成证据：UI 测试显示查询工单、分析案例、验证当前项目、交叉审核四类进度。
+- [x] 10.1 在 `test/case-investigation-observability.test.mjs` 先写失败测试：Agent/MCP/Worker actor 身份正确，event detail 不含 query、signals、body、identity、URL、key、reason、plan、raw error。完成证据：敏感诱饵对 Case JSON 和 `/api/logs` 均不可见。
+- [x] 10.2 新建 `src/runtime/event-recorder/case-investigation.ts` 并在各阶段记录白名单状态、耗时、数量、IDs、degraded 和 Worker flag；更新 recorder index。完成证据：observability 只转换展示，不参与决策。
+- [x] 10.3 更新 `src/observability/`、Dashboard 进度映射、`docs/standards/development.md`、`docs/standards/module-boundaries.md`、`docs/architecture/overview.md` 与 `docs/architecture/agents.md`。完成证据：UI 测试显示查询工单、分析案例、验证当前项目、交叉审核四类进度。
 
 ## 11. 离线验收、隐私与兼容
 
