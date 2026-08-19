@@ -52,7 +52,10 @@ export class ReviewPresentationService {
     caseSession: StoredCase,
     result: DiagnosticResult,
     run: DiagnosticRun,
-    context: { coverageEvidenceEnvelopes?: CoverageEvidenceEnvelope[] } = {},
+    context: {
+      coverageEvidenceEnvelopes?: CoverageEvidenceEnvelope[];
+      upstreamBlockers?: ReviewGlobalBlocker[];
+    } = {},
   ): Promise<ReviewPresentationResult> {
     this.events.evidenceReviewStarted(caseSession, run, result);
     const answerGoal = run.request?.answerGoal;
@@ -70,7 +73,10 @@ export class ReviewPresentationService {
       structural,
       answerGoal: answerGoal ?? fallbackAnswerGoal(structural.result),
       coverageReview,
-      upstreamBlockers: upstreamGlobalBlockers(run),
+      upstreamBlockers: [
+        ...upstreamGlobalBlockers(run),
+        ...(context.upstreamBlockers ?? []),
+      ],
     });
     let validated = validation.result;
     const promptCandidates = collectVisiblePromptCandidates({

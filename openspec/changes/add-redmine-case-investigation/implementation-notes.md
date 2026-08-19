@@ -11,13 +11,13 @@
 
 | Task | Red command/result | Green command/result | Commit |
 | --- | --- | --- | --- |
-| Configuration contracts | build 成功；专项 `24 pass / 9 fail`，9 个失败均为缺少校验或 onboarding 未保留字段 | build 成功；专项 `33/33 pass`；`pnpm typecheck` exit 0 | `pending` |
-| Redmine API/search | build 成功；专项因 `search.js` 不存在退出 1 | API + probe 专项 `16/16 pass`，所有捕获请求为 GET | `pending` |
-| Privacy/bounding | build 成功；专项因 `bounding.js`/`normalizer.js` 不存在退出 1 | Redmine API/probe/privacy 专项 `18/18 pass`；敏感诱饵与私有备注均不可见 | `pending` |
-| MCP server/stdio | build 成功；专项因 `candidate-grants.js`/server 不存在退出 1，stdio 子进程关闭 | Redmine 全链专项 `22/22 pass`；真实 SDK stdio list/search/detail 同会话通过 | `pending` |
-| Historical evidence service | build 成功；专项因 service 模块不存在退出 1 | historical + legacy MCP + stdio 专项 `25/25 pass`；同一 MCP 会话保持 grant，48K JSON 合法 | `pending` |
-| Model services | build 成功；专项因四个 model service 模块不存在退出 1 | model service `5/5 pass`；agent/knowledge/MCP 回归 `51/51 pass` | `pending` |
-| Collectors/runtime/gate | collectors 专项 `0/2`，缺少 `collect`/`collectEvidence` 方法 | collector `2/2 pass`；Knowledge/Experience/Worker 与 Agent registry 目标回归 `10/10 pass` | `pending` |
+| Configuration contracts | build 成功；专项 `24 pass / 9 fail`，9 个失败均为缺少校验或 onboarding 未保留字段 | build 成功；专项 `33/33 pass`；`pnpm typecheck` exit 0 | `6417cf7` |
+| Redmine API/search | build 成功；专项因 `search.js` 不存在退出 1 | API + probe 专项 `16/16 pass`，所有捕获请求为 GET | `83ed4b0` |
+| Privacy/bounding | build 成功；专项因 `bounding.js`/`normalizer.js` 不存在退出 1 | Redmine API/probe/privacy 专项 `18/18 pass`；敏感诱饵与私有备注均不可见 | `460e328` |
+| MCP server/stdio | build 成功；专项因 `candidate-grants.js`/server 不存在退出 1，stdio 子进程关闭 | Redmine 全链专项 `22/22 pass`；真实 SDK stdio list/search/detail 同会话通过 | `0c4c2d1` |
+| Historical evidence service | build 成功；专项因 service 模块不存在退出 1 | historical + legacy MCP + stdio 专项 `25/25 pass`；同一 MCP 会话保持 grant，48K JSON 合法 | `2a91dee` |
+| Model services | build 成功；专项因四个 model service 模块不存在退出 1 | model service `5/5 pass`；agent/knowledge/MCP 回归 `51/51 pass` | `2ef59b0` |
+| Collectors/runtime/gate | collectors 专项 `0/2`，缺少 `collect`/`collectEvidence` 方法；runtime/gate 专项因模块缺失退出 1 | collector/runtime/gate `15/15 pass`；生产 `DiagnosticRuntime` 证明配置来源后恰好一次搜索、一次 fallback Worker、一个 Run 和一个 helper reply | `73a7d3c` + 当前提交 |
 | Observability/UI | `not_run` | `not_run` | `not_committed` |
 
 ## Offline Verification

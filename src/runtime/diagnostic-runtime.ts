@@ -23,6 +23,15 @@ import { WorkerDiagnosisService } from './worker-diagnosis.js';
 import { McpEvidenceService, type McpEvidenceServiceOptions } from '../mcp/evidence-service.js';
 import { findRetryableInterruption, markInheritedActiveTurnsRetryable, removeInterruptionPlaceholder } from '../sessions/stale-turn.js';
 import { completePresentedTurn } from './turn-completion.js';
+import { HistoricalCaseEvidenceService } from '../mcp/historical-case-evidence-service.js';
+import { CandidateRerankerService } from './case-investigation/candidate-reranker-service.js';
+import { CaseInvestigationTurnService } from './case-investigation/case-investigation-turn-service.js';
+import { HistoricalCaseAnalyzerService } from './case-investigation/historical-case-analyzer-service.js';
+import { HistoricalCaseVerifierService } from './case-investigation/historical-case-verifier-service.js';
+import { ParallelSourceCollector } from './case-investigation/parallel-source-collector.js';
+import { QueryPlannerService } from './case-investigation/query-planner-service.js';
+import { RedmineBranch } from './case-investigation/redmine-branch.js';
+import { WorkerVerification } from './case-investigation/worker-verification.js';
 
 export interface AgentResponse extends RuntimeTurnResponse {}
 export interface DiagnosticRuntimeOptions {
@@ -41,9 +50,10 @@ export class DiagnosticRuntime {
   private readonly reviewer: ReviewPresentationService;
   private readonly caseCuration: CaseCurationService;
   private readonly mcpEvidence: McpEvidenceService;
+  private readonly caseInvestigation: CaseInvestigationTurnService;
 
   constructor(
-    config: SuperHelperConfig,
+    private readonly config: SuperHelperConfig,
     private readonly store: CaseRepository,
     worker: DiagnosticWorker,
     options: DiagnosticRuntimeOptions = {},
@@ -58,6 +68,10 @@ export class DiagnosticRuntime {
     const evidenceCoverageAgentSpec = resolveAgentConfig('evidence_coverage').content;
     const visiblePromptSafetyAgentSpec = resolveAgentConfig('visible_prompt_safety').content;
     const answerGoalCompletenessAgentSpec = resolveAgentConfig('answer_goal_completeness').content;
+    const historicalQueryPlannerSpec = resolveAgentConfig('historical_search_query_planner').content;
+    const historicalRerankerSpec = resolveAgentConfig('historical_case_reranker').content;
+    const historicalAnalyzerSpec = resolveAgentConfig('historical_case_analyzer').content;
+    const historicalVerifierSpec = resolveAgentConfig('historical_case_verifier').content;
 
     this.events = new CaseRuntimeEventRecorder(store);
     this.reviewer = new ReviewPresentationService(
@@ -96,6 +110,26 @@ export class DiagnosticRuntime {
     this.workerDiagnosis = new WorkerDiagnosisService(store, worker, this.events, this.reviewer);
     this.caseCuration = new CaseCurationService(config, store, this.events);
     this.mcpEvidence = new McpEvidenceService(config, options.mcp);
+    const historicalEvidence = new HistoricalCaseEvidenceService(config, options.mcp);
+    const historicalVerifier = new HistoricalCaseVerifierService(model, historicalVerifierSpec);
+    const redmineBranch = new RedmineBranch({
+      planner: new QueryPlannerService(model, historicalQueryPlannerSpec),
+      evidence: historicalEvidence,
+      reranker: new CandidateRerankerService(model, historicalRerankerSpec),
+      analyzer: new HistoricalCaseAnalyzerService(model, historicalAnalyzerSpec),
+    });
+    this.caseInvestigation = new CaseInvestigationTurnService({
+      store,
+      events: this.events,
+      reviewer: this.reviewer,
+      collector: new ParallelSourceCollector({
+        knowledge: this.knowledgeTurn,
+        experience: this.experienceTurn,
+        redmine: redmineBranch,
+      }),
+      workerVerification: new WorkerVerification(this.workerDiagnosis),
+      verifier: historicalVerifier,
+    });
   }
 
   async handleUserMessage(input: {
@@ -214,6 +248,10 @@ export class DiagnosticRuntime {
       return { caseSession, assistantMessage: reply, decision: 'ask_user' };
     }
 
+    if (this.hasHistoricalCaseSource(decision.request.workspaceId)) {
+      return this.caseInvestigation.answer(caseSession, decision.request, replyToMessageId);
+    }
+
     const experienceResponse = await this.experienceTurn.answer(caseSession, decision.request, replyToMessageId);
     if (experienceResponse) {
       return experienceResponse;
@@ -282,6 +320,12 @@ export class DiagnosticRuntime {
       review,
       replyToMessageId,
     });
+  }
+
+  private hasHistoricalCaseSource(workspaceId: string): boolean {
+    return this.config.workspaces.some((workspace) => (
+      workspace.id === workspaceId && workspace.historicalCaseSources?.length === 1
+    ));
   }
 }
 

@@ -44,16 +44,16 @@
 
 ## 8. 并行调查编排与自动 Worker
 
-- [ ] 8.1 在 `test/case-investigation-runtime.test.mjs` 用 deferred Promise 先写失败测试：Knowledge、Experience、完整 Redmine 分支同时启动；任何快分支不能提前回复；barrier 保留每个 terminal status。完成证据：测试在 collector 缺失时红。
-- [ ] 8.2 新建 `src/runtime/case-investigation/parallel-source-collector.ts` 与 `redmine-branch.ts`，实现 `Promise.allSettled` barrier 和 Redmine 内部 search→rerank→detail。完成证据：每个 configured dispatch 恰好一次 search，最多一次 detail call。
-- [ ] 8.3 新建 `worker-verification.ts`，把所有有效 leads 合成一次 bounded read-only Worker request；任何 write/unknown action 阻止派发。完成证据：三条历史案例仍只调用一个 Worker。
-- [ ] 8.4 新建 `case-investigation-turn-service.ts` 并修改 `src/runtime/diagnostic-runtime.ts`：Preflight dispatch 后、旧 early-return 前进入 collaborator；无 source 时走旧路径。完成证据：配置 workspace 的 Experience/Knowledge 不早停，legacy workspace 行为不变。
+- [x] 8.1 在 `test/case-investigation-runtime.test.mjs` 用 deferred Promise 先写失败测试：Knowledge、Experience、完整 Redmine 分支同时启动；任何快分支不能提前回复；barrier 保留每个 terminal status。完成证据：测试在 collector 缺失时红。
+- [x] 8.2 新建 `src/runtime/case-investigation/parallel-source-collector.ts` 与 `redmine-branch.ts`，实现 `Promise.allSettled` barrier 和 Redmine 内部 search→rerank→detail。完成证据：每个 configured dispatch 恰好一次 search，最多一次 detail call。
+- [x] 8.3 新建 `worker-verification.ts`，把所有有效 leads 合成一次 bounded read-only Worker request；任何 write/unknown action 阻止派发。完成证据：三条历史案例仍只调用一个 Worker。
+- [x] 8.4 新建 `case-investigation-turn-service.ts` 并修改 `src/runtime/diagnostic-runtime.ts`：Preflight dispatch 后、旧 early-return 前进入 collaborator；无 source 时走旧路径。完成证据：配置 workspace 的 Experience/Knowledge 不早停，legacy workspace 行为不变。
 
 ## 9. 历史证据门禁、结果构建与一次呈现
 
-- [ ] 9.1 在 `test/historical-case-gate.test.mjs` 先写失败测试：双侧当前/历史 evidence 通过；仅历史、旧 envelope、user claim、source failure、Worker 反证、Knowledge 冲突均降级。完成证据：测试明确区分 `same_root_cause_likely`、`diagnostic_lead_only`、`same_symptom_different_cause`。
-- [ ] 9.2 新建 `historical-case-gate.ts` 与 `result-builder.ts`，只使用本轮已引用 evidence 构建带 role/answers 的 claims，并向既有 Review 提供稳定 upstream blockers。完成证据：accepted primary coverage 仍由现有 AnswerGoal/Review 冻结。
-- [ ] 9.3 在 turn service 中只创建一个 sanitized Run，并只调用一次 `ReviewPresentationService.reviewAndFormat()` 与 `completePresentedTurn()`。完成证据：多来源+Worker 场景只有一个正式 helper reply，public DTO shape 不变。
+- [x] 9.1 在 `test/historical-case-gate.test.mjs` 先写失败测试：双侧当前/历史 evidence 通过；仅历史、旧 envelope、user claim、source failure、Worker 反证、Knowledge 冲突均降级。完成证据：测试明确区分 `same_root_cause_likely`、`diagnostic_lead_only`、`same_symptom_different_cause`。
+- [x] 9.2 新建 `historical-case-gate.ts` 与 `result-builder.ts`，只使用本轮已引用 evidence 构建带 role/answers 的 claims，并向既有 Review 提供稳定 upstream blockers。完成证据：accepted primary coverage 仍由现有 AnswerGoal/Review 冻结。
+- [x] 9.3 在 turn service 中只创建一个 sanitized Run，并只调用一次 `ReviewPresentationService.reviewAndFormat()` 与 `completePresentedTurn()`。完成证据：多来源+Worker 场景只有一个正式 helper reply，public DTO shape 不变。
 
 ## 10. 安全事件与 Dashboard 进度
 

@@ -156,7 +156,7 @@ export class WorkerDiagnosisService {
 }
 
 function validWorkerLeads(leads: HistoricalLead[]): boolean {
-  if (leads.length < 1 || leads.length > 3) return false;
+  if (leads.length > 3) return false;
   return leads.every((lead) => (
     lead.checks.length > 0 &&
     lead.checks.every((check) => (
