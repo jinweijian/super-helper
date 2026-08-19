@@ -85,7 +85,7 @@ docs/architecture/overview.md
 - Consumes: `FileSecretsRepository.set(key: string, value: string): SecretRef`；`DEFAULT_HOME`。
 - Produces: `REDMINE_API_KEY_SECRET = 'integrations.redmine.apiKey'`；`runRedmineCommand(input): Promise<boolean>`；`readHiddenLine(prompt): Promise<string>`。
 
-- [ ] **Step 1: 写密钥命令失败测试**
+- [x] **Step 1: 写密钥命令失败测试**
 
 在 `test/redmine-readonly-probe.test.mjs` 中创建临时目录并直接调用命令边界：
 
@@ -147,13 +147,13 @@ test('redmine secret set rejects empty or mismatched confirmation without overwr
 });
 ```
 
-- [ ] **Step 2: 构建并运行测试，确认因模块缺失而失败**
+- [x] **Step 2: 构建并运行测试，确认因模块缺失而失败**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: FAIL，错误包含 `Cannot find module '../dist/cli/command-redmine.js'`。
 
-- [ ] **Step 3: 实现隐藏输入和最小密钥命令**
+- [x] **Step 3: 实现隐藏输入和最小密钥命令**
 
 `src/cli/hidden-input.ts` 实现交互式 TTY 读取，进入 raw mode 后只接受可打印字符、退格、回车和 Ctrl+C；cleanup 必须恢复原 raw mode、移除 listener 并 pause stdin。固定错误只允许 `interactive_tty_required` 与 `input_cancelled`：
 
@@ -221,19 +221,19 @@ if (command === 'redmine') {
 "redmine:secret:set": "pnpm build && node dist/cli.js redmine secret set"
 ```
 
-- [ ] **Step 4: 构建并运行密钥专项测试**
+- [x] **Step 4: 构建并运行密钥专项测试**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: PASS，2 tests；测试输出不包含 fixture secret。
 
-- [ ] **Step 5: 运行类型检查**
+- [x] **Step 5: 运行类型检查**
 
 Run: `pnpm typecheck`
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/cli/hidden-input.ts src/cli/command-redmine.ts src/cli/main.ts package.json test/redmine-readonly-probe.test.mjs
@@ -257,7 +257,7 @@ git commit -m "feat: add secure Redmine secret input"
 - Consumes: 运行时已 materialize 的 `apiKey: string` 和可注入 `fetchImpl: typeof fetch`；不得 import secrets、CLI、runtime、gateway。
 - Produces: `createRedmineReadonlyClient(options): RedmineReadonlyClient`；安全的 `RedmineProbeErrorCode`；只包含 id/project id/数组数量所需字段的协议类型。
 
-- [ ] **Step 1: 写 GET、认证头、固定 URL 和最小 schema 的失败测试**
+- [x] **Step 1: 写 GET、认证头、固定 URL 和最小 schema 的失败测试**
 
 追加测试，fake `fetch` 依次返回 project、issue list 和 detail fixtures；记录每次 `URL` 与 `RequestInit`，断言：
 
@@ -289,7 +289,7 @@ project fixture 只需：
 
 详情 fixture 同样携带 notes/附件名诱饵，但解析结果只保留 id、project id 和三个数组的元素数量所需 id。
 
-- [ ] **Step 2: 写范围和错误映射失败测试**
+- [x] **Step 2: 写范围和错误映射失败测试**
 
 覆盖以下表格，并断言错误对象只包含固定 code，不包含原始 body、API Key 或 fixture 文本：
 
@@ -305,13 +305,13 @@ project fixture 只需：
 
 另测：项目 identifier 不一致、列表 project ID 不一致、详情 project ID 不一致、非法 JSON、schema 缺字段、AbortError、跨 origin Location/redirect 响应。
 
-- [ ] **Step 3: 构建并运行测试，确认因 API 模块缺失而失败**
+- [x] **Step 3: 构建并运行测试，确认因 API 模块缺失而失败**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: FAIL，错误指向 `dist/mcp-servers/redmine/...` 模块缺失或导出缺失。
 
-- [ ] **Step 4: 定义稳定合同与最小协议 schema**
+- [x] **Step 4: 定义稳定合同与最小协议 schema**
 
 `contracts.ts` 定义：
 
@@ -366,7 +366,7 @@ export const IssueResponseSchema = z.object({
 });
 ```
 
-- [ ] **Step 5: 实现安全错误和 GET-only client**
+- [x] **Step 5: 实现安全错误和 GET-only client**
 
 `error-mapping.ts` 暴露只包含 code 的错误：
 
@@ -400,13 +400,13 @@ export function createRedmineReadonlyClient(options: {
 - `AbortError` 映射 `timeout`，其余 fetch 异常映射 `service_unavailable`。
 - `getProject()` 复核 identifier；列表与详情复核数值 project ID。
 
-- [ ] **Step 6: 构建并运行专项测试**
+- [x] **Step 6: 构建并运行专项测试**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: PASS；所有请求均为固定 origin GET，错误输出不含诱饵敏感字段。
 
-- [ ] **Step 7: 运行类型检查并提交**
+- [x] **Step 7: 运行类型检查并提交**
 
 Run: `pnpm typecheck`
 
@@ -434,7 +434,7 @@ git commit -m "feat: add readonly Redmine API client"
 - Consumes: `createRedmineReadonlyClient`、`FileSecretsRepository.resolve({ source: 'file', key })`。
 - Produces: `runRedmineReadonlyProbe(input): Promise<RedmineProbeResult>`；CLI `redmine probe`；package script `redmine:probe`。
 
-- [ ] **Step 1: 写成功、无工单和缺密钥失败测试**
+- [x] **Step 1: 写成功、无工单和缺密钥失败测试**
 
 成功结果必须精确为：
 
@@ -462,7 +462,7 @@ redmine readonly probe: failed (missing_credentials)
 
 且 `fetchImpl` 调用次数为 0。
 
-- [ ] **Step 2: 写完整输出脱敏失败测试**
+- [x] **Step 2: 写完整输出脱敏失败测试**
 
 用包含以下诱饵的 fixture：
 
@@ -480,13 +480,13 @@ redmine readonly probe: failed (missing_credentials)
 
 断言 CLI 所有行连接后不包含任何诱饵值，只包含固定 identifier、numeric project ID、数量和状态。
 
-- [ ] **Step 3: 构建并运行测试，确认 probe 缺失而失败**
+- [x] **Step 3: 构建并运行测试，确认 probe 缺失而失败**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: FAIL，错误指向 `runRedmineReadonlyProbe` 或 `redmine probe` 尚未实现。
 
-- [ ] **Step 4: 实现无内容 probe result**
+- [x] **Step 4: 实现无内容 probe result**
 
 `probe.ts` 定义并实现：
 
@@ -514,7 +514,7 @@ export async function runRedmineReadonlyProbe(input: {
 
 编排只允许：`getProject()` → `listLatestIssue(project.id)` → 对数组第一项执行 `getIssueDetail(issue.id, project.id)`。捕获 `RedmineProbeError` 时只返回其 code；未知错误返回 `service_unavailable`。
 
-- [ ] **Step 5: 扩展 CLI probe 分支**
+- [x] **Step 5: 扩展 CLI probe 分支**
 
 扩展 `RunRedmineCommandInput`：
 
@@ -538,19 +538,19 @@ probe?: typeof runRedmineReadonlyProbe;
 
 usage 增加 `redmine <secret set|probe>`。
 
-- [ ] **Step 6: 构建并运行专项测试**
+- [x] **Step 6: 构建并运行专项测试**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: PASS；测试进程无网络访问。
 
-- [ ] **Step 7: 运行 CLI 缺密钥验收**
+- [x] **Step 7: 运行 CLI 缺密钥验收**
 
 使用隔离 home 通过直接调用 `runRedmineCommand({ argv: ['probe'], rootDir: tempDir })` 验证，不能操作真实 `~/.super-helper`。
 
 Expected: `missing_credentials`，无 fetch 调用。
 
-- [ ] **Step 8: 运行类型检查并提交**
+- [x] **Step 8: 运行类型检查并提交**
 
 Run: `pnpm typecheck`
 
@@ -577,7 +577,7 @@ git commit -m "feat: add Redmine readonly connectivity probe"
 - Consumes: Tasks 1–3 的目录与命令。
 - Produces: 可审计 ownership 文档、离线验收证据和真实穿刺操作说明。
 
-- [ ] **Step 1: 增加模块边界结构测试**
+- [x] **Step 1: 增加模块边界结构测试**
 
 测试读取三个文档和关键源码，至少断言：
 
@@ -589,13 +589,13 @@ assert.doesNotMatch(clientSource, /FileSecretsRepository|src\/cli|src\/runtime|s
 assert.doesNotMatch(commandSource, /X-Redmine-API-Key|\/issues\.json|\/projects\//);
 ```
 
-- [ ] **Step 2: 运行专项测试，确认文档声明缺失而失败**
+- [x] **Step 2: 运行专项测试，确认文档声明缺失而失败**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs`
 
 Expected: FAIL，三个 ownership 文档尚未包含新边界。
 
-- [ ] **Step 3: 更新 ownership 文档**
+- [x] **Step 3: 更新 ownership 文档**
 
 在 `development.md` 的 ownership map 增加：
 
@@ -613,13 +613,13 @@ src/mcp-servers/redmine/ | Redmine REST 协议、严格响应 schema、只读 pr
 
 在 `overview.md` 增加“Redmine 只读连通性穿刺”小节，明确它尚未进入 Runtime 答案来源链路。
 
-- [ ] **Step 4: 运行专项测试和 docs lint**
+- [x] **Step 4: 运行专项测试和 docs lint**
 
 Run: `pnpm build && node --test test/redmine-readonly-probe.test.mjs && pnpm lint`
 
 Expected: PASS。
 
-- [ ] **Step 5: 运行完整验证**
+- [x] **Step 5: 运行完整验证**
 
 Run: `pnpm typecheck`
 
@@ -633,7 +633,7 @@ Run: `pnpm test`
 
 Expected: PASS；不得访问真实 Redmine。
 
-- [ ] **Step 6: 运行泄漏扫描**
+- [x] **Step 6: 运行泄漏扫描**
 
 Run:
 
@@ -644,7 +644,7 @@ rg -n "redmine-fixture-secret|private note fixture|person@example\.test|secret\.
 
 Expected: 无输出。专项测试和本实施计划可以包含诱饵，但生产源码、产品文档和 package 配置不得包含。
 
-- [ ] **Step 7: 提交离线实现收尾**
+- [x] **Step 7: 提交离线实现收尾**
 
 ```bash
 git add docs/standards/development.md docs/standards/module-boundaries.md docs/architecture/overview.md test/redmine-readonly-probe.test.mjs
@@ -664,7 +664,7 @@ git commit -m "docs: define Redmine readonly adapter boundary"
 - Consumes: `redmine:secret:set` 与 `redmine:probe`。
 - Produces: 真实环境的安全状态结果；不产生仓库文件变更。
 
-- [ ] **Step 1: 请用户在自己的终端隐式录入密钥**
+- [x] **Step 1: 请用户在自己的终端隐式录入密钥**
 
 Run:
 
@@ -674,13 +674,13 @@ pnpm redmine:secret:set
 
 Expected: 终端连续两次隐藏输入后只显示 `redmine secret: configured`。用户不得把密钥粘贴到聊天。
 
-- [ ] **Step 2: 只检查 SecretRef 是否存在和文件权限，不输出文件内容**
+- [x] **Step 2: 只检查 SecretRef 是否存在和文件权限，不输出文件内容**
 
 通过 `FileSecretsRepository.has({ source: 'file', key: 'integrations.redmine.apiKey' })` 和文件 stat 执行只返回布尔值/权限位的检查。
 
 Expected: `configured=true`，mode 为 `0600`；不得执行 `cat ~/.super-helper/secrets.json`。
 
-- [ ] **Step 3: 执行真实只读穿刺**
+- [x] **Step 3: 执行真实只读穿刺**
 
 Run:
 
@@ -700,13 +700,13 @@ redmine readonly probe: passed
 
 若失败，只记录安全错误码并按 `authentication_failed`、`project_forbidden`、`project_not_found`、`rate_limited`、`timeout`、`invalid_response` 或 `service_unavailable` 定位；不得打印原始响应或密钥。
 
-- [ ] **Step 4: 检查工作区和 Git 历史无密钥变更**
+- [x] **Step 4: 检查工作区和 Git 历史无密钥变更**
 
 Run: `git status --short`
 
 Expected: 无由真实穿刺产生的仓库文件变更。
 
-- [ ] **Step 5: 更新本计划 checklist 并提交验证记录（不包含真实值）**
+- [x] **Step 5: 更新本计划 checklist 并提交验证记录（不包含真实值）**
 
 只把完成的 checkbox 改为 `[x]`；不得记录 numeric project ID、issue 数量之外的任何真实工单信息，也不得记录 API Key。
 
