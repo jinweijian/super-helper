@@ -76,6 +76,8 @@ export interface ExecuteMcpToolInput {
   stdioCommandWhitelist: string[];
   createClient: McpClientFactory;
   resolveSecret?: (ref: SecretRef) => string | undefined;
+  existingClient?: McpClientPort;
+  closeExistingClient?: boolean;
 }
 
 export type McpExecutionResult =

@@ -25,9 +25,9 @@
 
 ## 5. 主应用 HistoricalCaseEvidence 边界
 
-- [ ] 5.1 在 `test/historical-case-evidence-service.test.mjs` 先写失败测试：配置/allowlist、search→detail 同一 grant、状态映射、48K structured result、provenance 和历史结果不得直接生成 final answer。完成证据：测试因 service/capability 缺失而红。
-- [ ] 5.2 扩展 `src/mcp/normalizer.ts`，仅对显式 `historical_case/redmine` capability 使用 schema-aware 48K 路径；普通 MCP 保持 20K。完成证据：legacy MCP 专项与 historical structured 专项同时通过。
-- [ ] 5.3 新建 `src/mcp/historical-case-evidence-service.ts`，通过 `executeMcpTool` 调用两个工具并返回 `completed | no_hit | timeout | failed`、有界 payload、Evidence 和 current-run coverage envelopes。完成证据：timeout/failed/no_hit 不互换，readOnly/allowlisted/completed provenance 可验证。
+- [x] 5.1 在 `test/historical-case-evidence-service.test.mjs` 先写失败测试：配置/allowlist、search→detail 同一 grant、状态映射、48K structured result、provenance 和历史结果不得直接生成 final answer。完成证据：测试因 service/capability 缺失而红。
+- [x] 5.2 扩展 `src/mcp/normalizer.ts`，仅对显式 `historical_case/redmine` capability 使用 schema-aware 48K 路径；普通 MCP 保持 20K。完成证据：legacy MCP 专项与 historical structured 专项同时通过。
+- [x] 5.3 新建 `src/mcp/historical-case-evidence-service.ts`，通过 `executeMcpTool` 调用两个工具并返回 `completed | no_hit | timeout | failed`、有界 payload、Evidence 和 current-run coverage envelopes。完成证据：timeout/failed/no_hit 不互换，readOnly/allowlisted/completed provenance 可验证。
 
 ## 6. 四个 Product Agent 与模型服务
 

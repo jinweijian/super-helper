@@ -1,4 +1,10 @@
+import * as z from 'zod/v4';
+import type { HistoricalCaseMcpServerCapability } from './contracts.js';
+import { boundCaseDetails } from '../mcp-servers/redmine/redmine-api/bounding.js';
+import type { RedmineIssueCaseDetails } from '../mcp-servers/redmine/contracts.js';
+
 const MAX_MCP_RESULT_CHARS = 20_000;
+const MAX_HISTORICAL_CASE_RESULT_CHARS = 48_000;
 
 export interface McpContentLocator {
   kind: 'image' | 'audio' | 'blob';
@@ -14,7 +20,13 @@ export interface NormalizedMcpResult {
   truncated: boolean;
 }
 
-export function normalizeMcpResult(value: unknown): NormalizedMcpResult {
+export function normalizeMcpResult(
+  value: unknown,
+  capability?: HistoricalCaseMcpServerCapability,
+): NormalizedMcpResult {
+  if (capability?.type === 'historical_case' && capability.provider === 'redmine') {
+    return normalizeHistoricalCaseMcpResult(value);
+  }
   const result = objectValue(value);
   const content = Array.isArray(result.content) ? result.content : [];
   const textParts: string[] = [];
@@ -63,6 +75,120 @@ export function normalizeMcpResult(value: unknown): NormalizedMcpResult {
     structuredContent: boundedStructured,
     locators,
     truncated: text.length > boundedText.length || Boolean(structured && structured.length > (boundedStructured?.length ?? 0)),
+  };
+}
+
+const HistoricalCandidateSchema = z.object({
+  issueId: z.number().int().positive(),
+  subject: z.string().max(300),
+  descriptionExcerpt: z.string().max(1_000),
+  tracker: z.string().max(120).optional(),
+  status: z.string().max(120).optional(),
+  priority: z.string().max(120).optional(),
+  fixedVersion: z.string().max(120).optional(),
+  updatedAt: z.string().max(40).optional(),
+  sourceLocator: z.string().regex(/^redmine:issue:\d+$/u),
+}).strict();
+
+const HistoricalBlockSchema = z.object({
+  id: z.string().min(1).max(160),
+  kind: z.enum(['description', 'custom_field', 'journal', 'status_change', 'relation', 'attachment_metadata']),
+  label: z.string().max(120).optional(),
+  text: z.string().max(8_000).optional(),
+  occurredAt: z.string().max(40).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+const HistoricalDetailSchema = z.object({
+  issueId: z.number().int().positive(),
+  subject: z.string().max(300),
+  tracker: z.string().max(120).optional(),
+  status: z.string().max(120).optional(),
+  priority: z.string().max(120).optional(),
+  fixedVersion: z.string().max(120).optional(),
+  updatedAt: z.string().max(40).optional(),
+  sourceLocator: z.string().regex(/^redmine:issue:\d+$/u),
+  evidenceBlocks: z.array(HistoricalBlockSchema).max(200),
+}).strict();
+
+const HistoricalSearchResultSchema = z.union([
+  z.object({
+    status: z.literal('completed'),
+    searchId: z.string().min(1).max(128),
+    candidates: z.array(HistoricalCandidateSchema).max(10),
+  }).strict(),
+  z.object({ status: z.literal('no_hit'), candidates: z.tuple([]) }).strict(),
+  z.object({
+    status: z.enum(['timeout', 'failed']),
+    candidates: z.tuple([]),
+    safeErrorCode: z.string().min(1).max(80),
+  }).strict(),
+]);
+
+const HistoricalDetailResultSchema = z.union([
+  z.object({
+    status: z.literal('completed'),
+    details: z.array(HistoricalDetailSchema).max(3),
+    omittedBlocks: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    originalCharacters: z.number().int().nonnegative(),
+    outputCharacters: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    status: z.enum(['timeout', 'failed']),
+    details: z.tuple([]),
+    safeErrorCode: z.string().min(1).max(80),
+  }).strict(),
+]);
+
+function normalizeHistoricalCaseMcpResult(value: unknown): NormalizedMcpResult {
+  const result = objectValue(value);
+  const content = Array.isArray(result.content) ? result.content : [];
+  const text = redactMcpText(content.flatMap((itemValue) => {
+    const item = objectValue(itemValue);
+    return item.type === 'text' && typeof item.text === 'string' ? [item.text] : [];
+  }).join('\n')).slice(0, 1_000);
+  const structuredValue = result.structuredContent;
+  const search = HistoricalSearchResultSchema.safeParse(structuredValue);
+  if (search.success) {
+    return {
+      text,
+      structuredContent: JSON.stringify(search.data),
+      locators: [],
+      truncated: false,
+    };
+  }
+  const detail = HistoricalDetailResultSchema.safeParse(structuredValue);
+  if (!detail.success) {
+    return { text, locators: [], truncated: true };
+  }
+  if (detail.data.status !== 'completed') {
+    return {
+      text,
+      structuredContent: JSON.stringify(detail.data),
+      locators: [],
+      truncated: false,
+    };
+  }
+  let budget = MAX_HISTORICAL_CASE_RESULT_CHARS - 256;
+  let bounded = boundCaseDetails(
+    detail.data.details as RedmineIssueCaseDetails[],
+    budget,
+  );
+  let structured = JSON.stringify({ status: 'completed', ...bounded });
+  while (Array.from(structured).length > MAX_HISTORICAL_CASE_RESULT_CHARS && budget > 512) {
+    budget -= Math.max(256, Array.from(structured).length - MAX_HISTORICAL_CASE_RESULT_CHARS);
+    bounded = boundCaseDetails(detail.data.details as RedmineIssueCaseDetails[], budget);
+    structured = JSON.stringify({ status: 'completed', ...bounded });
+  }
+  if (Array.from(structured).length > MAX_HISTORICAL_CASE_RESULT_CHARS) {
+    return { text, locators: [], truncated: true };
+  }
+  return {
+    text,
+    structuredContent: structured,
+    locators: [],
+    truncated: bounded.truncated || detail.data.truncated,
   };
 }
 
