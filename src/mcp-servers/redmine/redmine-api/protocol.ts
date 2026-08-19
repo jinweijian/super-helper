@@ -6,6 +6,8 @@ const NonEmptyStringSchema = z.string().min(1);
 export const RedmineNamedReferenceSchema = z.object({
   id: PositiveIdSchema.optional(),
   name: NonEmptyStringSchema.optional(),
+  login: z.string().optional(),
+  mail: z.string().optional(),
 });
 
 const RedmineProjectReferenceSchema = RedmineNamedReferenceSchema.extend({
@@ -58,6 +60,9 @@ export const RedmineRawIssueSchema = z.object({
   status: RedmineNamedReferenceSchema.optional(),
   priority: RedmineNamedReferenceSchema.optional(),
   fixed_version: RedmineNamedReferenceSchema.nullable().optional(),
+  author: RedmineNamedReferenceSchema.optional(),
+  assigned_to: RedmineNamedReferenceSchema.optional(),
+  watchers: z.array(RedmineNamedReferenceSchema).optional().default([]),
   subject: z.string().optional().default(''),
   description: z.string().nullable().optional().default(''),
   created_on: z.string().optional(),

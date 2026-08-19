@@ -12,9 +12,9 @@
 
 ## 3. 永久隐私过滤与结构化预算
 
-- [ ] 3.1 新建 `test/redmine-normalizer.test.mjs` 和敏感 fixtures，先写失败测试覆盖 private journals、姓名/用户名/邮箱/IP/手机号/人员 ID、附件文件名/URL/token/body、未知 custom fields 和 raw error。完成证据：测试先证明未实现路径会泄漏诱饵。
-- [ ] 3.2 新建 `src/mcp-servers/redmine/redmine-api/normalizer.ts`，仅输出候选/详情白名单；私有备注永久删除，人员字段全部删除，附件只保留 MIME/size/count。完成证据：序列化结果不含任何诱饵或 `includePrivateNotes` 分支。
-- [ ] 3.3 新建 `src/mcp-servers/redmine/redmine-api/bounding.ts`，按完整 evidence block 将三条详情收缩到 48,000 Unicode 字符并返回 omitted/truncated metadata。完成证据：超限 fixture 仍是合法 schema，任何 block 不被半截切断。
+- [x] 3.1 新建 `test/redmine-normalizer.test.mjs` 和敏感 fixtures，先写失败测试覆盖 private journals、姓名/用户名/邮箱/IP/手机号/人员 ID、附件文件名/URL/token/body、未知 custom fields 和 raw error。完成证据：测试先证明未实现路径会泄漏诱饵。
+- [x] 3.2 新建 `src/mcp-servers/redmine/redmine-api/normalizer.ts`，仅输出候选/详情白名单；私有备注永久删除，人员字段全部删除，附件只保留 MIME/size/count。完成证据：序列化结果不含任何诱饵或 `includePrivateNotes` 分支。
+- [x] 3.3 新建 `src/mcp-servers/redmine/redmine-api/bounding.ts`，按完整 evidence block 将三条详情收缩到 48,000 Unicode 字符并返回 omitted/truncated metadata。完成证据：超限 fixture 仍是合法 schema，任何 block 不被半截切断。
 
 ## 4. 两个 Redmine MCP 工具与 stdio transport
 

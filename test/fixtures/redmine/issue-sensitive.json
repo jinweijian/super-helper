@@ -1,0 +1,51 @@
+{
+  "issue": {
+    "id": 118740,
+    "project": { "id": 77, "name": "00技术支持工单" },
+    "tracker": { "id": 3, "name": "工单" },
+    "status": { "id": 1, "name": "新建" },
+    "priority": { "id": 2, "name": "普通" },
+    "fixed_version": { "id": 9, "name": "24.8" },
+    "author": { "id": 638, "name": "张三", "login": "jwj", "mail": "zhangsan@example.test" },
+    "assigned_to": { "id": 421, "name": "李四", "login": "lisi" },
+    "subject": "张三反馈视频加载失败，手机号13800138000",
+    "description": "请联系 zhangsan@example.test，IP 10.24.3.9，用户ID:638，token=top-secret-token，详情 https://private.example.test/ticket/1",
+    "created_on": "2026-08-18T00:00:00Z",
+    "updated_on": "2026-08-19T00:00:00Z",
+    "custom_fields": [
+      { "id": 1, "name": "环境", "value": "production 10.24.3.9" },
+      { "id": 2, "name": "客户联系人", "value": "王五 13900139000" }
+    ],
+    "journals": [
+      {
+        "id": 5001,
+        "notes": "私密备注：cookie=session-secret，李四正在处理",
+        "private_notes": true,
+        "user": { "id": 421, "name": "李四", "login": "lisi" }
+      },
+      {
+        "id": 5002,
+        "notes": "公开排查：检查转码队列，联系张三，邮箱 zhangsan@example.test",
+        "private_notes": false,
+        "user": { "id": 638, "name": "张三", "login": "jwj" },
+        "details": [
+          { "property": "attr", "name": "status_id", "old_value": "1", "new_value": "2" }
+        ]
+      }
+    ],
+    "relations": [
+      { "id": 9001, "issue_id": 118740, "issue_to_id": 118736, "relation_type": "relates" }
+    ],
+    "attachments": [
+      {
+        "id": 7001,
+        "filename": "客户名单-secret.pdf",
+        "filesize": 2048,
+        "content_type": "application/pdf",
+        "content_url": "https://redmine.codeages.work/attachments/download/7001?token=file-secret",
+        "description": "包含客户正文",
+        "author": { "id": 638, "name": "张三" }
+      }
+    ]
+  }
+}

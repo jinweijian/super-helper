@@ -13,7 +13,7 @@
 | --- | --- | --- | --- |
 | Configuration contracts | build 成功；专项 `24 pass / 9 fail`，9 个失败均为缺少校验或 onboarding 未保留字段 | build 成功；专项 `33/33 pass`；`pnpm typecheck` exit 0 | `pending` |
 | Redmine API/search | build 成功；专项因 `search.js` 不存在退出 1 | API + probe 专项 `16/16 pass`，所有捕获请求为 GET | `pending` |
-| Privacy/bounding | `not_run` | `not_run` | `not_committed` |
+| Privacy/bounding | build 成功；专项因 `bounding.js`/`normalizer.js` 不存在退出 1 | Redmine API/probe/privacy 专项 `18/18 pass`；敏感诱饵与私有备注均不可见 | `pending` |
 | MCP server/stdio | `not_run` | `not_run` | `not_committed` |
 | Historical evidence service | `not_run` | `not_run` | `not_committed` |
 | Model services | `not_run` | `not_run` | `not_committed` |
