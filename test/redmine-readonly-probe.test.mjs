@@ -8,6 +8,7 @@ import {
   runRedmineCommand,
 } from '../dist/cli/command-redmine.js';
 import { createRedmineReadonlyClient } from '../dist/mcp-servers/redmine/redmine-api/client.js';
+import { runRedmineReadonlyProbe } from '../dist/mcp-servers/redmine/probe.js';
 
 test('redmine secret set stores a confirmed hidden value without printing it', async () => {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-redmine-secret-'));
@@ -244,4 +245,152 @@ test('readonly Redmine client maps aborts and redirects to safe errors', async (
     (error) => error?.code === 'service_unavailable',
   );
   assert.equal(redirect.calls[0].init.redirect, 'error');
+});
+
+function successfulProbeResponses({ issues = true } = {}) {
+  return [
+    jsonResponse({ project: { id: 77, identifier: 'itsupportknowledge' } }),
+    jsonResponse({
+      issues: issues ? [{
+        id: 118740,
+        project: { id: 77 },
+        subject: 'subject fixture',
+        description: 'description fixture',
+      }] : [],
+    }),
+    ...(issues ? [jsonResponse({
+      issue: {
+        id: 118740,
+        project: { id: 77 },
+        subject: 'subject fixture',
+        description: 'description fixture',
+        journals: [
+          { id: 1, notes: 'private note fixture', user: { name: 'Fixture Person' } },
+          { id: 2, notes: 'second note fixture' },
+        ],
+        relations: [{ id: 9, issue_id: 118740, issue_to_id: 118736 }],
+        attachments: [{
+          id: 4,
+          filename: 'secret.pdf',
+          content_url: 'https://redmine.codeages.work/attachments/download/4/secret.pdf',
+        }],
+      },
+    })] : []),
+  ];
+}
+
+test('readonly Redmine probe returns only project and bounded counts', async () => {
+  const fixture = sequenceFetch(successfulProbeResponses());
+
+  const result = await runRedmineReadonlyProbe({
+    apiKey: 'redmine-fixture-secret',
+    fetchImpl: fixture.fetch,
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    project: { identifier: 'itsupportknowledge', numericId: 77 },
+    issueList: { sampleCount: 1, includesAllStatuses: true },
+    issueDetail: {
+      status: 'ok',
+      journalCount: 2,
+      relationCount: 1,
+      attachmentCount: 1,
+    },
+  });
+  assert.equal(JSON.stringify(result).includes('118740'), false);
+});
+
+test('readonly Redmine probe succeeds without requesting details when the project has no issues', async () => {
+  const fixture = sequenceFetch(successfulProbeResponses({ issues: false }));
+
+  const result = await runRedmineReadonlyProbe({
+    apiKey: 'redmine-fixture-secret',
+    fetchImpl: fixture.fetch,
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    project: { identifier: 'itsupportknowledge', numericId: 77 },
+    issueList: { sampleCount: 0, includesAllStatuses: true },
+    issueDetail: {
+      status: 'skipped_no_issue',
+      journalCount: 0,
+      relationCount: 0,
+      attachmentCount: 0,
+    },
+  });
+  assert.equal(fixture.calls.length, 2);
+});
+
+test('redmine probe refuses missing credentials before fetch', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-redmine-probe-'));
+  const writes = [];
+  let fetchCalls = 0;
+  try {
+    const ok = await runRedmineCommand({
+      argv: ['probe'],
+      rootDir: root,
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        throw new Error('fetch must not be called');
+      },
+      write: (line) => writes.push(line),
+    });
+
+    assert.equal(ok, false);
+    assert.equal(fetchCalls, 0);
+    assert.deepEqual(writes, [
+      'redmine readonly probe: failed (missing_credentials)',
+      '请先执行: super-helper redmine secret set',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('redmine probe CLI output excludes ticket content, identities, locators, and credentials', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-redmine-probe-'));
+  const secretAnswers = ['redmine-fixture-secret', 'redmine-fixture-secret'];
+  const writes = [];
+  const fixture = sequenceFetch(successfulProbeResponses());
+  try {
+    assert.equal(await runRedmineCommand({
+      argv: ['secret', 'set'],
+      rootDir: root,
+      readSecret: async () => secretAnswers.shift() ?? '',
+      write: () => undefined,
+    }), true);
+
+    const ok = await runRedmineCommand({
+      argv: ['probe'],
+      rootDir: root,
+      fetchImpl: fixture.fetch,
+      write: (line) => writes.push(line),
+    });
+
+    assert.equal(ok, true);
+    assert.deepEqual(writes, [
+      'redmine authentication: ok',
+      'redmine project: ok (identifier=itsupportknowledge, numericId=77)',
+      'redmine issue list: ok (sampleCount=1, includesAllStatuses=true)',
+      'redmine issue detail: ok (journals=2, relations=1, attachments=1)',
+      'redmine readonly probe: passed',
+    ]);
+    const output = writes.join('\n');
+    for (const forbidden of [
+      'redmine-fixture-secret',
+      '118740',
+      'subject fixture',
+      'description fixture',
+      'private note fixture',
+      'Fixture Person',
+      'secret.pdf',
+      '/attachments/download/',
+    ]) {
+      assert.equal(output.includes(forbidden), false);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

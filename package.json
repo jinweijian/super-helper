@@ -43,6 +43,7 @@
     "acceptance:answer-fidelity:real": "pnpm build && node scripts/verify-answer-fidelity-real.mjs",
     "audit:answer-fidelity:mutations": "node scripts/verify-answer-fidelity-mutations.mjs",
     "redmine:secret:set": "pnpm build && node dist/cli.js redmine secret set",
+    "redmine:probe": "pnpm build && node dist/cli.js redmine probe",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p web/tsconfig.json",
     "typecheck:web": "vue-tsc --noEmit -p web/tsconfig.json",
     "lint": "node scripts/verify-docs.mjs",

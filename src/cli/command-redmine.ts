@@ -1,4 +1,5 @@
 import { DEFAULT_HOME } from '../config/defaults.js';
+import { runRedmineReadonlyProbe } from '../mcp-servers/redmine/probe.js';
 import { FileSecretsRepository } from '../onboarding/secrets.js';
 import { readHiddenLine } from './hidden-input.js';
 
@@ -8,16 +9,27 @@ export interface RunRedmineCommandInput {
   argv: string[];
   rootDir?: string;
   readSecret?: (prompt: string) => Promise<string>;
+  fetchImpl?: typeof fetch;
+  probe?: typeof runRedmineReadonlyProbe;
   write?: (line: string) => void;
 }
 
 export async function runRedmineCommand(input: RunRedmineCommandInput): Promise<boolean> {
   const write = input.write ?? ((line: string) => console.log(line));
-  if (input.argv[0] !== 'secret' || input.argv[1] !== 'set' || input.argv.length !== 2) {
-    write('用法: super-helper redmine secret set');
-    return false;
+  if (input.argv.length === 1 && input.argv[0] === 'probe') {
+    return runProbe(input, write);
   }
+  if (input.argv.length === 2 && input.argv[0] === 'secret' && input.argv[1] === 'set') {
+    return setSecret(input, write);
+  }
+  write('用法: super-helper redmine <secret set|probe>');
+  return false;
+}
 
+async function setSecret(
+  input: RunRedmineCommandInput,
+  write: (line: string) => void,
+): Promise<boolean> {
   const readSecret = input.readSecret ?? readHiddenLine;
   let first: string;
   let second: string;
@@ -44,5 +56,38 @@ export async function runRedmineCommand(input: RunRedmineCommandInput): Promise<
 
   new FileSecretsRepository(input.rootDir ?? DEFAULT_HOME).set(REDMINE_API_KEY_SECRET, first);
   write('redmine secret: configured');
+  return true;
+}
+
+async function runProbe(
+  input: RunRedmineCommandInput,
+  write: (line: string) => void,
+): Promise<boolean> {
+  const secrets = new FileSecretsRepository(input.rootDir ?? DEFAULT_HOME);
+  const apiKey = secrets.resolve({ source: 'file', key: REDMINE_API_KEY_SECRET });
+  if (!apiKey) {
+    write('redmine readonly probe: failed (missing_credentials)');
+    write('请先执行: super-helper redmine secret set');
+    return false;
+  }
+
+  const result = await (input.probe ?? runRedmineReadonlyProbe)({
+    apiKey,
+    fetchImpl: input.fetchImpl,
+  });
+  if (!result.ok) {
+    write(`redmine readonly probe: failed (${result.code})`);
+    return false;
+  }
+
+  write('redmine authentication: ok');
+  write(`redmine project: ok (identifier=${result.project.identifier}, numericId=${result.project.numericId})`);
+  write(`redmine issue list: ok (sampleCount=${result.issueList.sampleCount}, includesAllStatuses=true)`);
+  if (result.issueDetail.status === 'ok') {
+    write(`redmine issue detail: ok (journals=${result.issueDetail.journalCount}, relations=${result.issueDetail.relationCount}, attachments=${result.issueDetail.attachmentCount})`);
+  } else {
+    write('redmine issue detail: skipped (no_issue)');
+  }
+  write('redmine readonly probe: passed');
   return true;
 }
