@@ -1,4 +1,4 @@
-import type { SecretRef, UserPersona } from '../domain.js';
+import type { SecretRef, UserPersona, WorkspaceConfig } from '../domain.js';
 import type { EmbeddingProviderConfig } from '../providers/embedding/contract.js';
 import type { RerankProviderConfig } from '../providers/rerank/contract.js';
 import type { McpServerConfig } from '../mcp/contracts.js';
@@ -71,12 +71,7 @@ export interface SuperHelperConfig {
     sessionBusyMaxRetries: number;
     sessionBusyRetryDelayMs: number;
   };
-  workspaces: Array<{
-    id: string;
-    name: string;
-    rootPath: string;
-    mcpToolIds: string[];
-  }>;
+  workspaces: WorkspaceConfig[];
   mcpTools: McpServerConfig[];
   onboarding: {
     version: 1;

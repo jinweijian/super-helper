@@ -1,12 +1,18 @@
 import type { SecretRef, WorkspaceConfig } from '../domain.js';
 
-interface McpServerBase {
+export interface HistoricalCaseMcpServerCapability {
+  type: 'historical_case';
+  provider: 'redmine';
+}
+
+export interface McpServerBase {
   id: string;
   name: string;
   permission: 'read_only' | 'read_write';
   enabled: boolean;
   allowedToolNames?: string[];
   timeoutMs?: number;
+  capability?: HistoricalCaseMcpServerCapability;
 }
 
 export interface StdioMcpServerConfig extends McpServerBase {

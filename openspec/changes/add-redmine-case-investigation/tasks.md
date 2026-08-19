@@ -1,8 +1,8 @@
 ## 1. 配置与能力合同
 
-- [ ] 1.1 在 `test/historical-case-config.test.mjs` 先写失败测试：旧 workspace 无字段可读；配置 source 可 round-trip；未知/disabled/read_write/未 allowlist server、错误 capability、多 source 均拒绝。完成证据：构建后专项测试因合同缺失而失败，失败原因与预期一致。
-- [ ] 1.2 在 `src/contracts/base.ts`、`src/config/contracts.ts`、`src/mcp/contracts.ts` 增加 `HistoricalCaseSourceConfig` 与 `historical_case/redmine` capability；source 只含 `serverId`，不含项目或私有备注开关。完成证据：类型定义不包含 URL、project、credential、`includePrivateNotes`。
-- [ ] 1.3 在 `src/config/io.ts` 和 `src/onboarding/config-commit.ts` 实现配置校验与保留逻辑；`src/config/defaults.ts` 保持历史来源默认未配置。完成证据：`pnpm build && node --test test/historical-case-config.test.mjs test/onboarding.test.mjs` 通过。
+- [x] 1.1 在 `test/historical-case-config.test.mjs` 先写失败测试：旧 workspace 无字段可读；配置 source 可 round-trip；未知/disabled/read_write/未 allowlist server、错误 capability、多 source 均拒绝。完成证据：构建后专项测试因合同缺失而失败，失败原因与预期一致。
+- [x] 1.2 在 `src/contracts/base.ts`、`src/config/contracts.ts`、`src/mcp/contracts.ts` 增加 `HistoricalCaseSourceConfig` 与 `historical_case/redmine` capability；source 只含 `serverId`，不含项目或私有备注开关。完成证据：类型定义不包含 URL、project、credential、`includePrivateNotes`。
+- [x] 1.3 在 `src/config/io.ts` 和 `src/onboarding/config-commit.ts` 实现配置校验与保留逻辑；`src/config/defaults.ts` 保持历史来源默认未配置。完成证据：`pnpm build && node --test test/historical-case-config.test.mjs test/onboarding.test.mjs` 通过。
 
 ## 2. Redmine 搜索协议与固定范围 Client
 

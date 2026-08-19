@@ -62,7 +62,48 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
   if (parsed.claude?.maxBudgetUsd === 0.2) {
     delete merged.claude.maxBudgetUsd;
   }
+  validateHistoricalCaseSources(merged);
   return merged;
+}
+
+const REQUIRED_HISTORICAL_CASE_TOOLS = [
+  'redmine_search_issues',
+  'redmine_get_issue_case_details',
+] as const;
+
+function validateHistoricalCaseSources(config: SuperHelperConfig): void {
+  for (const workspace of config.workspaces) {
+    const sources = workspace.historicalCaseSources ?? [];
+    if (sources.length > 1) {
+      throw new Error(`workspace ${workspace.id} supports exactly one historical case source`);
+    }
+    for (const source of sources) {
+      const sourceRecord = source as unknown as Record<string, unknown>;
+      const unsupportedFields = Object.keys(sourceRecord).filter((key) => key !== 'serverId');
+      if (unsupportedFields.length > 0) {
+        throw new Error(`historical case source contains unsupported fields: ${unsupportedFields.sort().join(', ')}`);
+      }
+      if (typeof sourceRecord.serverId !== 'string' || sourceRecord.serverId.trim().length === 0) {
+        throw new Error('historical case source serverId must be a non-empty string');
+      }
+      const serverId = sourceRecord.serverId;
+      const server = config.mcpTools.find((item) => item.id === serverId);
+      if (!server) throw new Error(`historical case server not found: ${serverId}`);
+      if (!server.enabled) throw new Error(`historical case server must be enabled: ${serverId}`);
+      if (server.permission !== 'read_only') {
+        throw new Error(`historical case server must be read_only: ${serverId}`);
+      }
+      if (!workspace.mcpToolIds.includes(serverId)) {
+        throw new Error(`historical case server not enabled for workspace: ${serverId}`);
+      }
+      if (server.capability?.type !== 'historical_case' || server.capability.provider !== 'redmine') {
+        throw new Error(`historical case capability must be historical_case/redmine: ${serverId}`);
+      }
+      if (!REQUIRED_HISTORICAL_CASE_TOOLS.every((name) => server.allowedToolNames?.includes(name))) {
+        throw new Error(`historical case tools not allowlisted: ${serverId}`);
+      }
+    }
+  }
 }
 
 export function saveConfig(config: SuperHelperConfig, path = configPath(config.storage.rootDir)): void {

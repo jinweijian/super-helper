@@ -57,6 +57,11 @@ export interface WorkspaceConfig {
   rootPath: string;
   claudeInstructionsPath?: string;
   mcpToolIds: string[];
+  historicalCaseSources?: HistoricalCaseSourceConfig[];
+}
+
+export interface HistoricalCaseSourceConfig {
+  serverId: string;
 }
 
 export interface McpToolConfig {

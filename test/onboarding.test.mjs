@@ -13,6 +13,7 @@ import {
   OnboardingRunner,
   OnboardingService,
   buildOnboardingPlan,
+  commitOnboardingConfig,
   createOnboardingRun,
   materializeConfigSecrets,
   migrateLegacyConfigSecrets,
@@ -67,6 +68,34 @@ function createServiceFixture(options = {}) {
     }),
   };
 }
+
+test('onboarding retains the historical case source when updating a workspace', () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-historical-case-'));
+  const path = join(root, 'config.json');
+  try {
+    const config = defaultConfig();
+    config.storage.rootDir = root;
+    config.workspaces[0].mcpToolIds = ['company-redmine'];
+    config.workspaces[0].historicalCaseSources = [{ serverId: 'company-redmine' }];
+    const draft = onboardingDraftFixture({
+      workspace: { id: 'current', name: 'Updated workspace', rootPath: root },
+    });
+
+    const committed = commitOnboardingConfig({
+      draft,
+      currentConfig: config,
+      runId: 'run_historical_case',
+      path,
+      now: '2026-08-20T00:00:00.000Z',
+    });
+
+    assert.deepEqual(committed.workspaces[0].historicalCaseSources, [{ serverId: 'company-redmine' }]);
+    assert.deepEqual(committed.workspaces[0].mcpToolIds, ['company-redmine']);
+    assert.equal(committed.workspaces[0].rootPath, root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('secret repository stores file secrets outside config and materializes runtime config', () => {
   const root = mkdtempSync(join(tmpdir(), 'super-helper-onboarding-'));

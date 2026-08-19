@@ -24,11 +24,13 @@ export function commitOnboardingConfig(input: {
     sourceDir: input.draft.knowledge.sourceDir,
     buildVectorIndex: input.draft.knowledge.buildVectorIndex,
   };
+  const existingWorkspace = config.workspaces.find((workspace) => workspace.id === input.draft.workspace.id);
   config.workspaces = [{
     id: input.draft.workspace.id,
     name: input.draft.workspace.name,
     rootPath: input.draft.workspace.rootPath,
-    mcpToolIds: config.workspaces.find((workspace) => workspace.id === input.draft.workspace.id)?.mcpToolIds ?? [],
+    mcpToolIds: existingWorkspace?.mcpToolIds ?? [],
+    historicalCaseSources: existingWorkspace?.historicalCaseSources,
   }];
   config.models.providers[input.draft.agent.providerId] = structuredClone(input.draft.agent.provider);
   config.agent = {

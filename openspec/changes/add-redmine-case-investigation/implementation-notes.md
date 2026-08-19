@@ -11,7 +11,7 @@
 
 | Task | Red command/result | Green command/result | Commit |
 | --- | --- | --- | --- |
-| Configuration contracts | `not_run` | `not_run` | `not_committed` |
+| Configuration contracts | build 成功；专项 `24 pass / 9 fail`，9 个失败均为缺少校验或 onboarding 未保留字段 | build 成功；专项 `33/33 pass`；`pnpm typecheck` exit 0 | `pending` |
 | Redmine API/search | `not_run` | `not_run` | `not_committed` |
 | Privacy/bounding | `not_run` | `not_run` | `not_committed` |
 | MCP server/stdio | `not_run` | `not_run` | `not_committed` |
