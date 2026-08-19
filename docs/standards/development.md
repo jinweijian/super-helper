@@ -43,6 +43,8 @@ For OpenSpec changes, implementation must follow the change artifacts. Do not in
 | `src/agents/` | Product Agent configuration documents and `registry.json` stage pairings | Runtime orchestration, HTTP routing, worker execution, persistence |
 | `src/runtime/` | Agent turn orchestration, Preflight Gate, request building, review decisions, presentation, lifecycle event recording | HTTP APIs, route DTOs, raw file persistence details, Claude CLI implementation |
 | `src/providers/` | Embedding/rerank provider contracts, provider factories, remote provider adapters, provider smoke tests, safe provider error normalization | Knowledge workspace indexing decisions, retrieval strategy, runtime orchestration, HTTP DTO parsing, final replies |
+| `src/mcp/` | 通用 MCP Client、transport、工具 allowlist、执行策略和通用结果归一化 | 具体外部系统 REST 协议、Runtime 案例调查决策、最终回复 |
+| `src/mcp-servers/redmine/` | Redmine REST 协议、严格响应 schema、安全错误归一化、只读连通性 probe，以及后续 Redmine MCP tools/transports | Runtime 编排、AnswerGoal、Evidence Review、用户最终回复、SecretRef 文件读取 |
 | `src/knowledge/` | Enterprise knowledge workspace schema, templates, Markdown/frontmatter parsing, source metadata, local indexes/artifacts, local vector artifact build/read/compatibility checks | Runtime orchestration, user-facing final replies, Claude Code execution, HTTP route decisions, remote provider API calls, retrieval ranking/rerank decisions |
 | `src/retrieval/` | Multi-strategy recall, BM25/embedding recall strategies, candidate fusion, optional rerank, retrieval trace, evidence-pack conversion | User-facing final replies, Evidence Review decisions, HTTP DTO parsing, provider vendor protocol implementation, knowledge artifact writes |
 | `src/sessions/` | Case repository ports, file-backed repository export, diagnostic context building | Worker execution, model calls, user-facing final replies |
@@ -65,6 +67,7 @@ The project avoids private compatibility facades. Internal consumers must import
 - HTTP server startup from `src/gateway/http-server.ts`
 - Claude worker adapter from `src/workers/claude/claude-code-worker.ts`
 - Provider capabilities from `src/providers/embedding/` and `src/providers/rerank/`
+- Redmine REST adapter and readonly probe from `src/mcp-servers/redmine/`
 
 Do not recreate root aliases or command aliases to preserve old private paths. If a public API needs compatibility, document it in OpenSpec with explicit consumers and tests.
 

@@ -56,12 +56,30 @@ flowchart LR
 | --- | --- |
 | Workspace | 当前项目/服务目录，是代码和 MCP 检查边界 |
 | MCP | 每个 workspace allowlist；默认只读 |
+| Redmine 只读连通性 | `src/mcp-servers/redmine/` 只验证固定 Redmine 项目的 GET 认证、列表和详情能力；当前不进入 Runtime 答案来源 |
 | Claude Code Worker | 每次 run 接收结构化 `DiagnosticRequest`，返回 `DiagnosticResult + WorkerTrace` |
 | Knowledge Root | 默认在配置的 knowledge root 下按 workspace 隔离，不写入项目源码目录 |
 | Provider | Embedding 与 rerank 在 `src/providers/` 下是同级能力 |
 | Retrieval | 新召回策略进入 `src/retrieval/recall/<strategy>/`，通过 registry 接入 |
 | Deep Query Planner | 代码升级线索由 `src/runtime/deep-query-planner.ts` 按知识 module 候选、projectType 和过滤后的 anchor terms 生成；路径提示不得硬编码为单一 `src/**` 假设 |
 | Observability | Runtime 记录事件，`src/observability/` 只做展示转换 |
+
+## Redmine 只读连通性穿刺
+
+当前 Redmine 能力是正式 MCP 案例调查接入之前的底层技术穿刺：
+
+```text
+CLI materialize SecretRef
+  -> Redmine readonly probe
+  -> Redmine REST adapter
+  -> 固定项目 itsupportknowledge
+```
+
+- CLI 只负责隐藏录入密钥、解析本地 SecretRef 和输出安全状态。
+- `src/mcp-servers/redmine/redmine-api/` 只负责固定 origin 的 GET 请求、最小 schema 和安全错误映射。
+- probe 只返回项目数值 ID、是否取到一条样本以及 journal/relation/attachment 数量，不返回工单正文、人员或附件定位。
+- 该能力尚未进入 `Experience -> Knowledge -> MCP -> Worker` 的答案来源链路，不会被产品 Agent 自动调用，也不能生成用户最终回复。
+- 完整历史案例调查仍以 `docs/superpowers/specs/2026-07-31-redmine-mcp-case-investigation-design.md` 为准。
 
 ## 继续阅读
 

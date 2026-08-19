@@ -394,3 +394,21 @@ test('redmine probe CLI output excludes ticket content, identities, locators, an
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('Redmine readonly spike documents ownership and preserves adapter boundaries', () => {
+  const root = process.cwd();
+  const development = readFileSync(join(root, 'docs', 'standards', 'development.md'), 'utf8');
+  const boundaries = readFileSync(join(root, 'docs', 'standards', 'module-boundaries.md'), 'utf8');
+  const overview = readFileSync(join(root, 'docs', 'architecture', 'overview.md'), 'utf8');
+  const clientSource = readFileSync(
+    join(root, 'src', 'mcp-servers', 'redmine', 'redmine-api', 'client.ts'),
+    'utf8',
+  );
+  const commandSource = readFileSync(join(root, 'src', 'cli', 'command-redmine.ts'), 'utf8');
+
+  assert.match(development, /src\/mcp-servers\/redmine/);
+  assert.match(boundaries, /Redmine REST 协议/);
+  assert.match(overview, /Redmine 只读连通性/);
+  assert.doesNotMatch(clientSource, /FileSecretsRepository|src\/cli|src\/runtime|src\/gateway/);
+  assert.doesNotMatch(commandSource, /X-Redmine-API-Key|\/issues\.json|\/projects\//);
+});

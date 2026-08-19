@@ -40,6 +40,8 @@
 | `runtime` | 用户回合编排、Agent 决策、Preflight、Evidence Review、降级/升级路径、生命周期事件 | HTTP DTO、厂商协议、原始文件持久化细节、knowledge 索引实现、CLI 输出 |
 | `knowledge` | 本地知识文件、schema、Markdown/frontmatter、source metadata、本地 keyword index、本地 vector artifact build/read/compatibility、本地 evidence pack | 远程 provider API 调用、runtime 编排、最终回答、Claude Code 执行、HTTP route 决策、retrieval ranking/rerank 策略 |
 | `providers` | embedding/rerank provider contracts、factory、远程 provider adapters、smoke tests、安全错误归一化 | knowledge 目录结构、检索策略、runtime 决策、HTTP DTO、CLI 输出、最终回复 |
+| `mcp` | 通用 MCP Client、transport、tool allowlist、执行策略和通用结果归一化 | Redmine 等具体外部系统协议、Runtime 业务决策、最终回复 |
+| `mcp-servers/<system>` | 特定外部工具系统的协议 adapter、严格 schema、安全错误、MCP tools/transports 和显式 smoke/probe | Runtime 编排、AnswerGoal、Evidence Review、最终回复、SecretRef 文件读取 |
 | `retrieval` | 跨 `knowledge` + `providers` 的多策略召回、query embedding、候选融合、rerank、fallback、retrieval trace | 用户最终回复、Evidence Review、HTTP DTO、provider 厂商协议实现、knowledge artifact 写入 |
 | `sessions` | case repository port、case context、会话上下文构建、session storage scope | worker/model 调用、最终回复、HTTP DTO、provider 调用 |
 | `workers` | worker port、具体 worker adapter、CLI/tool 执行、worker 输出解析 | case 编排、用户回复、HTTP route、Evidence Review |
@@ -95,6 +97,17 @@ src/providers/
 - 在 provider adapter 内读取 file SecretRef。SecretRef 必须在 `config/secrets` 或 onboarding/config 边界 materialize 成运行时配置。
 - 在 provider adapter 内决定检索策略、证据排序、是否能直接回答用户。
 - 在 smoke test 返回值中包含原始向量、完整文本、Authorization header、cookie、API key 或 provider 原始错误 payload。
+
+### 外部工具系统 adapter
+
+`src/mcp/` 与 `src/mcp-servers/` 不得混为同一职责：
+
+- `src/mcp/` 是 super helper 调用任意 MCP Server 的通用 Client 边界。
+- `src/mcp-servers/redmine/` 是 Redmine REST 协议和未来 Redmine MCP Server 的专用边界。
+- Redmine API adapter 只接收已 materialize 的 credential，不得读取 `FileSecretsRepository`、环境变量或普通配置文件。
+- CLI 可以从 SecretRef materialize 当前命令需要的密钥，再把最小运行时值传给 adapter；CLI 不得拼接 `X-Redmine-API-Key`、Redmine URL 或响应 schema。
+- Redmine 只读连通性 probe 固定单一 HTTPS origin 和 project identifier，不得演变为接受任意 URL、任意项目或任意 issue ID 的通用 HTTP 客户端。
+- 外部工具 adapter 不得 import `runtime`、`gateway`、`agents` 或 `ui`，也不得生成用户最终回复。
 
 ## 文件拆分规则
 

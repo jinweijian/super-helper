@@ -638,10 +638,11 @@ Expected: PASS；不得访问真实 Redmine。
 Run:
 
 ```bash
-rg -n "redmine-fixture-secret|private note fixture|person@example\.test|secret\.pdf" src docs package.json
+rg -n "redmine-fixture-secret|private note fixture|person@example\.test|secret\.pdf" src docs package.json \
+  --glob '!docs/superpowers/plans/2026-08-20-redmine-readonly-connectivity-spike.md'
 ```
 
-Expected: 无输出。测试 fixture 可以包含诱饵，但生产源码、文档和 package 配置不得包含。
+Expected: 无输出。专项测试和本实施计划可以包含诱饵，但生产源码、产品文档和 package 配置不得包含。
 
 - [ ] **Step 7: 提交离线实现收尾**
 
