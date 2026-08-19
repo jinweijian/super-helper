@@ -53,6 +53,7 @@ export function runConfigCommand(input: {
       name: readOption(input.argv, '--name') ?? 'Current Project',
       rootPath,
       mcpToolIds: config.workspaces[0]?.mcpToolIds ?? [],
+      historicalCaseSources: config.workspaces[0]?.historicalCaseSources,
     };
     saveConfig(config);
     console.log(`workspace configured: ${rootPath}`);

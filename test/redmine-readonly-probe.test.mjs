@@ -7,6 +7,7 @@ import {
   REDMINE_API_KEY_SECRET,
   runRedmineCommand,
 } from '../dist/cli/command-redmine.js';
+import { loadConfig } from '../dist/config.js';
 import { createRedmineReadonlyClient } from '../dist/mcp-servers/redmine/redmine-api/client.js';
 import { runRedmineReadonlyProbe } from '../dist/mcp-servers/redmine/probe.js';
 
@@ -395,6 +396,39 @@ test('redmine probe CLI output excludes ticket content, identities, locators, an
   }
 });
 
+test('redmine source enable and disable safely manage the current workspace integration', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'super-helper-redmine-source-'));
+  const writes = [];
+  try {
+    assert.equal(await runRedmineCommand({
+      argv: ['source', 'enable'], rootDir: root, mcpEntryPath: '/fixture/redmine-main.js',
+      write: (line) => writes.push(line),
+    }), true);
+    let config = loadConfig(join(root, 'config.json'));
+    const server = config.mcpTools.find((item) => item.id === 'company-redmine');
+    assert.deepEqual(config.workspaces[0].historicalCaseSources, [{ serverId: 'company-redmine' }]);
+    assert.equal(config.workspaces[0].mcpToolIds.includes('company-redmine'), true);
+    assert.deepEqual(server.capability, { type: 'historical_case', provider: 'redmine' });
+    assert.deepEqual(server.allowedToolNames, ['redmine_search_issues', 'redmine_get_issue_case_details']);
+    assert.deepEqual(server.config.env.REDMINE_API_KEY, { source: 'file', key: REDMINE_API_KEY_SECRET });
+    assert.deepEqual(server.config.args, ['/fixture/redmine-main.js']);
+    assert.equal(config.claude.commandWhitelist.includes(process.execPath), true);
+    assert.equal(JSON.stringify(config).includes('redmine-fixture-secret'), false);
+
+    assert.equal(await runRedmineCommand({
+      argv: ['source', 'disable'], rootDir: root, mcpEntryPath: '/fixture/redmine-main.js',
+      write: (line) => writes.push(line),
+    }), true);
+    config = loadConfig(join(root, 'config.json'));
+    assert.equal(config.workspaces[0].historicalCaseSources, undefined);
+    assert.equal(config.workspaces[0].mcpToolIds.includes('company-redmine'), false);
+    assert.equal(config.mcpTools.some((item) => item.id === 'company-redmine'), false);
+    assert.deepEqual(writes, ['redmine historical source: enabled', 'redmine historical source: disabled']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Redmine readonly spike documents ownership and preserves adapter boundaries', () => {
   const root = process.cwd();
   const development = readFileSync(join(root, 'docs', 'standards', 'development.md'), 'utf8');
@@ -408,7 +442,7 @@ test('Redmine readonly spike documents ownership and preserves adapter boundarie
 
   assert.match(development, /src\/mcp-servers\/redmine/);
   assert.match(boundaries, /Redmine REST 协议/);
-  assert.match(overview, /Redmine 只读连通性/);
+  assert.match(overview, /Redmine 历史案例调查/);
   assert.doesNotMatch(clientSource, /FileSecretsRepository|src\/cli|src\/runtime|src\/gateway/);
   assert.doesNotMatch(commandSource, /X-Redmine-API-Key|\/issues\.json|\/projects\//);
 });

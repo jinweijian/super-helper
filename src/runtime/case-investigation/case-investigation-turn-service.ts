@@ -114,12 +114,12 @@ export class CaseInvestigationTurnService {
     const fallbackResult = knowledgeResult
       ?? experienceMatch?.result
       ?? (worker.status === 'completed' ? worker.response.result : undefined);
-    const result = buildCaseInvestigationResult({
+    const result = persistenceSafeResult(buildCaseInvestigationResult({
       answerGoal: request.answerGoal,
       gate,
       evidence,
       fallbackResult,
-    });
+    }));
     const persistedRequest = worker.status === 'completed'
       ? worker.persistedRequest
       : mergedRequest;
@@ -190,4 +190,17 @@ function uniqueEnvelopes(envelopes: CoverageEvidenceEnvelope[]): CoverageEvidenc
 function metadataOnlyTrace(trace: Parameters<typeof sanitizeWorkerTrace>[0]) {
   const safe = sanitizeWorkerTrace(trace);
   return { ...safe, stdout: '', stderr: '' };
+}
+
+function persistenceSafeResult(result: DiagnosticResult): DiagnosticResult {
+  return {
+    ...result,
+    evidence: result.evidence.map((item) => item.kind === 'mcp' && item.source.startsWith('mcp:redmine/')
+      ? {
+          ...item,
+          source: `mcp:redmine/${item.id}`,
+          summary: `本轮已通过只读 Redmine MCP 获取并验证历史工单证据（${item.id}）。`,
+        }
+      : item),
+  };
 }

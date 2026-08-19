@@ -63,13 +63,13 @@
 
 ## 11. 离线验收、隐私与兼容
 
-- [ ] 11.1 新建 `test/redmine-case-investigation-offline.test.mjs`，使用真实 MCP SDK stdio fixture + 正式 Runtime 覆盖 resolved/not-resolved/direction-helpful 三类结构门禁。完成证据：`pnpm acceptance:redmine:offline` 在无网络/无真实 key 时通过。
+- [x] 11.1 新建 `test/redmine-case-investigation-offline.test.mjs`，使用真实 MCP SDK stdio fixture + 正式 Runtime 覆盖 resolved/not-resolved/direction-helpful 三类结构门禁。完成证据：`pnpm acceptance:redmine:offline` 在无网络/无真实 key 时通过。
 - [ ] 11.2 增加模块边界、仅两个读工具、无 Redmine write endpoint、默认测试不联网、Case/DTO 泄漏和旧配置/旧 Case 兼容扫描。完成证据：专项测试与 `pnpm test` 同时通过。
-- [ ] 11.3 新建 `docs/operations/redmine-case-investigation.md`，写明配置、SecretRef、stdio 启动、预算、灰度、回滚、真实 E2E manifest 和故障定位；示例不得包含真实工单正文或凭证。
+- [x] 11.3 新建 `docs/operations/redmine-case-investigation.md`，写明配置、SecretRef、stdio 启动、预算、灰度、回滚、真实 E2E manifest 和故障定位；示例不得包含真实工单正文或凭证。
 
 ## 12. 真实项目三类 E2E
 
-- [ ] 12.1 新建 `scripts/verify-redmine-case-investigation-real.mjs`：显式读取用户目录 manifest 和现有 SecretRef，校验真实 workspace/git、真实模型、真实 Worker、正式 MCP stdio/Runtime；缺任一前置条件非零退出，不允许 fake fallback。
+- [x] 12.1 新建 `scripts/verify-redmine-case-investigation-real.mjs`：显式读取用户目录 manifest 和现有 SecretRef，校验真实 workspace/git、真实模型、真实 Worker、正式 MCP stdio/Runtime；缺任一前置条件非零退出，不允许 fake fallback。
 - [ ] 12.2 在不打印正文的情况下用真实 Redmine 搜索与真实 EduSoho workspace 建立三个稳定场景：`resolved_by_ticket`、`not_resolved_by_ticket`、`direction_helpful`。manifest 存在用户目录且不提交；完成证据只记录 scenario ID 与安全结构预期。
 - [ ] 12.3 运行 `pnpm acceptance:redmine:real -- --manifest <absolute-path> --workspace /Users/king/website/edusoho`。完成证据：三类均 PASS；resolved 同时有 current+redmine evidence；not-resolved 无历史冒充结论；direction-helpful 有初步方向且无确认根因。
 - [ ] 12.4 审计真实运行的 Redmine HTTP methods、工具名、Case JSON、logs 和报告。完成证据：全部 Redmine 请求为 GET；只调用两个读工具；无私有备注、身份、raw payload、URL、key 或 write action；安全结果写入 `implementation-notes.md`。

@@ -84,7 +84,7 @@ export async function main(): Promise<void> {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|extract|normalize|slice|audit|repair|review|publish|migration-report|redmine import-fixture|vector build>|redmine <secret set|probe>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|extract|normalize|slice|audit|repair|review|publish|migration-report|redmine import-fixture|vector build>|redmine <secret set|probe|source enable|source disable>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 
 export function runCli(): void {

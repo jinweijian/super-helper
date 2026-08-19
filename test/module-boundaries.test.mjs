@@ -304,6 +304,36 @@ test('runtime module does not instantiate embedding or rerank providers', () => 
   );
 });
 
+test('Redmine adapter and case investigation preserve external-system boundaries and read-only surface', () => {
+  const redmineFiles = tsFilesUnder(join(srcRoot, 'mcp-servers', 'redmine'));
+  const investigationFiles = tsFilesUnder(join(srcRoot, 'runtime', 'case-investigation'));
+  assertNoImportPattern(
+    redmineFiles,
+    [
+      /from\s+['"][^'"]*(?:runtime|gateway|agents|ui)(?:\/|['"])/,
+      /FileSecretsRepository|secrets\.json/,
+    ],
+    'Redmine MCP server must remain an adapter and must not import runtime, gateway, Agent, UI, or secret storage',
+  );
+  assertNoImportPattern(
+    investigationFiles,
+    [
+      /mcp-servers\/redmine\/redmine-api/,
+      /from\s+['"]node:(?:fs|http|https)['"]/,
+      /FileSecretsRepository|X-Redmine-API-Key|REDMINE_API_KEY/,
+    ],
+    'case investigation runtime must consume the MCP boundary instead of Redmine REST, files, HTTP, or credentials',
+  );
+
+  const client = read(join(srcRoot, 'mcp-servers', 'redmine', 'redmine-api', 'client.ts'));
+  assert.match(client, /method:\s*['"]GET['"]/);
+  assert.doesNotMatch(client, /method:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/i);
+  const server = read(join(srcRoot, 'mcp-servers', 'redmine', 'server.ts'));
+  const registrations = [...server.matchAll(/server\.registerTool\(([^,]+)/g)].map((match) => match[1].trim()).sort();
+  assert.deepEqual(registrations, ['REDMINE_DETAIL_TOOL_NAME', 'REDMINE_SEARCH_TOOL_NAME']);
+  assert.doesNotMatch(server, /update_issue|delete_issue|close_issue|add_note|upload_attachment/i);
+});
+
 test('runtime depends on the case repository port instead of FileMemoryStore', () => {
   assertNoImportPattern(
     tsFilesUnder(join(srcRoot, 'runtime')),
@@ -342,7 +372,11 @@ test('production modules consume StoredCase from the repository contract', () =>
 test('diagnostic runtime is a thin composition root with focused collaborators', () => {
   const runtimePath = join(srcRoot, 'runtime', 'diagnostic-runtime.ts');
   const source = read(runtimePath);
+  const compositionPath = join(srcRoot, 'runtime', 'runtime-composition.ts');
+  const composition = read(compositionPath);
   assert.ok(source.split(/\r?\n/).length <= 300, 'diagnostic-runtime.ts must stay at or below 300 lines');
+  assert.ok(composition.split(/\r?\n/).length <= 180, 'runtime-composition.ts must stay at or below 180 lines');
+  assert.match(source, /\bcreateRuntimeServices\b/, 'DiagnosticRuntime must delegate construction to the focused composition owner');
 
   const runtimeFiles = new Set(readdirSync(join(srcRoot, 'runtime')));
   const collaborators = [
@@ -357,7 +391,7 @@ test('diagnostic runtime is a thin composition root with focused collaborators',
   ];
   for (const [file, symbol] of collaborators) {
     assert.equal(runtimeFiles.has(file), true, `${file} must exist under src/runtime`);
-    assert.match(source, new RegExp(`\\b${symbol}\\b`), `DiagnosticRuntime must compose ${symbol}`);
+    assert.match(`${source}\n${composition}`, new RegExp(`\\b${symbol}\\b`), `runtime composition must compose ${symbol}`);
   }
 
   assertNoImportPattern(

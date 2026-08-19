@@ -19,15 +19,23 @@ const rawIssue = {
   watchers: [],
 };
 
+let activeIssue = rawIssue;
+
 const server = createRedmineMcpServer({
   search: {
     backend: 'issues_scan',
-    async search() { return [rawIssue]; },
+    async search(input) {
+      if (input.query === 'NOHIT') return [];
+      activeIssue = input.query === 'DIRECTION'
+        ? { ...rawIssue, description: 'direction-marker：可检查转码链路，但历史记录没有当前环境结论' }
+        : { ...rawIssue, description: 'resolved-marker：历史记录确认转码队列配置异常' };
+      return [activeIssue];
+    },
   },
   client: {
     async getRawIssue(issueId) {
-      if (issueId !== rawIssue.id) throw new Error('unexpected fixture issue');
-      return rawIssue;
+      if (issueId !== activeIssue.id) throw new Error('unexpected fixture issue');
+      return activeIssue;
     },
   },
   projectId: 77,

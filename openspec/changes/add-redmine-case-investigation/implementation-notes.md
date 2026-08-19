@@ -19,6 +19,7 @@
 | Model services | build 成功；专项因四个 model service 模块不存在退出 1 | model service `5/5 pass`；agent/knowledge/MCP 回归 `51/51 pass` | `2ef59b0` |
 | Collectors/runtime/gate | collectors 专项 `0/2`，缺少 `collect`/`collectEvidence` 方法；runtime/gate 专项因模块缺失退出 1 | collector/runtime/gate `15/15 pass`；生产 `DiagnosticRuntime` 证明配置来源后恰好一次搜索、一次 fallback Worker、一个 Run 和一个 helper reply | `73a7d3c` + 当前提交 |
 | Observability/UI | observability 专项先因 recorder 方法缺失 `0/1` | runtime/observability/owner 专项 `20/20 pass`；Web `13 files / 54 tests pass`；四阶段 Dashboard 映射和文档更新完成 | 当前提交 |
+| Offline/real acceptance harness | offline 第二场景先被固定 fixture 错误提升为 `concluded`；持久化审计随后证明 Redmine 正文进入 Case 并失败 | offline 三场景 `1/1 pass`；Redmine evidence 持久化改为通用占位；real manifest/evaluator/fail-closed runner 与边界专项合计 `43/43 pass` | 当前提交 |
 
 ## Offline Verification
 
@@ -31,7 +32,7 @@
 | focused Redmine/case tests | `not_run` | `not_run` |
 | `pnpm test` | `not_run` | `not_run` |
 | `pnpm test:web` | `not_run` | `not_run` |
-| `pnpm acceptance:redmine:offline` | `not_run` | `not_run` |
+| `pnpm acceptance:redmine:offline` | 0 | 正式 Runtime + 真实 MCP SDK stdio，三类结构结果通过且无网络/真实 key |
 
 ## Real E2E Verification
 
@@ -55,5 +56,5 @@
 
 ## Deviations and Remaining Risks
 
-- Current deviation: implementation has not started.
-- Remaining risk: all code, offline acceptance, real E2E, privacy audit, compatibility audit, and final master verification are pending.
+- Current deviation: 无；生产接线、离线验收和真实验收 harness 已按设计实现。
+- Remaining risk: 真实三场景尚未运行；全量 Node/Web 测试、最终隐私审计和外部 workspace 保全复核仍待完成。

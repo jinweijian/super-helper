@@ -1,37 +1,16 @@
 import type { SuperHelperConfig } from '../config.js';
-import { getModelProvider } from '../config.js';
 import type { DiagnosticRun, UserPersona } from '../domain.js';
-import { createModelClient } from '../providers/model/adapter.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
-import { resolveAgentConfig } from './agent-configs.js';
-import { CaseCurationService } from './case-curation-service.js';
 import type { RuntimeTurnResponse, AcceptedUserTurn } from './contracts.js';
-import { CaseRuntimeEventRecorder } from './event-recorder.js';
-import { ExperienceTurnService } from './experience-turn.js';
-import { KnowledgeExperienceEvidenceResolver } from './knowledge-experience-resolver.js';
-import { KnowledgeTurnService } from './knowledge-turn.js';
-import { PreflightService } from './preflight-service.js';
 import { formatPreflightQuestion } from './preflight-presentation.js';
-import { RagAnswerabilityService } from './rag-answerability-service.js';
-import { ReviewPresentationService } from './review-presentation.js';
-import { SessionLifecycle } from './session-lifecycle.js';
 import { CaseTurnQueue } from './turn-queue.js';
 import { bindTurnContextCutoff, clearTurnContextCutoff } from '../sessions/turn-context-snapshot.js';
-import { WorkerDiagnosisService } from './worker-diagnosis.js';
-import { McpEvidenceService, type McpEvidenceServiceOptions } from '../mcp/evidence-service.js';
+import type { McpEvidenceServiceOptions } from '../mcp/evidence-service.js';
 import { findRetryableInterruption, markInheritedActiveTurnsRetryable, removeInterruptionPlaceholder } from '../sessions/stale-turn.js';
 import { completePresentedTurn } from './turn-completion.js';
-import { HistoricalCaseEvidenceService } from '../mcp/historical-case-evidence-service.js';
-import { CandidateRerankerService } from './case-investigation/candidate-reranker-service.js';
-import { CaseInvestigationTurnService } from './case-investigation/case-investigation-turn-service.js';
-import { HistoricalCaseAnalyzerService } from './case-investigation/historical-case-analyzer-service.js';
-import { HistoricalCaseVerifierService } from './case-investigation/historical-case-verifier-service.js';
-import { ParallelSourceCollector } from './case-investigation/parallel-source-collector.js';
-import { QueryPlannerService } from './case-investigation/query-planner-service.js';
-import { RedmineBranch } from './case-investigation/redmine-branch.js';
-import { WorkerVerification } from './case-investigation/worker-verification.js';
+import { createRuntimeServices } from './runtime-composition.js';
 
 export interface AgentResponse extends RuntimeTurnResponse {}
 export interface DiagnosticRuntimeOptions {
@@ -40,17 +19,8 @@ export interface DiagnosticRuntimeOptions {
 }
 
 export class DiagnosticRuntime {
-  private readonly events: CaseRuntimeEventRecorder;
+  private readonly services: ReturnType<typeof createRuntimeServices>;
   private readonly turnQueue = new CaseTurnQueue();
-  private readonly sessions: SessionLifecycle;
-  private readonly preflight: PreflightService;
-  private readonly experienceTurn: ExperienceTurnService;
-  private readonly knowledgeTurn: KnowledgeTurnService;
-  private readonly workerDiagnosis: WorkerDiagnosisService;
-  private readonly reviewer: ReviewPresentationService;
-  private readonly caseCuration: CaseCurationService;
-  private readonly mcpEvidence: McpEvidenceService;
-  private readonly caseInvestigation: CaseInvestigationTurnService;
 
   constructor(
     private readonly config: SuperHelperConfig,
@@ -58,79 +28,7 @@ export class DiagnosticRuntime {
     worker: DiagnosticWorker,
     options: DiagnosticRuntimeOptions = {},
   ) {
-    const model = options.model ?? createModelClient(getModelProvider(config));
-    const mainAgentSpec = resolveAgentConfig('main').content;
-    const inputReviewAgentSpec = resolveAgentConfig('preflight').content;
-    const experienceAgentSpec = resolveAgentConfig('experience').content;
-    const outputReviewAgentSpec = resolveAgentConfig('output_review').content;
-    const presentationAgentSpec = resolveAgentConfig('presentation').content;
-    const ragAnswerabilityAgentSpec = resolveAgentConfig('rag_answerability').content;
-    const evidenceCoverageAgentSpec = resolveAgentConfig('evidence_coverage').content;
-    const visiblePromptSafetyAgentSpec = resolveAgentConfig('visible_prompt_safety').content;
-    const answerGoalCompletenessAgentSpec = resolveAgentConfig('answer_goal_completeness').content;
-    const historicalQueryPlannerSpec = resolveAgentConfig('historical_search_query_planner').content;
-    const historicalRerankerSpec = resolveAgentConfig('historical_case_reranker').content;
-    const historicalAnalyzerSpec = resolveAgentConfig('historical_case_analyzer').content;
-    const historicalVerifierSpec = resolveAgentConfig('historical_case_verifier').content;
-
-    this.events = new CaseRuntimeEventRecorder(store);
-    this.reviewer = new ReviewPresentationService(
-      config,
-      model,
-      this.events,
-      mainAgentSpec,
-      outputReviewAgentSpec,
-      presentationAgentSpec,
-      evidenceCoverageAgentSpec,
-      visiblePromptSafetyAgentSpec,
-    );
-    this.sessions = new SessionLifecycle(config, store, this.events);
-    this.preflight = new PreflightService(
-      config,
-      store,
-      model,
-      this.events,
-      mainAgentSpec,
-      inputReviewAgentSpec,
-      experienceAgentSpec,
-      answerGoalCompletenessAgentSpec,
-    );
-    this.experienceTurn = new ExperienceTurnService(
-      store,
-      this.events,
-      this.reviewer,
-      new KnowledgeExperienceEvidenceResolver(config),
-    );
-    const ragAnswerabilityService = new RagAnswerabilityService(
-      model,
-      ragAnswerabilityAgentSpec,
-      config.agent.ragAnswerabilityTopN ?? config.agent.evidenceCoverageTopN ?? 3,
-    );
-    this.knowledgeTurn = new KnowledgeTurnService(config, store, this.events, this.reviewer, ragAnswerabilityService);
-    this.workerDiagnosis = new WorkerDiagnosisService(store, worker, this.events, this.reviewer);
-    this.caseCuration = new CaseCurationService(config, store, this.events);
-    this.mcpEvidence = new McpEvidenceService(config, options.mcp);
-    const historicalEvidence = new HistoricalCaseEvidenceService(config, options.mcp);
-    const historicalVerifier = new HistoricalCaseVerifierService(model, historicalVerifierSpec);
-    const redmineBranch = new RedmineBranch({
-      planner: new QueryPlannerService(model, historicalQueryPlannerSpec),
-      evidence: historicalEvidence,
-      reranker: new CandidateRerankerService(model, historicalRerankerSpec),
-      analyzer: new HistoricalCaseAnalyzerService(model, historicalAnalyzerSpec),
-    });
-    this.caseInvestigation = new CaseInvestigationTurnService({
-      store,
-      events: this.events,
-      reviewer: this.reviewer,
-      collector: new ParallelSourceCollector({
-        knowledge: this.knowledgeTurn,
-        experience: this.experienceTurn,
-        redmine: redmineBranch,
-        events: this.events,
-      }),
-      workerVerification: new WorkerVerification(this.workerDiagnosis),
-      verifier: historicalVerifier,
-    });
+    this.services = createRuntimeServices({ config, store, worker, options });
   }
 
   async handleUserMessage(input: {
@@ -144,7 +42,7 @@ export class DiagnosticRuntime {
   }
 
   loadCase(caseId: string): StoredCase | undefined {
-    return this.sessions.loadCase(caseId);
+    return this.services.sessions.loadCase(caseId);
   }
 
   startUserTurn(input: {
@@ -153,7 +51,7 @@ export class DiagnosticRuntime {
     workspaceId?: string;
     persona?: UserPersona;
   }): AcceptedUserTurn {
-    return this.sessions.startUserTurn(input);
+    return this.services.sessions.startUserTurn(input);
   }
 
   async completeUserTurn(caseId: string, userMessageId: string): Promise<AgentResponse> {
@@ -161,7 +59,7 @@ export class DiagnosticRuntime {
   }
 
   recordTurnFailure(caseId: string, error: unknown, replyToMessageId?: string): void {
-    this.sessions.recordTurnFailure(caseId, error, replyToMessageId);
+    this.services.sessions.recordTurnFailure(caseId, error, replyToMessageId);
   }
 
   recoverInterruptedTurns(): void {
@@ -215,8 +113,8 @@ export class DiagnosticRuntime {
   }
 
   private async completeUserTurnNow(caseId: string, userMessageId: string): Promise<AgentResponse> {
-    const caseSession = this.sessions.requireActiveCase(caseId);
-    const userMessage = this.sessions.userMessageBody(caseSession, userMessageId);
+    const caseSession = this.services.sessions.requireActiveCase(caseId);
+    const userMessage = this.services.sessions.userMessageBody(caseSession, userMessageId);
     const replyToMessageId = userMessageId;
 
     bindTurnContextCutoff(caseSession, userMessageId);
@@ -232,17 +130,17 @@ export class DiagnosticRuntime {
     userMessage: string,
     replyToMessageId: string,
   ): Promise<AgentResponse> {
-    const curationResponse = this.caseCuration.answer(caseSession, userMessage, replyToMessageId);
+    const curationResponse = this.services.caseCuration.answer(caseSession, userMessage, replyToMessageId);
     if (curationResponse) {
       return curationResponse;
     }
 
-    const decision = await this.preflight.decide(caseSession, userMessage);
+    const decision = await this.services.preflight.decide(caseSession, userMessage);
     if (decision.action === 'ask_user') {
-      this.events.preflightAskUser(caseSession, decision);
+      this.services.events.preflightAskUser(caseSession, decision);
       const reply = formatPreflightQuestion(decision.question, decision.missingInfo);
       this.store.addMessage(caseSession, { role: 'helper', body: reply, replyToMessageId });
-      this.events.preflightReplyCreated(caseSession, reply);
+      this.services.events.preflightReplyCreated(caseSession, reply);
       this.store.appendDailyMemory(`- ${new Date().toISOString()} ${caseSession.id} preflight ask: ${decision.missingInfo.join(', ')}`);
       caseSession.status = 'need_input';
       this.store.saveCase(caseSession);
@@ -250,15 +148,15 @@ export class DiagnosticRuntime {
     }
 
     if (this.hasHistoricalCaseSource(decision.request.workspaceId)) {
-      return this.caseInvestigation.answer(caseSession, decision.request, replyToMessageId);
+      return this.services.caseInvestigation.answer(caseSession, decision.request, replyToMessageId);
     }
 
-    const experienceResponse = await this.experienceTurn.answer(caseSession, decision.request, replyToMessageId);
+    const experienceResponse = await this.services.experienceTurn.answer(caseSession, decision.request, replyToMessageId);
     if (experienceResponse) {
       return experienceResponse;
     }
 
-    const knowledgeResponse = await this.knowledgeTurn.answer(
+    const knowledgeResponse = await this.services.knowledgeTurn.answer(
       caseSession,
       decision.request.userGoal,
       replyToMessageId,
@@ -268,7 +166,7 @@ export class DiagnosticRuntime {
       return knowledgeResponse;
     }
 
-    const mcpResult = await this.mcpEvidence.run(decision.request);
+    const mcpResult = await this.services.mcpEvidence.run(decision.request);
     if (decision.request.context?.mcp) {
       this.store.addLogEvent(caseSession, {
         actor: 'mcp',
@@ -296,8 +194,8 @@ export class DiagnosticRuntime {
       };
       caseSession.status = 'diagnosing';
       this.store.addRun(caseSession, run);
-      const review = await this.reviewer.reviewAndFormat(caseSession, mcpResult, run, {
-        coverageEvidenceEnvelopes: this.mcpEvidence.currentCoverageEvidence(decision.request)
+      const review = await this.services.reviewer.reviewAndFormat(caseSession, mcpResult, run, {
+        coverageEvidenceEnvelopes: this.services.mcpEvidence.currentCoverageEvidence(decision.request)
           .map((item) => ({
             ...item,
             kind: 'mcp' as const,
@@ -306,17 +204,17 @@ export class DiagnosticRuntime {
       });
       return completePresentedTurn({
         store: this.store,
-        events: this.events,
+        events: this.services.events,
         caseSession,
         review,
         replyToMessageId,
       });
     }
 
-    const review = await this.workerDiagnosis.diagnose(caseSession, decision.request);
+    const review = await this.services.workerDiagnosis.diagnose(caseSession, decision.request);
     return completePresentedTurn({
       store: this.store,
-      events: this.events,
+      events: this.services.events,
       caseSession,
       review,
       replyToMessageId,
