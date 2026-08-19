@@ -18,10 +18,10 @@
 
 ## 4. 两个 Redmine MCP 工具与 stdio transport
 
-- [ ] 4.1 在 `test/redmine-mcp-server.test.mjs` 先写失败测试：只发现两个工具、输入 schema 禁止 transport/project/credential、search 最多 10、detail 只接受 live grant 中最多 3 个唯一 ID。完成证据：测试先因 server/grant 缺失而红。
-- [ ] 4.2 新建 `src/mcp-servers/redmine/candidate-grants.ts`、`tools/search-issues.ts`、`tools/get-issue-case-details.ts` 和 `server.ts`，实现 TTL grant、固定项目复核和安全错误。完成证据：未知/过期/重复/越限 ID 在 Redmine detail fetch 前被拒绝。
-- [ ] 4.3 新建 `src/mcp-servers/redmine/config.ts`、`transports/stdio.ts` 和薄 `main.ts`；进程只接收 materialized `REDMINE_API_KEY` 与有界 backend/预算配置，不读取 secrets 文件。完成证据：`test/redmine-mcp-stdio.test.mjs` 通过真实 MCP SDK stdio transport 完成 listTools/search/detail fixture 流程。
-- [ ] 4.4 更新 `package.json` bin/scripts 和 build contract，增加 `super-helper-redmine-mcp`、`acceptance:redmine:offline`、`acceptance:redmine:real`。完成证据：`pnpm build` 后 `dist/mcp-servers/redmine/main.js` 存在且普通 `super-helper` bin 不变。
+- [x] 4.1 在 `test/redmine-mcp-server.test.mjs` 先写失败测试：只发现两个工具、输入 schema 禁止 transport/project/credential、search 最多 10、detail 只接受 live grant 中最多 3 个唯一 ID。完成证据：测试先因 server/grant 缺失而红。
+- [x] 4.2 新建 `src/mcp-servers/redmine/candidate-grants.ts`、`tools/search-issues.ts`、`tools/get-issue-case-details.ts` 和 `server.ts`，实现 TTL grant、固定项目复核和安全错误。完成证据：未知/过期/重复/越限 ID 在 Redmine detail fetch 前被拒绝。
+- [x] 4.3 新建 `src/mcp-servers/redmine/config.ts`、`transports/stdio.ts` 和薄 `main.ts`；进程只接收 materialized `REDMINE_API_KEY` 与有界 backend/预算配置，不读取 secrets 文件。完成证据：`test/redmine-mcp-stdio.test.mjs` 通过真实 MCP SDK stdio transport 完成 listTools/search/detail fixture 流程。
+- [x] 4.4 更新 `package.json` bin/scripts 和 build contract，增加 `super-helper-redmine-mcp`、`acceptance:redmine:offline`、`acceptance:redmine:real`。完成证据：`pnpm build` 后 `dist/mcp-servers/redmine/main.js` 存在且普通 `super-helper` bin 不变。
 
 ## 5. 主应用 HistoricalCaseEvidence 边界
 

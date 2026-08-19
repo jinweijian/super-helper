@@ -5,7 +5,8 @@
   "type": "module",
   "description": "A chat-first helper agent that mediates between users, workspaces, MCP tools, and Claude Code workers.",
   "bin": {
-    "super-helper": "./dist/cli.js"
+    "super-helper": "./dist/cli.js",
+    "super-helper-redmine-mcp": "./dist/mcp-servers/redmine/main.js"
   },
   "files": [
     "dist",
@@ -44,6 +45,8 @@
     "audit:answer-fidelity:mutations": "node scripts/verify-answer-fidelity-mutations.mjs",
     "redmine:secret:set": "pnpm build && node dist/cli.js redmine secret set",
     "redmine:probe": "pnpm build && node dist/cli.js redmine probe",
+    "acceptance:redmine:offline": "pnpm build && node --test test/redmine-case-investigation-offline.test.mjs",
+    "acceptance:redmine:real": "pnpm build && node scripts/verify-redmine-case-investigation-real.mjs",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p web/tsconfig.json",
     "typecheck:web": "vue-tsc --noEmit -p web/tsconfig.json",
     "lint": "node scripts/verify-docs.mjs",
