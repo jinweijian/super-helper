@@ -42,6 +42,7 @@
     "acceptance:answer-fidelity:offline": "pnpm build && node --test test/answer-fidelity-offline-acceptance.test.mjs",
     "acceptance:answer-fidelity:real": "pnpm build && node scripts/verify-answer-fidelity-real.mjs",
     "audit:answer-fidelity:mutations": "node scripts/verify-answer-fidelity-mutations.mjs",
+    "redmine:secret:set": "pnpm build && node dist/cli.js redmine secret set",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p web/tsconfig.json",
     "typecheck:web": "vue-tsc --noEmit -p web/tsconfig.json",
     "lint": "node scripts/verify-docs.mjs",

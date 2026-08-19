@@ -9,6 +9,7 @@ import { runConfigCommand, runInitCommand } from './command-config.js';
 import { runKnowledgeCommand } from './command-knowledge.js';
 import { runProviderCommand } from './command-provider.js';
 import { runRetrievalCommand } from './command-retrieval.js';
+import { runRedmineCommand } from './command-redmine.js';
 
 export async function main(): Promise<void> {
   const command = process.argv[2] ?? 'dashboard';
@@ -67,6 +68,12 @@ export async function main(): Promise<void> {
     return;
   }
 
+  if (command === 'redmine') {
+    const ok = await runRedmineCommand({ argv });
+    if (!ok) process.exitCode = 1;
+    return;
+  }
+
   if (runConfigCommand({ command, argv })) {
     return;
   }
@@ -77,7 +84,7 @@ export async function main(): Promise<void> {
 }
 
 function printUsage(): void {
-  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|extract|normalize|slice|audit|repair|review|publish|migration-report|redmine import-fixture|vector build>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
+  console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|extract|normalize|slice|audit|repair|review|publish|migration-report|redmine import-fixture|vector build>|redmine <secret set|probe>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 
 export function runCli(): void {
