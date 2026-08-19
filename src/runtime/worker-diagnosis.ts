@@ -1,4 +1,4 @@
-import type { DiagnosticRequest } from '../domain.js';
+import type { ClaudeWorkerResponse, DiagnosticRequest } from '../domain.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { ReviewPresentationResult } from './contracts.js';
@@ -12,6 +12,24 @@ import {
   prepareDeepQueryRetry,
 } from './worker-turn.js';
 import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js';
+import type { HistoricalLead, ReadOnlyCheckAction } from './case-investigation/contracts.js';
+
+const READ_ONLY_ACTIONS = new Set<ReadOnlyCheckAction>([
+  'read_file',
+  'search_workspace',
+  'inspect_config',
+  'inspect_log',
+  'run_read_only_command',
+]);
+
+export type WorkerEvidenceCollectionOutcome =
+  | {
+      status: 'completed';
+      response: ClaudeWorkerResponse;
+      persistedRequest: DiagnosticRequest;
+      coverageEvidenceEnvelopes: CoverageEvidenceEnvelope[];
+    }
+  | { status: 'rejected' | 'failed'; safeErrorCode: string };
 
 export class WorkerDiagnosisService {
   constructor(
@@ -20,6 +38,35 @@ export class WorkerDiagnosisService {
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
   ) {}
+
+  async collectEvidence(input: {
+    request: DiagnosticRequest;
+    leads: HistoricalLead[];
+  }): Promise<WorkerEvidenceCollectionOutcome> {
+    if (!validWorkerLeads(input.leads)) {
+      return { status: 'rejected', safeErrorCode: 'unsafe_worker_action' };
+    }
+    const workerRequest = structuredClone(input.request);
+    workerRequest.constraints = Array.from(new Set([
+      ...workerRequest.constraints,
+      'Historical case verification is read-only. Do not query or mutate Redmine. Check both supporting and contradicting conditions.',
+      ...input.leads.flatMap((lead) => lead.checks.map((check) => (
+        `Historical check ${check.id}: action=${check.action}; target=${check.target}; expected_match=${check.expectedMatch}; expected_mismatch=${check.expectedMismatch}`
+      ))),
+    ]));
+    const persistedRequest = structuredClone(input.request);
+    try {
+      const response = await this.worker.diagnose(workerRequest);
+      return {
+        status: 'completed',
+        response,
+        persistedRequest,
+        coverageEvidenceEnvelopes: workerCoverageEnvelopes(response),
+      };
+    } catch {
+      return { status: 'failed', safeErrorCode: 'worker_failure' };
+    }
+  }
 
   async diagnose(caseSession: StoredCase, request: DiagnosticRequest): Promise<ReviewPresentationResult> {
     caseSession.status = 'diagnosing';
@@ -106,6 +153,19 @@ export class WorkerDiagnosisService {
     });
     return review;
   }
+}
+
+function validWorkerLeads(leads: HistoricalLead[]): boolean {
+  if (leads.length < 1 || leads.length > 3) return false;
+  return leads.every((lead) => (
+    lead.checks.length > 0 &&
+    lead.checks.every((check) => (
+      READ_ONLY_ACTIONS.has(check.action) &&
+      check.target.length > 0 && check.target.length <= 500 &&
+      check.expectedMatch.length > 0 && check.expectedMatch.length <= 500 &&
+      check.expectedMismatch.length > 0 && check.expectedMismatch.length <= 500
+    ))
+  ));
 }
 
 function workerCoverageEnvelopes(

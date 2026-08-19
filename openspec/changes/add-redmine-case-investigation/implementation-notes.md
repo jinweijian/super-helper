@@ -17,7 +17,7 @@
 | MCP server/stdio | build 成功；专项因 `candidate-grants.js`/server 不存在退出 1，stdio 子进程关闭 | Redmine 全链专项 `22/22 pass`；真实 SDK stdio list/search/detail 同会话通过 | `pending` |
 | Historical evidence service | build 成功；专项因 service 模块不存在退出 1 | historical + legacy MCP + stdio 专项 `25/25 pass`；同一 MCP 会话保持 grant，48K JSON 合法 | `pending` |
 | Model services | build 成功；专项因四个 model service 模块不存在退出 1 | model service `5/5 pass`；agent/knowledge/MCP 回归 `51/51 pass` | `pending` |
-| Collectors/runtime/gate | `not_run` | `not_run` | `not_committed` |
+| Collectors/runtime/gate | collectors 专项 `0/2`，缺少 `collect`/`collectEvidence` 方法 | collector `2/2 pass`；Knowledge/Experience/Worker 与 Agent registry 目标回归 `10/10 pass` | `pending` |
 | Observability/UI | `not_run` | `not_run` | `not_committed` |
 
 ## Offline Verification

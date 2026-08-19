@@ -1,5 +1,5 @@
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticRequest, DiagnosticRun } from '../domain.js';
+import type { DiagnosticRequest, DiagnosticRun, DiagnosticResult } from '../domain.js';
 import {
   readActiveKnowledgeGeneration,
   readKnowledgeChunks,
@@ -7,6 +7,7 @@ import {
 } from '../knowledge/index.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { RuntimeTurnResponse } from './contracts.js';
+import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { RagAnswerabilityService, type RagAnswerabilityResult } from './rag-answerability-service.js';
 import {
@@ -18,6 +19,19 @@ import type { EvidenceJudgeBlocker } from './evidence-judge.js';
 import { ReviewPresentationService } from './review-presentation.js';
 import { completePresentedTurn } from './turn-completion.js';
 
+type PreparedKnowledgeDiagnosis = NonNullable<Awaited<ReturnType<typeof prepareKnowledgeDiagnosis>>>;
+
+export interface KnowledgeCollectionOutcome {
+  status: 'completed' | 'no_hit';
+  route?: PreparedKnowledgeDiagnosis['route'];
+  evidencePack?: PreparedKnowledgeDiagnosis['evidencePack'];
+  judge?: PreparedKnowledgeDiagnosis['judge'];
+  answerability?: RagAnswerabilityResult;
+  result?: DiagnosticResult;
+  coverageEvidenceEnvelopes: CoverageEvidenceEnvelope[];
+  requestPatch?: Pick<DiagnosticRequest, 'context' | 'knownFacts' | 'unknowns' | 'constraints'>;
+}
+
 export class KnowledgeTurnService {
   constructor(
     private readonly config: SuperHelperConfig,
@@ -27,12 +41,11 @@ export class KnowledgeTurnService {
     private readonly ragAnswerabilityService?: RagAnswerabilityService,
   ) {}
 
-  async answer(
+  async collect(
     caseSession: StoredCase,
     userMessage: string,
-    replyToMessageId: string | undefined,
     request: DiagnosticRequest,
-  ): Promise<RuntimeTurnResponse | undefined> {
+  ): Promise<KnowledgeCollectionOutcome> {
     const workspaceRoot = resolveKnowledgeWorkspaceRoot(this.config, caseSession.workspaceId);
     this.events.knowledgeRouterStarted(caseSession, userMessage);
     const diagnosis = await prepareKnowledgeDiagnosis({
@@ -41,9 +54,7 @@ export class KnowledgeTurnService {
       question: userMessage,
       persona: caseSession.userPersona,
     });
-    if (!diagnosis) {
-      return undefined;
-    }
+    if (!diagnosis) return { status: 'no_hit', coverageEvidenceEnvelopes: [] };
 
     const { route, evidencePack, judge, retrievalTrace, glossaryTerms } = diagnosis;
     this.events.knowledgeRouterResult(caseSession, route);
@@ -65,7 +76,6 @@ export class KnowledgeTurnService {
       this.ragAnswerabilityService &&
       this.config.agent.useModelForRagAnswerability !== false &&
       this.config.agent.modelProvider &&
-      answerGoal &&
       evidencePack.results[0]
     ) {
       this.events.ragAnswerabilityStarted(caseSession, {
@@ -79,9 +89,7 @@ export class KnowledgeTurnService {
       this.events.ragAnswerabilityResult(caseSession, answerability);
     }
 
-    const ragBlocksDirectAnswer = Boolean(
-      answerability && answerability.answerability !== 'full'
-    );
+    const ragBlocksDirectAnswer = Boolean(answerability && answerability.answerability !== 'full');
     const questionNotAnsweredBlocker: EvidenceJudgeBlocker = 'question_not_answered';
     const finalJudge = {
       ...judge,
@@ -102,8 +110,9 @@ export class KnowledgeTurnService {
     };
 
     if (!finalJudge.answerable || finalJudge.need_code_escalation) {
+      const patchedRequest = structuredClone(request);
       attachKnowledgeCodeEscalationContext({
-        request,
+        request: patchedRequest,
         question: userMessage,
         route,
         evidencePack,
@@ -112,17 +121,50 @@ export class KnowledgeTurnService {
         projectType: this.config.knowledge.projectType,
         glossaryTerms,
       });
-      this.events.codeEscalationRequested(caseSession, request);
-      return undefined;
+      this.events.codeEscalationRequested(caseSession, patchedRequest);
+      return {
+        status: 'completed',
+        route,
+        evidencePack,
+        judge: finalJudge,
+        answerability,
+        coverageEvidenceEnvelopes: knowledgeCoverageEnvelopes(workspaceRoot, diagnosis),
+        requestPatch: {
+          context: patchedRequest.context,
+          knownFacts: patchedRequest.knownFacts,
+          unknowns: patchedRequest.unknowns,
+          constraints: patchedRequest.constraints,
+        },
+      };
     }
 
-    const result = diagnosticResultFromKnowledge({
+    return {
+      status: 'completed',
+      route,
       evidencePack,
       judge: finalJudge,
-      route,
       answerability,
-      answerGoal,
-    });
+      result: diagnosticResultFromKnowledge({
+        evidencePack,
+        judge: finalJudge,
+        route,
+        answerability,
+        answerGoal,
+      }),
+      coverageEvidenceEnvelopes: knowledgeCoverageEnvelopes(workspaceRoot, diagnosis),
+    };
+  }
+
+  async answer(
+    caseSession: StoredCase,
+    userMessage: string,
+    replyToMessageId: string | undefined,
+    request: DiagnosticRequest,
+  ): Promise<RuntimeTurnResponse | undefined> {
+    const collected = await this.collect(caseSession, userMessage, request);
+    if (collected.requestPatch) applyRequestPatch(request, collected.requestPatch);
+    if (!collected.result) return undefined;
+    const result = collected.result;
     const run: DiagnosticRun = {
       id: request.runId,
       caseId: caseSession.id,
@@ -134,40 +176,8 @@ export class KnowledgeTurnService {
     this.store.addRun(caseSession, run);
     this.events.preflightKnowledgeAnswer(caseSession, result);
     this.events.knowledgeAnswerSelected(caseSession, result);
-    const activeGeneration = readActiveKnowledgeGeneration(workspaceRoot);
-    const requestGenerationId = diagnosis.retrievalTrace.generationId;
-    const chunksById = new Map(readKnowledgeChunks(workspaceRoot, requestGenerationId).chunks
-      .map((chunk) => [chunk.chunk_id, chunk]));
-    const coverageEvidenceEnvelopes = evidencePack.results.flatMap((item) => {
-      const chunk = item.chunk_id ? chunksById.get(item.chunk_id) : undefined;
-      const safeText = item.answer_span ?? item.excerpt;
-      if (
-        !chunk ||
-        chunk.legacy ||
-        chunk.artifact_version !== 4 ||
-        chunk.chunking_strategy !== 'parent-child-v4' ||
-        chunk.undersized_unmergeable ||
-        chunk.manual_split_required ||
-        !activeGeneration ||
-        !requestGenerationId ||
-        activeGeneration.generation_id !== requestGenerationId ||
-        !safeText
-      ) {
-        return [];
-      }
-      return [{
-        evidenceId: item.evidence_id,
-        kind: 'knowledge' as const,
-        safeText,
-        freshness: 'current_knowledge_v4' as const,
-        validated: true,
-        generationId: requestGenerationId,
-        currentGenerationId: activeGeneration.generation_id,
-        strictEligible: item.status === 'active' && item.quality?.severity === 'ok' && !(item.grounding_issues?.length),
-      }];
-    });
     const review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
-      coverageEvidenceEnvelopes,
+      coverageEvidenceEnvelopes: collected.coverageEvidenceEnvelopes,
     });
     return completePresentedTurn({
       store: this.store,
@@ -177,4 +187,44 @@ export class KnowledgeTurnService {
       replyToMessageId,
     });
   }
+}
+
+function knowledgeCoverageEnvelopes(
+  workspaceRoot: string,
+  diagnosis: PreparedKnowledgeDiagnosis,
+): CoverageEvidenceEnvelope[] {
+  const activeGeneration = readActiveKnowledgeGeneration(workspaceRoot);
+  const requestGenerationId = diagnosis.retrievalTrace.generationId;
+  const chunksById = new Map(readKnowledgeChunks(workspaceRoot, requestGenerationId).chunks
+    .map((chunk) => [chunk.chunk_id, chunk]));
+  return diagnosis.evidencePack.results.flatMap((item) => {
+    const chunk = item.chunk_id ? chunksById.get(item.chunk_id) : undefined;
+    const safeText = item.answer_span ?? item.excerpt;
+    if (
+      !chunk || chunk.legacy || chunk.artifact_version !== 4 ||
+      chunk.chunking_strategy !== 'parent-child-v4' || chunk.undersized_unmergeable ||
+      chunk.manual_split_required || !activeGeneration || !requestGenerationId ||
+      activeGeneration.generation_id !== requestGenerationId || !safeText
+    ) return [];
+    return [{
+      evidenceId: item.evidence_id,
+      kind: 'knowledge' as const,
+      safeText,
+      freshness: 'current_knowledge_v4' as const,
+      validated: true,
+      generationId: requestGenerationId,
+      currentGenerationId: activeGeneration.generation_id,
+      strictEligible: item.status === 'active' && item.quality?.severity === 'ok' && !(item.grounding_issues?.length),
+    }];
+  });
+}
+
+function applyRequestPatch(
+  request: DiagnosticRequest,
+  patch: Pick<DiagnosticRequest, 'context' | 'knownFacts' | 'unknowns' | 'constraints'>,
+): void {
+  request.context = patch.context;
+  request.knownFacts = [...patch.knownFacts];
+  request.unknowns = [...patch.unknowns];
+  request.constraints = [...patch.constraints];
 }

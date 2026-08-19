@@ -3670,6 +3670,10 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
     'rag_answerability',
     'mcp_planner',
     'mcp_evidence_extractor',
+    'historical_search_query_planner',
+    'historical_case_reranker',
+    'historical_case_analyzer',
+    'historical_case_verifier',
     'case_curator',
     'output_review',
     'presentation',
@@ -3685,6 +3689,10 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
   assert.match(resolveAgentConfig('rag_answerability').content, /RAG Answerability Agent/);
   assert.match(resolveAgentConfig('mcp_planner').content, /MCP Planner Agent/);
   assert.match(resolveAgentConfig('mcp_evidence_extractor').content, /MCP Evidence Extractor Agent/);
+  assert.match(resolveAgentConfig('historical_search_query_planner').content, /Historical Search Query Planner Agent/);
+  assert.match(resolveAgentConfig('historical_case_reranker').content, /Historical Case Reranker Agent/);
+  assert.match(resolveAgentConfig('historical_case_analyzer').content, /Historical Case Analyzer Agent/);
+  assert.match(resolveAgentConfig('historical_case_verifier').content, /Historical Case Verifier Agent/);
   assert.match(resolveAgentConfig('case_curator').content, /Case Curator Agent/);
   assert.match(resolveAgentConfig('answer_goal_completeness').content, /Answer Goal Completeness Agent/);
   assert.equal(resolveAgentConfig('answer_goal_completeness').mayProduceUserFacingText, false);

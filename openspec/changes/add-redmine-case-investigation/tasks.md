@@ -37,10 +37,10 @@
 
 ## 7. Evidence-only collectors
 
-- [ ] 7.1 在 `test/case-investigation-collectors.test.mjs` 先写失败测试：Knowledge collect、Experience collect、Worker collect 都不创建 Run、Review、Presentation 或 helper reply，也不并发修改共享 request。完成证据：现有 answer/diagnose 路径保持原回归。
-- [ ] 7.2 从 `src/runtime/knowledge-turn.ts` 拆出 `collect()`，返回 route/evidence/judge/answerability/provenance/context patch；`answer()` 复用 collect。完成证据：Knowledge 可回答时 collect 仍只返回 evidence。
-- [ ] 7.3 从 `src/runtime/experience-turn.ts` 拆出 `collect()`，返回可复用和 rejected candidates；`answer()` 保持 legacy 行为。完成证据：配置案例调查时 Experience 不短路。
-- [ ] 7.4 从 `src/runtime/worker-diagnosis.ts` 拆出 `collectEvidence()`，只调用一次 worker、不运行 deep-query follow-up、不 Review/Presentation；校验 action allowlist 和 match/mismatch。完成证据：ephemeral request 含 checks，persisted request/Case 不含完整计划或历史正文。
+- [x] 7.1 在 `test/case-investigation-collectors.test.mjs` 先写失败测试：Knowledge collect、Experience collect、Worker collect 都不创建 Run、Review、Presentation 或 helper reply，也不并发修改共享 request。完成证据：现有 answer/diagnose 路径保持原回归。
+- [x] 7.2 从 `src/runtime/knowledge-turn.ts` 拆出 `collect()`，返回 route/evidence/judge/answerability/provenance/context patch；`answer()` 复用 collect。完成证据：Knowledge 可回答时 collect 仍只返回 evidence。
+- [x] 7.3 从 `src/runtime/experience-turn.ts` 拆出 `collect()`，返回可复用和 rejected candidates；`answer()` 保持 legacy 行为。完成证据：配置案例调查时 Experience 不短路。
+- [x] 7.4 从 `src/runtime/worker-diagnosis.ts` 拆出 `collectEvidence()`，只调用一次 worker、不运行 deep-query follow-up、不 Review/Presentation；校验 action allowlist 和 match/mismatch。完成证据：ephemeral request 含 checks，persisted request/Case 不含完整计划或历史正文。
 
 ## 8. 并行调查编排与自动 Worker
 
