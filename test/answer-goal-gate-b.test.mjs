@@ -144,14 +144,14 @@ test('Gate B production wiring: Preflight carries accepted items once and invoke
     new URL('../src/runtime/preflight-service.ts', import.meta.url),
     'utf8',
   );
-  const runtime = readFileSync(
-    new URL('../src/runtime/diagnostic-runtime.ts', import.meta.url),
+  const composition = readFileSync(
+    new URL('../src/runtime/runtime-composition.ts', import.meta.url),
     'utf8',
   );
   assert.match(preflight, /mustAnswerItems/);
   assert.match(preflight, /AnswerGoalCompletenessReviewService/);
   assert.match(preflight, /reconcileMustAnswerItems/);
-  assert.match(runtime, /answer_goal_completeness/);
+  assert.match(composition, /answer_goal_completeness/);
   assert.doesNotMatch(
     preflight,
     /modelDecision\.request\.answerGoal\s*=\s*resolvedTurn\s*\?\s*buildAnswerGoal/,

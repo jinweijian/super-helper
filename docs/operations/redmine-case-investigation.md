@@ -100,4 +100,4 @@ pnpm acceptance:redmine:real -- \
   --workspace /absolute/path/real-project
 ```
 
-脚本缺 manifest、真实 Git workspace、真实模型凭证、真实 Claude Code、正式 MCP entry 或 Redmine SecretRef 时会非零退出，不会注入 fake fallback。报告只输出 scenario ID、结构状态、evidence kinds、Review 决策和只读审计，不输出 prompt、工单正文、人员、URL、凭证或 Worker 原始结果。验收创建的 Case 会在结束时删除。
+脚本缺 manifest、真实 Git workspace、真实模型凭证、真实 Claude Code、正式 MCP entry 或 Redmine SecretRef 时会非零退出，不会注入 fake fallback。静态前置条件通过后，脚本会先用生产模型适配器执行一个最小 JSON 健康检查；余额不足、鉴权失败或服务不可用时会在启动 HTTP Runtime 和 Worker 前安全退出。报告只输出 scenario ID、结构状态、evidence kinds、Review 决策和只读审计，不输出 prompt、工单正文、人员、URL、凭证或 Worker 原始结果。验收创建的 Case 会在结束时删除。

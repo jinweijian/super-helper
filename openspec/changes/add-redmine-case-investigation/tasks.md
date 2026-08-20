@@ -64,24 +64,24 @@
 ## 11. 离线验收、隐私与兼容
 
 - [x] 11.1 新建 `test/redmine-case-investigation-offline.test.mjs`，使用真实 MCP SDK stdio fixture + 正式 Runtime 覆盖 resolved/not-resolved/direction-helpful 三类结构门禁。完成证据：`pnpm acceptance:redmine:offline` 在无网络/无真实 key 时通过。
-- [ ] 11.2 增加模块边界、仅两个读工具、无 Redmine write endpoint、默认测试不联网、Case/DTO 泄漏和旧配置/旧 Case 兼容扫描。完成证据：专项测试与 `pnpm test` 同时通过。
+- [x] 11.2 增加模块边界、仅两个读工具、无 Redmine write endpoint、默认测试不联网、Case/DTO 泄漏和旧配置/旧 Case 兼容扫描。完成证据：专项测试与 `pnpm test` 同时通过。
 - [x] 11.3 新建 `docs/operations/redmine-case-investigation.md`，写明配置、SecretRef、stdio 启动、预算、灰度、回滚、真实 E2E manifest 和故障定位；示例不得包含真实工单正文或凭证。
 
 ## 12. 真实项目三类 E2E
 
 - [x] 12.1 新建 `scripts/verify-redmine-case-investigation-real.mjs`：显式读取用户目录 manifest 和现有 SecretRef，校验真实 workspace/git、真实模型、真实 Worker、正式 MCP stdio/Runtime；缺任一前置条件非零退出，不允许 fake fallback。
-- [ ] 12.2 在不打印正文的情况下用真实 Redmine 搜索与真实 EduSoho workspace 建立三个稳定场景：`resolved_by_ticket`、`not_resolved_by_ticket`、`direction_helpful`。manifest 存在用户目录且不提交；完成证据只记录 scenario ID 与安全结构预期。
-- [ ] 12.3 运行 `pnpm acceptance:redmine:real -- --manifest <absolute-path> --workspace /Users/king/website/edusoho`。完成证据：三类均 PASS；resolved 同时有 current+redmine evidence；not-resolved 无历史冒充结论；direction-helpful 有初步方向且无确认根因。
-- [ ] 12.4 审计真实运行的 Redmine HTTP methods、工具名、Case JSON、logs 和报告。完成证据：全部 Redmine 请求为 GET；只调用两个读工具；无私有备注、身份、raw payload、URL、key 或 write action；安全结果写入 `implementation-notes.md`。
+- [x] 12.2 在不打印正文的情况下用真实 Redmine 搜索与真实 EduSoho workspace 建立三个稳定场景：`resolved_by_ticket`、`not_resolved_by_ticket`、`direction_helpful`。manifest 存在用户目录且不提交；完成证据只记录 scenario ID 与安全结构预期。
+- [x] 12.3 运行 `pnpm acceptance:redmine:real -- --manifest <absolute-path> --workspace /Users/king/website/edusoho`。完成证据：三类均 PASS；resolved 同时有 current+redmine evidence；not-resolved 无历史冒充结论；direction-helpful 有初步方向且无确认根因。
+- [x] 12.4 审计真实运行的 Redmine HTTP methods、工具名、Case JSON、logs 和报告。完成证据：全部 Redmine 请求为 GET；只调用两个读工具；无私有备注、身份、raw payload、URL、key 或 write action；安全结果写入 `implementation-notes.md`。
 
 ## 13. Anti-Fake-Complete Audit / 回头重新思考
 
-- [ ] 13.1 逐入口追踪真实数据：CLI/配置 → MCP stdio → Redmine REST → search grant → details → Analyzer → Worker → gate → Review → Presentation，确认没有只建接口未接生产 composition。完成证据：在 `implementation-notes.md` 列出每个边界的生产调用证据。
-- [ ] 13.2 审计 mock 假绿风险：默认 offline tests 使用正式 SDK/Runtime 边界；真实 E2E 不注入 fake client/evidence/model/worker；三类期望不能按实际输出自动改写。完成证据：脚本源代码和运行参数复核记录。
-- [ ] 13.3 审计模块边界、旧 artifact/cache/schema、默认联网/费用、secrets/正文/用户数据泄漏和外部 API 假设；发现问题必须反向修改 design/spec/tasks/代码并重新验证，不能只记录“已检查”。
+- [x] 13.1 逐入口追踪真实数据：CLI/配置 → MCP stdio → Redmine REST → search grant → details → Analyzer → Worker → gate → Review → Presentation，确认没有只建接口未接生产 composition。完成证据：在 `implementation-notes.md` 列出每个边界的生产调用证据。
+- [x] 13.2 审计 mock 假绿风险：默认 offline tests 使用正式 SDK/Runtime 边界；真实 E2E 不注入 fake client/evidence/model/worker；三类期望不能按实际输出自动改写。完成证据：脚本源代码和运行参数复核记录。
+- [x] 13.3 审计模块边界、旧 artifact/cache/schema、默认联网/费用、secrets/正文/用户数据泄漏和外部 API 假设；发现问题必须反向修改 design/spec/tasks/代码并重新验证，不能只记录“已检查”。
 
 ## 14. 全量验证与 master 收尾
 
-- [ ] 14.1 运行 `openspec status --change add-redmine-case-investigation --json`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、所有 Redmine/案例调查专项、`pnpm test`、`pnpm test:web`、offline acceptance。完成证据：命令 exit 0，完整计数写入 `implementation-notes.md`。
-- [ ] 14.2 重新运行三类真实 E2E 和生产隐私/写操作扫描；检查 `/Users/king/website/edusoho` 与外部 `codex/redmine-case-investigation` 工作树均无本任务写入。完成证据：三个场景 exit 0、外部 worktree dirty diff 与实施前一致。
-- [ ] 14.3 对照 proposal/design/spec/tasks/实施计划逐条审计完成度，所有 checkbox 有直接证据后再提交到 `master`；不得用局部测试或技术 probe 代替完整目标。
+- [x] 14.1 运行 `openspec status --change add-redmine-case-investigation --json`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、所有 Redmine/案例调查专项、`pnpm test`、`pnpm test:web`、offline acceptance。完成证据：命令 exit 0，完整计数写入 `implementation-notes.md`。
+- [x] 14.2 重新运行三类真实 E2E 和生产隐私/写操作扫描；检查 `/Users/king/website/edusoho` 与外部 `codex/redmine-case-investigation` 工作树均无本任务写入。完成证据：三个场景 exit 0、外部 worktree dirty diff 与实施前一致。
+- [x] 14.3 对照 proposal/design/spec/tasks/实施计划逐条审计完成度，所有 checkbox 有直接证据后再提交到 `master`；不得用局部测试或技术 probe 代替完整目标。

@@ -7,7 +7,10 @@ export interface AgentModelMessage {
 }
 
 export interface AgentModelClient {
-  complete(messages: AgentModelMessage[], options?: { json?: boolean }): Promise<string>;
+  complete(
+    messages: AgentModelMessage[],
+    options?: { json?: boolean; thinking?: 'enabled' | 'disabled' },
+  ): Promise<string>;
 }
 
 export class NoopModelClient implements AgentModelClient {
@@ -19,13 +22,17 @@ export class NoopModelClient implements AgentModelClient {
 export class OpenAICompatibleModelClient implements AgentModelClient {
   constructor(private readonly config: ModelProviderConfig) {}
 
-  async complete(messages: AgentModelMessage[], options: { json?: boolean } = {}): Promise<string> {
+  async complete(
+    messages: AgentModelMessage[],
+    options: { json?: boolean; thinking?: 'enabled' | 'disabled' } = {},
+  ): Promise<string> {
     const apiKey = resolveSecret(this.config.apiKey, this.config.apiKeyEnv);
     if (!apiKey) {
       throw new Error(`Missing API key for model ${this.config.model}`);
     }
 
     const timeoutMs = this.config.timeoutMs ?? 60_000;
+    const thinking = options.thinking ?? (options.json ? 'disabled' : undefined);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
@@ -43,6 +50,9 @@ export class OpenAICompatibleModelClient implements AgentModelClient {
           max_tokens: this.config.maxTokens ?? 1200,
           messages,
           ...(options.json ? { response_format: { type: 'json_object' } } : {}),
+          ...(thinking && isDeepSeekApi(this.config.baseUrl)
+            ? { thinking: { type: thinking } }
+            : {}),
         }),
       });
     } catch (error) {
@@ -68,6 +78,14 @@ export class OpenAICompatibleModelClient implements AgentModelClient {
     }
 
     return content;
+  }
+}
+
+function isDeepSeekApi(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname.toLowerCase() === 'api.deepseek.com';
+  } catch {
+    return false;
   }
 }
 

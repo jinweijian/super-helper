@@ -5,6 +5,7 @@ import process from 'node:process';
 import { ensureConfig } from '../dist/config.js';
 import { startServer } from '../dist/gateway/http-server.js';
 import { FileSecretsRepository } from '../dist/onboarding/secrets.js';
+import { createModelClient } from '../dist/providers/model/adapter.js';
 import {
   assertAcceptancePollResponse,
   createMonotonicDeadline,
@@ -42,6 +43,7 @@ try {
   const sourceAudit = auditProductionSource();
   requireCheck('source_get_only', sourceAudit.getOnly, 'redmine_http_get_only');
   requireCheck('source_two_tools', sourceAudit.twoTools, 'exactly_two_read_tools');
+  requireCheck('real_model_health', await realModelHealthy(provider, secrets), 'production_model_completion');
 
   const serverConfig = structuredClone(config);
   serverConfig.server.host = '127.0.0.1';
@@ -137,6 +139,23 @@ function isCleanGitWorkspace(path) {
 
 function providerSecretAvailable(provider, secrets) {
   return Boolean(provider.apiKey || (provider.apiKeyEnv && process.env[provider.apiKeyEnv]) || secrets.has(provider.apiKeyRef));
+}
+
+async function realModelHealthy(provider, secrets) {
+  if (!provider) return false;
+  const materialized = structuredClone(provider);
+  if (!materialized.apiKey && materialized.apiKeyRef) {
+    materialized.apiKey = secrets.resolve(materialized.apiKeyRef);
+  }
+  try {
+    const response = await createModelClient(materialized).complete([
+      { role: 'system', content: 'Return one JSON object only.' },
+      { role: 'user', content: 'Return {"status":"ok"}.' },
+    ], { json: true });
+    return typeof response === 'string' && response.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function realWorkerAvailable(config) {

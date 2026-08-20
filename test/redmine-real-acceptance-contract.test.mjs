@@ -43,6 +43,12 @@ test('real acceptance evaluator enforces resolved, not-resolved, and direction s
     evaluateRealScenario('direction_helpful', direction.session, direction.logs),
   ]) {
     assert.doesNotMatch(JSON.stringify(evaluation), /ticket body|https:\/\/private|Bearer|secret query/i);
+    assert.deepEqual(evaluation.classificationCounts, {
+      sameRootCauseLikely: 0,
+      sameSymptomDifferentCause: 0,
+      diagnosticLeadOnly: 0,
+      irrelevant: 0,
+    });
   }
 });
 
@@ -77,6 +83,8 @@ test('real acceptance runner fails closed on missing prerequisites and contains 
   const source = readFileSync(script, 'utf8');
   assert.doesNotMatch(source, /fake(?:Client|Worker|Model|Evidence)|workerFactory\s*:|createClient\s*:/i);
   assert.match(source, /startServer\(\{ config: serverConfig \}\)/);
+  assert.match(source, /real_model_health/);
+  assert.match(source, /createModelClient/);
   const result = spawnSync(process.execPath, [script], { encoding: 'utf8', timeout: 10_000 });
   assert.equal(result.status, 2);
   const report = JSON.parse(result.stdout);

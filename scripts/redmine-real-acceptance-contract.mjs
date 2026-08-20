@@ -41,6 +41,7 @@ export function evaluateRealScenario(id, session, logs) {
   );
   const evidenceKinds = [...new Set(evidence.map((item) => String(item.kind)))].sort();
   const search = phaseDetail(logs, 'historical_case_search_completed');
+  const analysis = phaseDetail(logs, 'historical_case_analysis_completed');
   const worker = phaseDetail(logs, 'current_project_verification_completed');
   const cross = phaseDetail(logs, 'historical_cross_review_completed');
   const review = phaseDetail(logs, 'evidence_validation_result');
@@ -75,13 +76,30 @@ export function evaluateRealScenario(id, session, logs) {
     status: passed ? 'PASS' : 'FAIL',
     actual: `${String(result.status ?? 'missing')}/${String(result.recommendedNextAction ?? 'missing')}`,
     redmineStatus: safeEnum(search?.status),
+    candidateCount: safeCount(search?.candidateCount),
+    detailCount: safeCount(search?.detailCount),
+    searchDegraded: search?.degraded === true,
+    leadCount: safeCount(analysis?.leadCount),
+    analysisDegraded: analysis?.degraded === true,
     workerStatus: safeEnum(worker?.status),
     workerInvoked: worker?.workerInvoked === true,
     verificationCount: safeCount(cross?.verificationCount),
+    classificationCounts: safeClassificationCounts(cross?.classificationCounts),
+    verificationDegraded: cross?.degraded === true,
     evidenceKinds,
     reviewDecision: safeEnum(review?.outcomeReasonCode),
     unmetRequirements: requirements,
     readOnlyAudit: worker?.workerInvoked === true ? 'worker_invoked' : 'worker_not_invoked',
+  };
+}
+
+function safeClassificationCounts(value) {
+  const counts = isRecord(value) ? value : {};
+  return {
+    sameRootCauseLikely: safeCount(counts.sameRootCauseLikely),
+    sameSymptomDifferentCause: safeCount(counts.sameSymptomDifferentCause),
+    diagnosticLeadOnly: safeCount(counts.diagnosticLeadOnly),
+    irrelevant: safeCount(counts.irrelevant),
   };
 }
 

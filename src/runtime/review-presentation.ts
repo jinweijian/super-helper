@@ -1,5 +1,5 @@
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticResult, DiagnosticRun } from '../domain.js';
+import type { AnswerGoal, DiagnosticClaim, DiagnosticResult, DiagnosticRun, Evidence } from '../domain.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import type { StoredCase } from '../sessions/case-repository.js';
 import { parseAgentModelJson } from './agent-model-review.js';
@@ -8,6 +8,7 @@ import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import {
   caseStatusFromDiagnosticResult,
   decisionFromDiagnosticResult,
+  type ReviewGlobalBlocker,
 } from './review-gate.js';
 import {
   freezeReviewedDiagnosticResult,
@@ -18,8 +19,6 @@ import {
   materializeCurrentCoverageReviewInput,
   unknownCoverageReview,
 } from './answer-coverage.js';
-import type { AnswerGoal, DiagnosticClaim, Evidence } from '../domain.js';
-import type { ReviewGlobalBlocker } from './review-gate.js';
 import {
   buildSafeFrozenAnswerProjection,
   collectVisiblePromptCandidates,
@@ -31,10 +30,7 @@ import {
 } from './safe-answer-projection.js';
 import { VisiblePromptSafetyService } from './visible-prompt-safety.js';
 import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js';
-import {
-  formatSafeWorkerFailure,
-  type SafeWorkerFailureCategory,
-} from './safe-failure-presentation.js';
+import { formatSafeWorkerFailure, type SafeWorkerFailureCategory } from './safe-failure-presentation.js';
 
 export class ReviewPresentationService {
   constructor(

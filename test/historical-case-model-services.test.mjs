@@ -10,6 +10,17 @@ function modelReturning(value) {
   return { async complete() { return typeof value === 'string' ? value : JSON.stringify(value); } };
 }
 
+function recordingModel(value) {
+  const calls = [];
+  return {
+    calls,
+    async complete(messages, options) {
+      calls.push({ messages, options });
+      return typeof value === 'string' ? value : JSON.stringify(value);
+    },
+  };
+}
+
 function throwingModel() {
   return { async complete() { throw new Error('model fixture failed with private payload'); } };
 }
@@ -48,13 +59,14 @@ test('registry exposes exactly four non-visible historical-case model agents and
 });
 
 test('query planner returns fixed budgets and falls back to the resolved question on invalid or failed model output', async () => {
-  const valid = await new QueryPlannerService(modelReturning({
+  const validModel = recordingModel({
     query: '视频 加载 失败',
     signals: ['转码', '播放器'],
     status: 'all',
     candidateLimit: 10,
     detailLimit: 3,
-  }), 'planner spec').plan({ answerGoal });
+  });
+  const valid = await new QueryPlannerService(validModel, 'planner spec').plan({ answerGoal });
   assert.deepEqual(valid, {
     query: '视频 加载 失败',
     signals: ['转码', '播放器'],
@@ -63,6 +75,7 @@ test('query planner returns fixed budgets and falls back to the resolved questio
     detailLimit: 3,
     degraded: false,
   });
+  assert.deepEqual(validModel.calls[0].options, { json: true, thinking: 'disabled' });
 
   for (const model of [modelReturning('not-json'), modelReturning({ query: '', signals: [], candidateLimit: 99 }), throwingModel()]) {
     const fallback = await new QueryPlannerService(model, 'planner spec').plan({ answerGoal });
@@ -79,9 +92,11 @@ test('query planner returns fixed budgets and falls back to the resolved questio
 });
 
 test('reranker only returns at most three unique IDs from the supplied candidate set', async () => {
-  const selected = await new CandidateRerankerService(modelReturning({ issueIds: [3, 1] }), 'reranker spec')
+  const validModel = recordingModel({ issueIds: [3, 1] });
+  const selected = await new CandidateRerankerService(validModel, 'reranker spec')
     .select({ query: 'video', candidates });
   assert.deepEqual(selected, { issueIds: [3, 1], degraded: false });
+  assert.deepEqual(validModel.calls[0].options, { json: true, thinking: 'disabled' });
 
   for (const response of ['not-json', { issueIds: [1, 1] }, { issueIds: [99] }, { issueIds: [1, 2, 3, 4] }]) {
     const fallback = await new CandidateRerankerService(modelReturning(response), 'reranker spec')
@@ -91,6 +106,34 @@ test('reranker only returns at most three unique IDs from the supplied candidate
   const failed = await new CandidateRerankerService(throwingModel(), 'reranker spec')
     .select({ query: 'video', candidates });
   assert.deepEqual(failed, { issueIds: [1, 2, 3], degraded: true });
+});
+
+test('query planning and reranking preserve opaque user identifiers deterministically', async () => {
+  const identifiedGoal = {
+    ...answerGoal,
+    resolvedQuestion: '排查 quantum-flux-20260820 异常',
+  };
+  const generalized = await new QueryPlannerService(modelReturning({
+    query: '排查异常',
+    signals: ['异常'],
+    status: 'all',
+    candidateLimit: 10,
+    detailLimit: 3,
+  }), 'planner spec').plan({ answerGoal: identifiedGoal });
+  assert.equal(generalized.query, identifiedGoal.resolvedQuestion);
+  assert.equal(generalized.degraded, true);
+
+  const identifiedCandidates = [
+    { ...candidates[0], issueId: 1, subject: '普通异常', descriptionExcerpt: '无唯一标识' },
+    { ...candidates[1], issueId: 2, subject: 'quantum-flux-20260820 异常', descriptionExcerpt: '唯一场景' },
+  ];
+  const filtered = await new CandidateRerankerService(modelReturning({ issueIds: [1, 2] }), 'reranker spec')
+    .select({ query: identifiedGoal.resolvedQuestion, candidates: identifiedCandidates });
+  assert.deepEqual(filtered, { issueIds: [2], degraded: true });
+
+  const invalidFallback = await new CandidateRerankerService(modelReturning('not-json'), 'reranker spec')
+    .select({ query: identifiedGoal.resolvedQuestion, candidates: identifiedCandidates });
+  assert.deepEqual(invalidFallback, { issueIds: [2], degraded: true });
 });
 
 const details = [{
@@ -125,10 +168,15 @@ test('analyzer accepts only evidence-bound leads with allowlisted read-only chec
       }],
     }],
   };
-  const valid = await new HistoricalCaseAnalyzerService(modelReturning(validResponse), 'analyzer spec')
+  const validModel = recordingModel(validResponse);
+  const valid = await new HistoricalCaseAnalyzerService(validModel, 'analyzer spec')
     .analyze({ details, evidence: historicalEvidence });
   assert.equal(valid.degraded, false);
   assert.equal(valid.leads[0].checks[0].action, 'search_workspace');
+  assert.deepEqual(validModel.calls[0].options, { json: true, thinking: 'disabled' });
+  const analyzerInput = JSON.parse(validModel.calls[0].messages[1].content);
+  assert.deepEqual(analyzerInput.allowedEvidenceIds, ['redmine_ev_01']);
+  assert.equal('id' in analyzerInput.details[0].evidenceBlocks[0], false);
 
   for (const response of [
     'not-json',
@@ -164,7 +212,7 @@ const leads = [{
 
 test('verifier cannot introduce facts, lead IDs, or evidence IDs and degrades conservatively', async () => {
   const currentEvidence = [{ id: 'worker_ev_01', kind: 'workspace', source: 'worker', summary: '配置相同', confidence: 'high' }];
-  const valid = await new HistoricalCaseVerifierService(modelReturning({
+  const validModel = recordingModel({
     verifications: [{
       leadId: 'lead-1',
       classification: 'same_root_cause_likely',
@@ -173,9 +221,12 @@ test('verifier cannot introduce facts, lead IDs, or evidence IDs and degrades co
       supportingEvidenceIds: ['redmine_ev_01', 'worker_ev_01'],
       conflictingEvidenceIds: [],
     }],
-  }), 'verifier spec').verify({ leads, historicalEvidence, currentEvidence });
+  });
+  const valid = await new HistoricalCaseVerifierService(validModel, 'verifier spec')
+    .verify({ leads, historicalEvidence, currentEvidence });
   assert.equal(valid.degraded, false);
   assert.equal(valid.verifications[0].classification, 'same_root_cause_likely');
+  assert.deepEqual(validModel.calls[0].options, { json: true, thinking: 'disabled' });
 
   for (const response of [
     'not-json',

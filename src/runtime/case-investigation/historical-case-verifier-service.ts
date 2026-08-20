@@ -33,7 +33,7 @@ export class HistoricalCaseVerifierService {
       const response = await this.model.complete([
         { role: 'system', content: `${this.agentSpec}\n\nReturn JSON only.` },
         { role: 'user', content: JSON.stringify(input) },
-      ], { json: true });
+      ], { json: true, thinking: 'disabled' });
       const parsed = VerificationSchema.parse(parseAgentModelJson<unknown>(response));
       if (!validVerification(parsed, input)) return conservative(input);
       return { verifications: parsed.verifications, degraded: false };

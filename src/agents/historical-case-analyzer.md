@@ -18,7 +18,7 @@ may_produce_user_facing_text: false
 
 ## Output Contract
 
-只输出 JSON `leads`。每条 lead 必须包含 `id`、候选内 `issueId`、`hypothesis`、`evidenceIds`、`conflicts` 和非空 `checks`。每个 check 必须包含 `id`、`action`、`target`、`expectedMatch`、`expectedMismatch`、`evidenceIds`。
+只输出 JSON `leads`。每条 lead 必须包含 `id`、候选内 `issueId`、`hypothesis`、`evidenceIds`、`conflicts` 和非空 `checks`。每个 check 必须包含 `id`、`action`、`target`、`expectedMatch`、`expectedMismatch`、`evidenceIds`。所有 `evidenceIds` 只能从输入的 `allowedEvidenceIds` 逐字选择，不得使用其他字段值或自行构造 ID。
 
 ## Rules
 

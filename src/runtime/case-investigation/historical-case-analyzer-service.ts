@@ -39,8 +39,8 @@ export class HistoricalCaseAnalyzerService {
     try {
       const response = await this.model.complete([
         { role: 'system', content: `${this.agentSpec}\n\nReturn JSON only.` },
-        { role: 'user', content: JSON.stringify(input) },
-      ], { json: true });
+        { role: 'user', content: JSON.stringify(modelInput(input)) },
+      ], { json: true, thinking: 'disabled' });
       const parsed = AnalysisSchema.parse(parseAgentModelJson<unknown>(response));
       if (!validAnalysis(parsed, input)) return { leads: [], degraded: true };
       return { leads: parsed.leads, degraded: false };
@@ -48,6 +48,23 @@ export class HistoricalCaseAnalyzerService {
       return { leads: [], degraded: true };
     }
   }
+}
+
+function modelInput(input: HistoricalAnalysisInput) {
+  return {
+    details: input.details.map((detail) => ({
+      ...detail,
+      evidenceBlocks: detail.evidenceBlocks.map((block) => ({
+        kind: block.kind,
+        label: block.label,
+        text: block.text,
+        occurredAt: block.occurredAt,
+        metadata: block.metadata,
+      })),
+    })),
+    evidence: input.evidence,
+    allowedEvidenceIds: input.evidence.map((item) => item.id),
+  };
 }
 
 function validAnalysis(
