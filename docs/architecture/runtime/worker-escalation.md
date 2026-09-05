@@ -77,4 +77,6 @@ profiles 默认未启用。管理员在设置中填写校准后的模型路由�
 
 Runtime 的 InvestigationControl 按 caseId/userMessageId 持有当前回合控制器。GET /api/chat/progress 返回白名单进度；POST /api/chat/cancel 仅取消匹配的活动回合。导航停止本地轮询不会取消后台任务。取消后没有已审核判断时持久化 user_cancelled 中断，retry 读取原用户消息偏好。
 
+审核层从冻结投影生成内部 hasReviewedAnswer，取消/回退不能通过原始 claims 或失败日志判断“已有结论”。已审核初步答案在 Deep 失败后保留；取消后统一降为 partial。该元数据不进入 API DTO 或 Case JSON。
+
 Worker port 的可选 options 接收 signal/onProgress。Claude adapter 使用 stream-json 解析 Deep 工具活动；原始事件和模型正文不进入 trace/日志，公开数据仅阶段、计数和活动时间。POSIX 下每次子进程有独立进程组，取消先 TERM、宽限后 KILL 整组。

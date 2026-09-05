@@ -9,11 +9,11 @@ profiles 保持默认关闭，Fast turn 数不设未经校准的默认值。真�
 ## 验证记录
 
 - 基线 pnpm test：569/569 通过。
-- 实施 pnpm test：591/591 通过，包含 lint、TypeScript/Vue typecheck、前后端 build。
+- 最终 pnpm test：597/597 通过，包含 lint、TypeScript/Vue typecheck、前后端 build。
 - 模式策略、控制器、Runtime 和 HTTP 联调：覆盖手动边界、一次升级、历史核验、按消息取消、脱敏进度和重试。
 - Worker fake 进程测试：11 个新增案例与 7 个既有 Worker 回归通过。CLI 2.1.218 的 help 已本机检查；没有真实模型调用。
 - 前端新增失败测试验证缺少选择器与 stop API，随后实现通过；覆盖接收成功复位和完整 profile 保存。
-- pnpm test:web：57/57 通过；Chromium 原有 smoke 5/5 和新增模式提交/复位浏览器合同 1/1 通过。浏览器命令输出包含环境 NO_COLOR/FORCE_COLOR 兼容警告，不影响测试。
+- 最终 pnpm test:web：57/57 通过；pnpm exec playwright test：6/6 通过。浏览器命令输出包含环境 NO_COLOR/FORCE_COLOR 兼容警告，不影响测试。
 
 ## 回头重新思考
 
@@ -22,6 +22,8 @@ profiles 保持默认关闭，Fast turn 数不设未经校准的默认值。真�
 - 达到 turns 上限与模型故障分别处理：前者允许 Auto 升级，后者安全停止。
 - 取消和导航分开：cancel 本地轮询不发送服务器停止；stop 明确请求当前 Case/message。旧回调不能修改新回合进度。
 - 重复中断后的 retry 检查仅考虑该次中断后的日志，保留用户消息偏好。
+- 最终审查修复了 process_note 被误当作已有判断的问题：仅从最终冻结投影导出内部 hasReviewedAnswer；Deep 失败/取消保留相应 review，所有来源取消统一 partial 并同步唯一 helper。新增 6 个回归且复核通过。
+- 新增审核元数据使 review-presentation.ts 超过仓库 300 行限制；已将 Worker 失败判断提取到 review-worker-failure.ts，未放宽结构验收规则。
 - 旧配置/旧 Case 缺省字段继续兼容；新配置验证错误映射 HTTP 400。
 - Windows taskkill 树终止实现存在，但本次测试环境为 macOS，未实测 Windows。
 

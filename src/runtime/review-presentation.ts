@@ -30,7 +30,8 @@ import {
 } from './safe-answer-projection.js';
 import { VisiblePromptSafetyService } from './visible-prompt-safety.js';
 import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js';
-import { formatSafeWorkerFailure, type SafeWorkerFailureCategory } from './safe-failure-presentation.js';
+import { formatSafeWorkerFailure } from './safe-failure-presentation.js';
+import { workerFailedBeforeUsableResult, workerFailureCategory } from './review-worker-failure.js';
 
 export class ReviewPresentationService {
   constructor(
@@ -253,28 +254,6 @@ function safeStringArray(value: unknown): string[] {
     return [];
   }
   return Array.from(new Set(value.filter((item): item is string => typeof item === 'string'))).slice(0, 20);
-}
-
-function workerFailedBeforeUsableResult(run: DiagnosticRun): boolean {
-  const trace = run.workerTrace;
-  const failed = Boolean(trace && (
-    trace.error || trace.signal || (trace.exitCode !== undefined && trace.exitCode !== 0)
-  ));
-  if (!failed) return false;
-
-  // Worker failure parsers may attach a high-confidence log item describing the
-  // failure itself. That item is useful for diagnostics, but is not usable
-  // domain evidence and must never make the raw failure eligible for presentation.
-  return !run.result?.evidence.some((evidence) => (
-    evidence.kind !== 'log' && evidence.confidence !== 'low'
-  ));
-}
-
-function workerFailureCategory(run: DiagnosticRun): SafeWorkerFailureCategory {
-  const trace = run.workerTrace;
-  if (trace?.signal) return 'worker_interrupted';
-  if (trace?.error && /timed?\s*out|timeout/i.test(trace.error)) return 'worker_timeout';
-  return 'worker_execution_failed';
 }
 
 function applyProjectionOutcome(
