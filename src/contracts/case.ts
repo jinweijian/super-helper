@@ -1,5 +1,6 @@
 import type { CaseStatus, UserPersona } from './base.js';
 import type { DiagnosticLogEvent, DiagnosticRun } from './diagnostic.js';
+import type { InvestigationPreference } from './investigation.js';
 
 export interface CaseSession {
   id: string;
@@ -18,6 +19,7 @@ export interface CaseSession {
 }
 
 export interface CaseMessage {
+  investigationPreference?: InvestigationPreference;
   id: string;
   role: 'user' | 'helper' | 'system';
   body: string;

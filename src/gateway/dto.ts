@@ -56,7 +56,7 @@ export interface AgentActivityItem {
 export interface RetryableTurnDto {
   userMessageId: string;
   interruptedAt: string;
-  reason: 'service_restarted';
+  reason: 'service_restarted' | 'user_cancelled';
 }
 
 export type SerializedSession = SessionSummary
@@ -119,13 +119,13 @@ export function serializeSession(
   }
   const interruption = findRetryableInterruption(caseSession);
   if (interruption) {
-    const interruptedLog = caseSession.logs.find(
+    const interruptedLog = [...caseSession.logs].reverse().find(
       (log) => log.phase === 'turn_interrupted' && (log.detail as Record<string, unknown> | undefined)?.userMessageId === interruption.userMessageId,
     );
     session.retryableTurn = {
       userMessageId: interruption.userMessageId,
       interruptedAt: interruptedLog?.createdAt ?? caseSession.updatedAt,
-      reason: 'service_restarted',
+      reason: (interruptedLog?.detail as Record<string, unknown> | undefined)?.reason === 'user_cancelled' ? 'user_cancelled' : 'service_restarted',
     };
   }
   return session;

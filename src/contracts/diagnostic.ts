@@ -1,7 +1,9 @@
 import type { AnswerGoal, ClaimType, DiagnosticRunStatus, EvidenceKind, LogSeverity, UserPersona } from './base.js';
 import type { CaseMessage } from './case.js';
+import type { InvestigationExecution } from './investigation.js';
 
 export interface DiagnosticRequest {
+  investigation?: InvestigationExecution;
   caseId: string;
   runId: string;
   workspaceId: string;

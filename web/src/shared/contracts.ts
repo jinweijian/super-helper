@@ -1,4 +1,5 @@
 export interface MessageDto {
+  investigationPreference?: 'auto' | 'fast' | 'deep';
   id: string;
   role: 'user' | 'helper';
   body: string;
@@ -9,7 +10,7 @@ export interface MessageDto {
 export interface RetryableTurnDto {
   userMessageId: string;
   interruptedAt: string;
-  reason: 'service_restarted';
+  reason: 'service_restarted' | 'user_cancelled';
 }
 
 export interface SessionDto {

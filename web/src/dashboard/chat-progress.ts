@@ -1,6 +1,16 @@
 import type { SessionDto } from '../shared/contracts';
 
 export interface ChatProgressState {
+  investigation?: {
+    requestedMode: 'auto' | 'fast' | 'deep';
+    resolvedProfile?: 'fast' | 'deep';
+    attempt?: 1 | 2;
+    stage: 'locating' | 'reading' | 'verifying' | 'summarizing';
+    searchCount: number;
+    filesRead: number;
+    lastActivityAt: string;
+    stopping?: boolean;
+  };
   state: 'idle' | 'running' | 'completed' | 'interrupted' | 'reconnecting';
   startedAt?: number;
   lastActivityAt?: number;

@@ -12,6 +12,18 @@ const settings = {
 };
 
 describe('完整配置表单', () => {
+  it('校准 profiles 从设置独立复制并完整保存，旧配置不引入空 profile', async () => {
+    const wrapper = mount(SettingsForm, {props:{settings, actions:{}}});
+    const save = () => wrapper.findAll('button').find(button => button.text() === '保存 Claude')!;
+    await save().trigger('click');
+    expect((wrapper.emitted('saveClaude')?.[0]?.[0] as any).investigationProfiles).toBeUndefined();
+    const profiles={enabled:true,fast:{model:'fast',effort:'low',maxTurns:12},deep:{model:'deep',effort:'high',timeoutMs:1200000}};
+    await wrapper.setProps({settings:{...settings,claude:{...settings.claude,investigationProfiles:profiles}}});
+    await wrapper.get('[name="fastMaxTurns"]').setValue(15);
+    await save().trigger('click');
+    expect((wrapper.emitted('saveClaude')?.[1]?.[0] as any).investigationProfiles.fast.maxTurns).toBe(15);
+    expect(profiles.fast.maxTurns).toBe(12);
+  });
   it('保留所有配置分区并使用当前未保存模型值测试', async () => {
     const wrapper = mount(SettingsForm, { props: { settings, actions: {} } });
     expect(wrapper.text()).toContain('Embedding');

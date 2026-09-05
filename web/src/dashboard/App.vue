@@ -13,7 +13,7 @@ import { useSessions } from './use-sessions';
 import { useSettings } from './use-settings';
 
 const sessions = useSessions();
-const chat = useChat();
+const chat = useChat({trackInvestigation: true});
 const logs = useLogs();
 const knowledge = useKnowledge();
 const settings = useSettings();
@@ -30,6 +30,7 @@ onMounted(async () => {
   window.addEventListener('popstate', onPopState);
   await sessions.initialize();
   if (disposed) return;
+  void settings.load().catch(() => undefined);
   const current = sessions.current.value;
   if (current?.userPersona) selectedPersona.value = current.userPersona;
   if (current) knowledge.loadLocalHealth(current.workspaceId || 'current').catch(() => undefined);
@@ -70,7 +71,7 @@ function closeAudit(): void {
   auditMode.value = false;
 }
 
-async function send(message: string, persona: string): Promise<void> {
+async function send(message: string, persona: string, investigationPreference: 'auto' | 'fast' | 'deep' = 'auto'): Promise<void> {
   try {
     const current = sessions.current.value;
     const next = await chat.send({
@@ -78,6 +79,7 @@ async function send(message: string, persona: string): Promise<void> {
       workspaceId: current?.workspaceId || 'current',
       message,
       persona,
+      investigationPreference,
     }, (session) => { if (!sessions.current.value || sessions.current.value.id === session.id) sessions.current.value = session; });
     sessions.current.value = next;
     await sessions.list();
@@ -152,7 +154,7 @@ async function openSession(id: string): Promise<void> {
         @action="sessions.action"
         @remove="sessions.remove"
       />
-      <ChatPanel :session="sessions.current.value" :sending="chat.sending.value" :progress="chat.progress.value" :error="chat.error.value" :selected-persona="selectedPersona" @update-persona="selectedPersona = $event" @send="send" @retry="onRetry">
+      <ChatPanel :session="sessions.current.value" :sending="chat.sending.value" :progress="chat.progress.value" :error="chat.error.value" :selected-persona="selectedPersona" :accepted-count="chat.acceptedCount?.value" :investigation-enabled="!!settings.value.value.claude?.investigationProfiles?.enabled" @update-persona="selectedPersona = $event" @send="send" @retry="onRetry" @stop="chat.stop()">
         <template #actions>
           <button type="button" :disabled="!sessions.current.value" @click="openAudit">诊断详情</button>
           <button type="button" :disabled="!sessions.current.value" @click="openLogs">日志</button>

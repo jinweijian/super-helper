@@ -1,5 +1,5 @@
 import { configuredWorkspaceId, type SuperHelperConfig } from '../config.js';
-import type { UserPersona } from '../domain.js';
+import type { UserPersona, InvestigationPreference } from '../domain.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { AcceptedUserTurn } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
@@ -32,6 +32,7 @@ export class SessionLifecycle {
     message: string;
     workspaceId?: string;
     persona?: UserPersona;
+    investigationPreference?: InvestigationPreference;
   }): AcceptedUserTurn {
     const caseSession = this.loadOrCreateCase(input);
     if (caseSession.archivedAt) {
@@ -48,7 +49,7 @@ export class SessionLifecycle {
     if (isGenericTitle(caseSession.title)) {
       caseSession.title = titleFromMessage(input.message);
     }
-    const userMessage = this.store.addMessage(caseSession, { role: 'user', body: input.message });
+    const userMessage = this.store.addMessage(caseSession, { role: 'user', body: input.message, investigationPreference: input.investigationPreference ?? 'auto' });
     this.events.inputReceived(caseSession, input.message);
     this.events.personaApplied(caseSession, personaName(caseSession.userPersona), personaGuide(caseSession.userPersona));
     this.events.inputReviewStarted(caseSession, input.message);

@@ -59,7 +59,7 @@ export function markInheritedActiveTurnsRetryable(
 
 export function findRetryableInterruption(caseSession: StoredCase): { userMessageId: string; placeholderMessageId: string } | undefined {
   const interruptedLog = [...caseSession.logs].reverse().find(
-    (log) => log.phase === 'turn_interrupted' && (log.detail as Record<string, unknown> | undefined)?.reason === 'service_restarted',
+    (log) => log.phase === 'turn_interrupted' && ['service_restarted', 'user_cancelled'].includes(String((log.detail as Record<string, unknown> | undefined)?.reason)),
   );
   if (!interruptedLog) return undefined;
 
@@ -71,7 +71,8 @@ export function findRetryableInterruption(caseSession: StoredCase): { userMessag
   const placeholder = caseSession.messages.find((message) => message.id === placeholderMessageId);
   if (placeholder?.role !== 'helper' || placeholder.replyToMessageId !== userMessageId) return undefined;
 
-  const retryStarted = caseSession.logs.some((log) => log.phase === 'turn_retry_started' && (log.detail as Record<string, unknown> | undefined)?.userMessageId === userMessageId);
+  const interruptionIndex = caseSession.logs.indexOf(interruptedLog);
+  const retryStarted = caseSession.logs.slice(interruptionIndex + 1).some((log) => log.phase === 'turn_retry_started' && (log.detail as Record<string, unknown> | undefined)?.userMessageId === userMessageId);
   if (retryStarted) return undefined;
 
   const hasFormalReply = caseSession.messages.some(
@@ -140,7 +141,10 @@ export function recoverStaleActiveTurn(
 }
 
 export function activeTurnStaleAfterMs(config: SuperHelperConfig): number {
-  const timeoutMs = config.claude.timeoutMs > 0 ? config.claude.timeoutMs : DEFAULT_STALE_TIMEOUT_MS;
+  const configuredTimeout = config.claude.investigationProfiles?.enabled
+    ? Math.max(config.claude.timeoutMs, config.claude.investigationProfiles.deep.timeoutMs)
+    : config.claude.timeoutMs;
+  const timeoutMs = configuredTimeout > 0 ? configuredTimeout : DEFAULT_STALE_TIMEOUT_MS;
   return timeoutMs + STALE_GRACE_MS;
 }
 

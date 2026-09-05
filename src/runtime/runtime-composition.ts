@@ -24,6 +24,7 @@ import { RagAnswerabilityService } from './rag-answerability-service.js';
 import { ReviewPresentationService } from './review-presentation.js';
 import { SessionLifecycle } from './session-lifecycle.js';
 import { WorkerDiagnosisService } from './worker-diagnosis.js';
+import type { InvestigationControl } from './investigation-control.js';
 
 export interface RuntimeCompositionOptions {
   mcp?: McpEvidenceServiceOptions;
@@ -35,6 +36,7 @@ export function createRuntimeServices(input: {
   store: CaseRepository;
   worker: DiagnosticWorker;
   options?: RuntimeCompositionOptions;
+  investigationControl?: InvestigationControl;
 }) {
   const { config, store, worker } = input;
   const options = input.options ?? {};
@@ -64,7 +66,7 @@ export function createRuntimeServices(input: {
       config.agent.ragAnswerabilityTopN ?? config.agent.evidenceCoverageTopN ?? 3,
     ),
   );
-  const workerDiagnosis = new WorkerDiagnosisService(store, worker, events, reviewer);
+  const workerDiagnosis = new WorkerDiagnosisService(store, worker, events, reviewer, { config, control: input.investigationControl });
   const redmineBranch = new RedmineBranch({
     planner: new QueryPlannerService(model, spec('historical_search_query_planner')),
     evidence: new HistoricalCaseEvidenceService(config, options.mcp),

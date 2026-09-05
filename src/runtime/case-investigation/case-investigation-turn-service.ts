@@ -12,6 +12,7 @@ import { gateHistoricalCases } from './historical-case-gate.js';
 import type { ParallelSourceCollector, ParallelSourceOutcome } from './parallel-source-collector.js';
 import { buildCaseInvestigationResult } from './result-builder.js';
 import type { WorkerVerification, WorkerVerificationOutcome } from './worker-verification.js';
+import { recordInvestigationMode } from '../event-recorder/investigation.js';
 
 export class CaseInvestigationTurnService {
   private readonly store: CaseRepository;
@@ -135,6 +136,11 @@ export class CaseInvestigationTurnService {
     };
     caseSession.status = 'diagnosing';
     this.store.addRun(caseSession, run);
+    if (persistedRequest.investigation) {
+      recordInvestigationMode(this.store, caseSession, persistedRequest.investigation,
+        persistedRequest.investigation.requestedMode === 'fast' ? 'manual_fast' :
+        persistedRequest.investigation.requestedMode === 'deep' ? 'manual_deep' : 'historical_verification');
+    }
     this.events.preflightDispatch(caseSession, persistedRequest);
     this.events.diagnosticRequestCreated(caseSession, persistedRequest);
     this.store.appendDailyMemory(`- ${new Date().toISOString()} ${caseSession.id} case investigation ${run.id}`);

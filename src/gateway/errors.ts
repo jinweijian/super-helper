@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import { InvalidWorkspaceIdError } from '../config.js';
 import { InvalidCaseIdError } from '../sessions/case-identifier.js';
+import { InvestigationProfilesError } from '../config/investigation-profiles.js';
 
 export class GatewayHttpError extends Error {
   constructor(
@@ -37,6 +38,10 @@ export function sendGatewayError(
 ): void {
   if (error instanceof GatewayHttpError) {
     writeError(res, error.status, error.publicMessage);
+    return;
+  }
+  if (error instanceof InvestigationProfilesError) {
+    writeError(res, 400, error.message);
     return;
   }
   if (error instanceof InvalidCaseIdError) {

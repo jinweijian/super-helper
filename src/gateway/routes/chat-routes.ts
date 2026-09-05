@@ -1,11 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolveContextWindowTokens, type SuperHelperConfig } from '../../config.js';
 import { estimateCaseContextUsage } from '../../context-window.js';
-import type { UserPersona } from '../../domain.js';
+import type { UserPersona, InvestigationPreference } from '../../domain.js';
 import type { DiagnosticRuntime } from '../../runtime/diagnostic-runtime.js';
 import { RetryableTurnError } from '../../runtime/diagnostic-runtime.js';
 import { readJson, sendJson } from '../http-utils.js';
 import { assertChatMessageSize, requireCaseId, resolveConfiguredWorkspaceId } from '../request-contracts.js';
+import { handleInvestigationRoutes } from './investigation-routes.js';
 
 export async function handleChatRoutes(
   req: IncomingMessage,
@@ -14,6 +15,7 @@ export async function handleChatRoutes(
   config: SuperHelperConfig,
   agent: DiagnosticRuntime,
 ): Promise<boolean> {
+  if (await handleInvestigationRoutes(req, res, url, agent)) return true;
   if (req.method !== 'POST') {
     return false;
   }
@@ -32,7 +34,12 @@ export async function handleChatRoutes(
     workspaceId?: string;
     persona?: UserPersona;
     async?: boolean;
+    investigationPreference?: InvestigationPreference;
   };
+  if (body.investigationPreference !== undefined && !['auto', 'fast', 'deep'].includes(body.investigationPreference)) {
+    sendJson(res, 400, {error: 'investigationPreference must be auto, fast or deep'});
+    return true;
+  }
   if (!body.message?.trim()) {
     sendJson(res, 400, { error: 'message is required' });
     return true;
@@ -54,6 +61,7 @@ export async function handleChatRoutes(
       message: body.message,
       workspaceId,
       persona: body.persona,
+      investigationPreference: body.investigationPreference,
     });
     const caseSession = turn.caseSession;
     const userMessageId = turn.userMessageId;
@@ -78,6 +86,7 @@ export async function handleChatRoutes(
     message: body.message,
     workspaceId,
     persona: body.persona,
+    investigationPreference: body.investigationPreference,
   });
 
   sendJson(res, 200, {

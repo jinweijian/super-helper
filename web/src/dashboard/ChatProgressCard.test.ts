@@ -27,6 +27,8 @@ vi.mock('./use-chat', async () => {
       appMocks.progressRef = progress;
       return {
         sending: ref(false),
+        acceptedCount: ref(0),
+        stop: vi.fn(),
         error: ref(appMocks.chatError),
         progress,
         send: vi.fn(),
@@ -94,7 +96,7 @@ vi.mock('./use-settings', async () => {
     useSettings: () => ({
       value: ref({}),
       actions: { load: { running: false, status: '', error: '' } },
-      load: vi.fn(),
+      load: vi.fn(async () => ({})),
     }),
   };
 });

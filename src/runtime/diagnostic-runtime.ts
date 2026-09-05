@@ -1,5 +1,5 @@
 import type { SuperHelperConfig } from '../config.js';
-import type { DiagnosticRun, UserPersona } from '../domain.js';
+import type { DiagnosticRun, UserPersona, InvestigationPreference } from '../domain.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
@@ -11,6 +11,8 @@ import type { McpEvidenceServiceOptions } from '../mcp/evidence-service.js';
 import { findRetryableInterruption, markInheritedActiveTurnsRetryable, removeInterruptionPlaceholder } from '../sessions/stale-turn.js';
 import { completePresentedTurn } from './turn-completion.js';
 import { createRuntimeServices } from './runtime-composition.js';
+import { InvestigationControl } from './investigation-control.js';
+import { InvestigationCancelled, completeCancelledInvestigation } from './investigation-cancellation.js';
 
 export interface AgentResponse extends RuntimeTurnResponse {}
 export interface DiagnosticRuntimeOptions {
@@ -21,6 +23,7 @@ export interface DiagnosticRuntimeOptions {
 export class DiagnosticRuntime {
   private readonly services: ReturnType<typeof createRuntimeServices>;
   private readonly turnQueue = new CaseTurnQueue();
+  private readonly investigationControl = new InvestigationControl();
 
   constructor(
     private readonly config: SuperHelperConfig,
@@ -28,7 +31,7 @@ export class DiagnosticRuntime {
     worker: DiagnosticWorker,
     options: DiagnosticRuntimeOptions = {},
   ) {
-    this.services = createRuntimeServices({ config, store, worker, options });
+    this.services = createRuntimeServices({ config, store, worker, options, investigationControl: this.investigationControl });
   }
 
   async handleUserMessage(input: {
@@ -36,6 +39,7 @@ export class DiagnosticRuntime {
     message: string;
     workspaceId?: string;
     persona?: UserPersona;
+    investigationPreference?: InvestigationPreference;
   }): Promise<AgentResponse> {
     const turn = this.startUserTurn(input);
     return this.completeUserTurn(turn.caseSession.id, turn.userMessageId);
@@ -50,12 +54,21 @@ export class DiagnosticRuntime {
     message: string;
     workspaceId?: string;
     persona?: UserPersona;
+    investigationPreference?: InvestigationPreference;
   }): AcceptedUserTurn {
     return this.services.sessions.startUserTurn(input);
   }
 
   async completeUserTurn(caseId: string, userMessageId: string): Promise<AgentResponse> {
     return this.turnQueue.run(caseId, () => this.completeUserTurnNow(caseId, userMessageId));
+  }
+
+  investigationProgress(caseId: string, userMessageId: string) {
+    return this.investigationControl.snapshot(caseId, userMessageId);
+  }
+
+  cancelInvestigation(caseId: string, userMessageId: string): boolean {
+    return this.investigationControl.cancel(caseId, userMessageId);
   }
 
   recordTurnFailure(caseId: string, error: unknown, replyToMessageId?: string): void {
@@ -118,9 +131,24 @@ export class DiagnosticRuntime {
     const replyToMessageId = userMessageId;
 
     bindTurnContextCutoff(caseSession, userMessageId);
+    const preference = caseSession.messages.find(message => message.id === userMessageId)?.investigationPreference ?? 'auto';
+    this.investigationControl.begin(caseId, userMessageId, preference);
     try {
-      return await this.runTurnPipeline(caseSession, userMessage, replyToMessageId);
+      const response = await this.runTurnPipeline(caseSession, userMessage, replyToMessageId);
+      if (this.investigationControl.options(caseId).signal?.aborted) {
+        const accepted = caseSession.runs.some(run =>
+          run.request?.answerGoal.sourceMessageIds.includes(userMessageId) &&
+          run.result?.claims.some(claim => (claim.type === 'fact' || claim.type === 'inference') && claim.evidenceIds.length > 0));
+        if (!accepted) return completeCancelledInvestigation(this.store, caseSession, userMessageId);
+      }
+      return response;
+    } catch (error) {
+      if (error instanceof InvestigationCancelled || this.investigationControl.options(caseId).signal?.aborted) {
+        return completeCancelledInvestigation(this.store, caseSession, userMessageId);
+      }
+      throw error;
     } finally {
+      this.investigationControl.finish(caseId, userMessageId);
       clearTurnContextCutoff(caseSession);
     }
   }
@@ -136,6 +164,7 @@ export class DiagnosticRuntime {
     }
 
     const decision = await this.services.preflight.decide(caseSession, userMessage);
+    if (this.investigationControl.options(caseSession.id).signal?.aborted) throw new InvestigationCancelled();
     if (decision.action === 'ask_user') {
       this.services.events.preflightAskUser(caseSession, decision);
       const reply = formatPreflightQuestion(decision.question, decision.missingInfo);

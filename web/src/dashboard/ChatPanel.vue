@@ -5,9 +5,11 @@ import RichAnswer from './RichAnswer.vue';
 import ChatProgressCard from './ChatProgressCard.vue';
 import type { ChatProgressState } from './chat-progress';
 
-const props = defineProps<{ session?: SessionDto; sending: boolean; progress?: ChatProgressState; error?: string; selectedPersona?: string }>();
-const emit = defineEmits<{ send: [message: string, persona: string]; updatePersona: [persona: string]; retry: [] }>();
+const props = defineProps<{ session?: SessionDto; sending: boolean; progress?: ChatProgressState; error?: string; selectedPersona?: string; acceptedCount?: number; investigationEnabled?: boolean }>();
+const emit = defineEmits<{ send: [message: string, persona: string, investigationPreference: 'auto' | 'fast' | 'deep']; updatePersona: [persona: string]; retry: []; stop: [] }>();
 const message = ref('');
+const investigationPreference = ref<'auto' | 'fast' | 'deep'>('auto');
+watch(() => props.acceptedCount, () => { investigationPreference.value = 'auto'; message.value = ''; });
 const persona = computed({ get: () => props.selectedPersona || props.session?.userPersona || 'operations', set: (value: string) => emit('updatePersona', value) });
 const chat = ref<HTMLElement>();
 const blockedReason = computed(() => props.session?.archivedAt ? '这个会话已归档，只能阅读，不能继续追问。' : props.session?.contextUsage?.available === false ? '上下文窗口已满，请新建诊断后继续。' : '');
@@ -35,8 +37,7 @@ function relativeTime(iso?: string): string {
 function submit(): void {
   const body = message.value.trim();
   if (!body || props.sending || blockedReason.value) return;
-  emit('send', body, persona.value);
-  message.value = '';
+  emit('send', body, persona.value, investigationPreference.value);
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -66,7 +67,7 @@ function onKeydown(event: KeyboardEvent): void {
         <pre v-if="item.role === 'user'">{{ item.body }}</pre>
         <RichAnswer v-else :text="item.body" />
       </article>
-      <ChatProgressCard v-if="progress && ['running', 'interrupted', 'reconnecting'].includes(progress.state)" :progress="progress" @retry="emit('retry')" />
+      <ChatProgressCard v-if="progress && ['running', 'interrupted', 'reconnecting'].includes(progress.state)" :progress="progress" @retry="emit('retry')" @stop="emit('stop')" />
     </section>
     <form class="composer" @submit.prevent="submit">
       <label class="sr-only" for="chat-input">输入问题</label>
@@ -74,6 +75,13 @@ function onKeydown(event: KeyboardEvent): void {
       <p v-if="blockedReason" class="warning-banner">{{ blockedReason }}</p>
       <textarea id="chat-input" v-model="message" :disabled="sending || !!blockedReason" :placeholder="blockedReason || '描述故障、回答追问，或输入：不清楚'" @keydown="onKeydown" />
       <div class="composer-actions">
+        <label>排查模式
+          <select v-model="investigationPreference" aria-label="排查模式" :disabled="sending || !investigationEnabled">
+            <option value="auto">自动</option>
+            <option value="fast">快速</option>
+            <option value="deep">深度</option>
+          </select>
+        </label>
         <label>用户视角
           <select v-model="persona">
             <option value="operations">运营人员</option>
@@ -84,6 +92,7 @@ function onKeydown(event: KeyboardEvent): void {
         </label>
         <button class="primary" type="submit" :disabled="sending || !!blockedReason || !message.trim()">发送</button>
       </div>
+      <p v-if="!investigationEnabled" class="muted">排查模式尚未启用，可在设置中配置。</p>
     </form>
   </main>
 </template>

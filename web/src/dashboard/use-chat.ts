@@ -7,6 +7,7 @@ interface ChatOptions {
   fetcher?: Fetcher;
   pollDelayMs?: number;
   maxPolls?: number;
+  trackInvestigation?: boolean;
 }
 
 interface SendInput {
@@ -14,6 +15,7 @@ interface SendInput {
   workspaceId: string;
   message: string;
   persona: string;
+  investigationPreference?: 'auto' | 'fast' | 'deep';
 }
 
 export function pendingUserMessageId(session: SessionDto): string | undefined {
@@ -31,6 +33,8 @@ export function useChat(options: ChatOptions = {}) {
   const sending = ref(false);
   const error = ref('');
   const progress = ref<ChatProgressState>({ state: 'idle' });
+  const acceptedCount = ref(0);
+  let activeTarget: {caseId: string; userMessageId: string} | undefined;
   let abortController: AbortController | undefined;
   let generation = 0;
 
@@ -47,6 +51,7 @@ export function useChat(options: ChatOptions = {}) {
         { ...request, signal },
       );
       assertCurrent(signal, currentGeneration);
+      acceptedCount.value += 1;
       return await pollCurrent(accepted.caseId, accepted.userMessageId, signal, currentGeneration, onSession);
     } catch (cause) {
       if (isAbortError(cause)) throw cause;
@@ -70,6 +75,7 @@ export function useChat(options: ChatOptions = {}) {
     currentGeneration: number,
     onSession?: (session: SessionDto) => void,
   ): Promise<SessionDto> {
+    activeTarget = {caseId, userMessageId};
     if (progress.value.state !== 'running') progress.value = { state: 'running', startedAt: Date.now(), lastActivityAt: Date.now() };
     const maxPolls = options.maxPolls ?? Infinity;
     let reconnectDelay = 500;
@@ -97,13 +103,30 @@ export function useChat(options: ChatOptions = {}) {
       progress.value = { ...progress.value, state: 'running', lastActivityAt: Date.now(), session: body.session };
       onSession?.(body.session);
       if (body.session.retryableTurn?.userMessageId === userMessageId) {
-        const message = '这个回合因服务重启被中断，你可以点击“一键重试”继续。';
+        const message = body.session.retryableTurn.reason === 'user_cancelled'
+          ? '排查已停止，你可以点击“一键重试”继续。'
+          : '这个回合因服务重启被中断，你可以点击“一键重试”继续。';
+        activeTarget = undefined;
         progress.value = { ...progress.value, state: 'interrupted', session: body.session, error: message };
         throw new Error(message);
       }
       if (hasHelperReply(body.session, userMessageId)) {
+        activeTarget = undefined;
         progress.value = { ...progress.value, state: 'completed', session: body.session };
         return body.session;
+      }
+      if (options.trackInvestigation) {
+        try {
+          const state = await apiJson<{progress: ChatProgressState['investigation'] | null}>(
+            fetcher, `/api/chat/progress?caseId=${encodeURIComponent(caseId)}&userMessageId=${encodeURIComponent(userMessageId)}`, {signal},
+          );
+          assertCurrent(signal, currentGeneration);
+          progress.value = {...progress.value, investigation: state.progress ?? undefined};
+          if (state.progress?.lastActivityAt) progress.value.lastActivityAt = Date.parse(state.progress.lastActivityAt);
+        } catch (cause) {
+          assertCurrent(signal, currentGeneration);
+          if (isAbortError(cause)) throw cause;
+        }
       }
       await delay(options.pollDelayMs ?? 500, signal);
       assertCurrent(signal, currentGeneration);
@@ -140,6 +163,7 @@ export function useChat(options: ChatOptions = {}) {
   }
 
   function cancel(): void {
+    activeTarget = undefined;
     generation += 1;
     abortController?.abort();
     abortController = undefined;
@@ -148,13 +172,26 @@ export function useChat(options: ChatOptions = {}) {
     progress.value = { state: 'idle' };
   }
 
+  async function stop(): Promise<void> {
+    if (!activeTarget) return;
+    const target = {...activeTarget};
+    const currentGeneration = generation;
+    try {
+      await apiJson(fetcher, '/api/chat/cancel', jsonRequest('POST', target));
+      if (currentGeneration !== generation) return;
+      if (progress.value.investigation) progress.value.investigation.stopping = true;
+    } catch (cause) {
+      if (currentGeneration === generation) error.value = cause instanceof Error ? cause.message : '停止失败，请重试';
+    }
+  }
+
   function assertCurrent(signal: AbortSignal, currentGeneration: number): void {
     if (signal.aborted || currentGeneration !== generation) {
       throw new DOMException('aborted', 'AbortError');
     }
   }
 
-  return { sending, error, progress, send, poll, retry, cancel };
+  return { sending, error, progress, acceptedCount, send, poll, retry, cancel, stop };
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {

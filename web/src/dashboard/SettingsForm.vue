@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue';
 import type { SettingsActionState } from './use-settings';
+import InvestigationSettings from './InvestigationSettings.vue';
 
 const props = defineProps<{ settings: Record<string, any>; actions: Partial<Record<string, SettingsActionState>> }>();
 const emit = defineEmits<{ saveModel: [value: Record<string, unknown>]; saveEmbedding: [value: Record<string, unknown>]; saveRerank: [value: Record<string, unknown>]; saveClaude: [value: Record<string, unknown>]; testModel: [value: Record<string, unknown>]; testEmbedding: [value: Record<string, unknown>]; testRerank: [value: Record<string, unknown>] }>();
@@ -13,6 +14,14 @@ function hydrate(settings: Record<string, any>): void {
   form.embedding = { ...settings.embedding, apiKey: '' };
   form.rerank = { ...settings.rerank, apiKey: '' };
   form.claude = { timeoutMs: settings.claude?.timeoutMs ?? 1200000, maxBudgetUsd: settings.claude?.maxBudgetUsd ?? '', sessionBusyMaxRetries: settings.claude?.sessionBusyMaxRetries ?? 3, sessionBusyRetryDelayMs: settings.claude?.sessionBusyRetryDelayMs ?? 3000 };
+  form.claude.investigationProfiles = settings.claude?.investigationProfiles
+    ? JSON.parse(JSON.stringify(settings.claude.investigationProfiles))
+    : {enabled:false,fast:{model:'',effort:'low'},deep:{model:'',effort:'high',timeoutMs:settings.claude?.timeoutMs || 1200000}};
+}
+function saveClaude(): void {
+  const body = {...form.claude};
+  if (!body.investigationProfiles.enabled && !props.settings.claude?.investigationProfiles) delete body.investigationProfiles;
+  emit('saveClaude', body);
 }
 function clean(value: Record<string, any>): Record<string, unknown> { return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== 'apiKey' || String(item).trim())); }
 function feedback(name: string, label: string): string { const state = props.actions[name]; return state?.running ? `正在${label}…` : state?.error || state?.status || ''; }
@@ -32,7 +41,7 @@ function feedback(name: string, label: string): string { const state = props.act
     </fieldset>
     <fieldset><legend>Embedding</legend><label class="check-label"><input v-model="form.embedding.enabled" type="checkbox" />启用 Embedding</label><div class="field-grid"><label>Provider<input v-model="form.embedding.provider" /></label><label>模型<input v-model="form.embedding.model" /></label></div><label>Base URL<input v-model="form.embedding.baseUrl" /></label><div class="field-grid"><label>API Key 环境变量<input v-model="form.embedding.apiKeyEnv" /></label><label>维度<input v-model.number="form.embedding.dimensions" type="number" /></label></div><label>API Key<input v-model="form.embedding.apiKey" type="password" placeholder="留空保持原值" /></label><p class="status-banner">{{ feedback('testEmbedding', '测试 Embedding') || feedback('saveEmbedding', '保存 Embedding') }}</p><div class="stack-actions"><button type="button" :disabled="actions.testEmbedding?.running" @click="emit('testEmbedding', clean(form.embedding))">测试 Embedding</button><button type="button" @click="emit('saveEmbedding', clean(form.embedding))">保存 Embedding</button></div></fieldset>
     <fieldset><legend>Rerank</legend><label class="check-label"><input v-model="form.rerank.enabled" type="checkbox" />启用 Rerank</label><div class="field-grid"><label>Provider<input v-model="form.rerank.provider" /></label><label>模型<input v-model="form.rerank.model" /></label></div><label>Base URL<input v-model="form.rerank.baseUrl" /></label><div class="field-grid"><label>API Key 环境变量<input v-model="form.rerank.apiKeyEnv" /></label><label>Top N<input v-model.number="form.rerank.topN" type="number" /></label></div><label>API Key<input v-model="form.rerank.apiKey" type="password" placeholder="留空保持原值" /></label><p class="status-banner">{{ feedback('testRerank', '测试 Rerank') || feedback('saveRerank', '保存 Rerank') }}</p><div class="stack-actions"><button type="button" :disabled="actions.testRerank?.running" @click="emit('testRerank', clean(form.rerank))">测试 Rerank</button><button type="button" @click="emit('saveRerank', clean(form.rerank))">保存 Rerank</button></div></fieldset>
-    <fieldset><legend>Claude</legend><div class="field-grid"><label>超时毫秒<input v-model.number="form.claude.timeoutMs" type="number" /></label><label>预算 USD<input v-model="form.claude.maxBudgetUsd" type="number" step="0.01" placeholder="不限制" /></label></div><div class="field-grid"><label>Session busy 重试次数<input v-model.number="form.claude.sessionBusyMaxRetries" type="number" /></label><label>重试间隔毫秒<input v-model.number="form.claude.sessionBusyRetryDelayMs" type="number" /></label></div><p class="status-banner">{{ feedback('saveClaude', '保存 Claude') }}</p><button type="button" @click="emit('saveClaude', form.claude)">保存 Claude</button></fieldset>
+    <fieldset><legend>Claude</legend><div class="field-grid"><label>超时毫秒<input v-model.number="form.claude.timeoutMs" type="number" /></label><label>预算 USD<input v-model="form.claude.maxBudgetUsd" type="number" step="0.01" placeholder="不限制" /></label></div><div class="field-grid"><label>Session busy 重试次数<input v-model.number="form.claude.sessionBusyMaxRetries" type="number" /></label><label>重试间隔毫秒<input v-model.number="form.claude.sessionBusyRetryDelayMs" type="number" /></label></div><InvestigationSettings v-model="form.claude.investigationProfiles" /><p class="status-banner">{{ feedback('saveClaude', '保存 Claude') }}</p><button type="button" @click="saveClaude">保存 Claude</button></fieldset>
     <fieldset><legend>多 Agent</legend><article v-for="agent in settings.agents || []" :key="agent.id" class="agent-summary"><strong>{{ agent.name || agent.id }}</strong><span>{{ agent.role }}</span></article><p v-if="!settings.agents?.length" class="muted">暂无 Agent 配置摘要。</p></fieldset>
   </form>
 </template>
