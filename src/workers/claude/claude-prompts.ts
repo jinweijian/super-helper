@@ -1,7 +1,12 @@
 import type { DiagnosticRequest } from '../../domain.js';
 
-export function buildClaudeSystemPrompt(): string {
-  return `You are an inspection tool called by super helper Agent.
+export function buildClaudeSystemPrompt(profile?: 'fast' | 'deep'): string {
+  const investigationPolicy = profile === 'fast'
+    ? 'Fast investigation: inspect the provided artifact targets and candidate files first. Expand the search scope at most once. Stop with structured partial evidence when this bounded search is insufficient.'
+    : profile === 'deep'
+      ? 'Deep investigation: form testable hypotheses across modules and inspect both supporting evidence and counterevidence. Return structured evidence and explicit unknowns.'
+      : '';
+  return `${investigationPolicy}${investigationPolicy ? '\n\n' : ''}You are an inspection tool called by super helper Agent.
 
 Do not write a user-facing answer.
 Do not assume missing facts.

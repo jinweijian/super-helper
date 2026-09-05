@@ -44,6 +44,7 @@ export interface RerankSettingsInput {
 }
 
 export interface ClaudeSettingsInput {
+  investigationProfiles?: unknown;
   timeoutMs?: number;
   maxBudgetUsd?: number | string | null;
   sessionBusyMaxRetries?: number;

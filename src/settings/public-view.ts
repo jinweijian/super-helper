@@ -57,6 +57,7 @@ export function publicSettings(config: SuperHelperConfig, secrets?: PublicSettin
       maxBudgetUsd: config.claude.maxBudgetUsd,
       sessionBusyMaxRetries: config.claude.sessionBusyMaxRetries,
       sessionBusyRetryDelayMs: config.claude.sessionBusyRetryDelayMs,
+      investigationProfiles: config.claude.investigationProfiles,
     },
   };
 }

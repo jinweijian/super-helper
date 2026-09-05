@@ -2,12 +2,16 @@ import type { SuperHelperConfig } from '../config.js';
 import { saveConfig } from '../config.js';
 import type { ClaudeSettingsInput, SettingsSecretStore } from './contracts.js';
 import { publicSettings } from './public-view.js';
+import { validateInvestigationProfiles } from '../config/investigation-profiles.js';
 
 export function updateClaudeSettings(input: {
   config: SuperHelperConfig;
   secrets: SettingsSecretStore;
   body: ClaudeSettingsInput;
 }): unknown {
+  const profiles = input.body.investigationProfiles === undefined ? undefined
+    : validateInvestigationProfiles(input.body.investigationProfiles);
+  if (profiles) input.config.claude.investigationProfiles = profiles;
   if (input.body.timeoutMs !== undefined) {
     input.config.claude.timeoutMs = Math.max(0, Number(input.body.timeoutMs));
   }

@@ -4,6 +4,7 @@ import { writeJsonAtomic } from '../onboarding/atomic-json.js';
 import type { SuperHelperConfig } from './contracts.js';
 import { DEFAULT_HOME, defaultConfig } from './defaults.js';
 import { selectActiveModelProvider } from './resolution.js';
+import { validateInvestigationProfiles } from './investigation-profiles.js';
 
 export function configPath(homeDir = DEFAULT_HOME): string {
   return join(homeDir, 'config.json');
@@ -63,6 +64,9 @@ export function loadConfig(path = configPath()): SuperHelperConfig {
     delete merged.claude.maxBudgetUsd;
   }
   validateHistoricalCaseSources(merged);
+  if (merged.claude.investigationProfiles !== undefined) {
+    merged.claude.investigationProfiles = validateInvestigationProfiles(merged.claude.investigationProfiles);
+  }
   return merged;
 }
 

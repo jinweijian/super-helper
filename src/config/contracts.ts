@@ -2,6 +2,7 @@ import type { SecretRef, UserPersona, WorkspaceConfig } from '../domain.js';
 import type { EmbeddingProviderConfig } from '../providers/embedding/contract.js';
 import type { RerankProviderConfig } from '../providers/rerank/contract.js';
 import type { McpServerConfig } from '../mcp/contracts.js';
+import type { InvestigationProfiles } from './investigation-profiles.js';
 export interface ModelProviderConfig {
   type: 'openai-compatible';
   baseUrl: string;
@@ -59,6 +60,7 @@ export interface SuperHelperConfig {
   embedding: EmbeddingProviderConfig;
   rerank: RerankProviderConfig;
   claude: {
+    investigationProfiles?: InvestigationProfiles;
     enabled: boolean;
     command: string;
     commandWhitelist: string[];
