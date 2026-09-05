@@ -23,5 +23,6 @@ export function completePresentedTurn(input: {
     caseSession,
     assistantMessage: review.reply,
     decision: review.decision,
+    hasReviewedAnswer: review.hasReviewedAnswer,
   };
 }

@@ -102,6 +102,8 @@ export class ReviewPresentationService {
     const caseStatus = caseStatusFromDiagnosticResult(validated);
     this.events.evidenceValidationResult(caseSession, run.id, validation);
     const frozenDecision = decisionFromDiagnosticResult(validated);
+    const hasReviewedAnswer = [...projection.primary, ...projection.supporting]
+      .some(segment => segment.type === 'fact' || segment.type === 'inference');
 
     if (workerFailedBeforeUsableResult(run)) {
       return {
@@ -112,6 +114,7 @@ export class ReviewPresentationService {
         }),
         decision: frozenDecision,
         caseStatus,
+        hasReviewedAnswer: false,
       };
     }
 
@@ -123,6 +126,7 @@ export class ReviewPresentationService {
             reply,
             decision: frozenDecision,
             caseStatus,
+            hasReviewedAnswer,
           };
         }
       } catch (error) {
@@ -135,6 +139,7 @@ export class ReviewPresentationService {
       reply: renderSafeFrozenAnswer({ projection, persona: caseSession.userPersona }),
       decision: frozenDecision,
       caseStatus,
+      hasReviewedAnswer,
     };
   }
 

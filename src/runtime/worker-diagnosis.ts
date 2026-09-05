@@ -1,4 +1,4 @@
-import type { ClaudeWorkerResponse, DiagnosticRequest, DiagnosticResult } from '../domain.js';
+import type { ClaudeWorkerResponse, DiagnosticRequest } from '../domain.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
 import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
 import type { ReviewPresentationResult } from './contracts.js';
@@ -98,7 +98,7 @@ export class WorkerDiagnosisService {
     let review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
       coverageEvidenceEnvelopes: workerCoverageEnvelopes(workerResponse),
     });
-    if (this.investigation?.control?.options(request.caseId).signal?.aborted) return this.cancelledReview(review, run.result);
+    if (this.investigation?.control?.options(request.caseId).signal?.aborted) return this.cancelledReview(review);
     const escalation = request.investigation && !workerResponse.trace.error ? nextInvestigation(request.investigation, review.decision) : undefined;
     if (request.investigation && !escalation && (
       request.investigation.resolvedProfile === 'fast' ||
@@ -173,7 +173,7 @@ export class WorkerDiagnosisService {
     } catch (error) {
       if (!(error instanceof InvestigationCancelled)) throw error;
       followUpRun.status = 'partial';
-      return this.cancelledReview(review, run.result);
+      return this.cancelledReview(review);
     }
     applyWorkerResponseToRun({ run: followUpRun, response: followUpResponse });
     caseSession.status = 'diagnosing';
@@ -183,10 +183,10 @@ export class WorkerDiagnosisService {
     review = await this.reviewer.reviewAndFormat(caseSession, followUpResponse.result, followUpRun, {
       coverageEvidenceEnvelopes: workerCoverageEnvelopes(followUpResponse),
     });
-    if (review.decision !== 'final' && !usableReviewedClaims(followUpRun.result) && usableReviewedClaims(run.result)) {
+    if (review.decision !== 'final' && !review.hasReviewedAnswer && previousReview.hasReviewedAnswer) {
       review = { ...previousReview, reply: '初步判断（深度排查未补齐证据，不能作为最终结论）：\n\n' + previousReview.reply, decision: 'partial', caseStatus: 'partial' };
     }
-    if (this.investigation?.control?.options(request.caseId).signal?.aborted) return this.cancelledReview(review, followUpRun.result);
+    if (this.investigation?.control?.options(request.caseId).signal?.aborted) return this.cancelledReview(review);
     return review;
   }
 
@@ -208,9 +208,9 @@ export class WorkerDiagnosisService {
     return response;
   }
 
-  private cancelledReview(review: ReviewPresentationResult, result?: DiagnosticResult): ReviewPresentationResult {
-    if (!result?.claims.some(claim => (claim.type === 'fact' || claim.type === 'inference') && claim.evidenceIds.length > 0)) throw new InvestigationCancelled();
-    return { ...review, reply: '排查已停止。以下为已审核的初步判断，不能作为最终结论。\n\n' + review.reply, decision: 'partial', caseStatus: 'partial' };
+  private cancelledReview(review: ReviewPresentationResult): ReviewPresentationResult {
+    if (!review.hasReviewedAnswer) throw new InvestigationCancelled();
+    return { ...review, decision: 'partial', caseStatus: 'partial' };
   }
 }
 
@@ -225,10 +225,6 @@ function validWorkerLeads(leads: HistoricalLead[]): boolean {
       check.expectedMismatch.length > 0 && check.expectedMismatch.length <= 500
     ))
   ));
-}
-
-function usableReviewedClaims(result?: DiagnosticResult): boolean {
-  return Boolean(result?.claims.some(claim => (claim.type === 'fact' || claim.type === 'inference') && claim.evidenceIds.length > 0));
 }
 
 function workerCoverageEnvelopes(

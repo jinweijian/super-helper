@@ -136,10 +136,13 @@ export class DiagnosticRuntime {
     try {
       const response = await this.runTurnPipeline(caseSession, userMessage, replyToMessageId);
       if (this.investigationControl.options(caseId).signal?.aborted) {
-        const accepted = caseSession.runs.some(run =>
-          run.request?.answerGoal.sourceMessageIds.includes(userMessageId) &&
-          run.result?.claims.some(claim => (claim.type === 'fact' || claim.type === 'inference') && claim.evidenceIds.length > 0));
-        if (!accepted) return completeCancelledInvestigation(this.store, caseSession, userMessageId);
+        if (!response.hasReviewedAnswer) return completeCancelledInvestigation(this.store, caseSession, userMessageId);
+        response.assistantMessage = '排查已停止。以下为已审核的初步判断，不能作为最终结论。\n\n' + response.assistantMessage;
+        response.decision = 'partial';
+        response.caseSession.status = 'partial';
+        const helper = response.caseSession.messages.find(message => message.role === 'helper' && message.replyToMessageId === userMessageId);
+        if (helper) helper.body = response.assistantMessage;
+        this.store.saveCase(response.caseSession);
       }
       return response;
     } catch (error) {
