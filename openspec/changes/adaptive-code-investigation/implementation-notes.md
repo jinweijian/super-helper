@@ -13,6 +13,7 @@ profiles 保持默认关闭，Fast turn 数不设未经校准的默认值。真�
 - 模式策略、控制器、Runtime 和 HTTP 联调：覆盖手动边界、一次升级、历史核验、按消息取消、脱敏进度和重试。
 - Worker fake 进程测试：11 个新增案例与 7 个既有 Worker 回归通过。CLI 2.1.218 的 help 已本机检查；没有真实模型调用。
 - 前端新增失败测试验证缺少选择器与 stop API，随后实现通过；覆盖接收成功复位和完整 profile 保存。
+- pnpm test:web：57/57 通过；Chromium 原有 smoke 5/5 和新增模式提交/复位浏览器合同 1/1 通过。浏览器命令输出包含环境 NO_COLOR/FORCE_COLOR 兼容警告，不影响测试。
 
 ## 回头重新思考
 

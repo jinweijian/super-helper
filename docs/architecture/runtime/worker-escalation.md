@@ -69,7 +69,7 @@ buildDiagnosticRequest
 - 不把 Worker stdout/stderr 直接暴露给主聊天。
 - 不请求默认写操作。
 - 不读取另一个 case、tenant、user 或 workspace 的上下文。
-# 自适应排查模式
+## 自适应排查模式
 
 消息可携带 investigationPreference（auto/fast/deep），旧消息缺省 auto。启用 claude.investigationProfiles 后，Runtime 在完成已有来源收集后，使用结构化候选、冲突和历史核验信号选择 profile。手动快速不升级；自动快速审核不足最多追加一次独立 Deep Run。每个 Run 保持同一 AnswerGoal，结果继续经过 Evidence Review。
 
