@@ -27,6 +27,17 @@ test('session busy 等待期间取消不等待重试延迟', async () => {
   assert.equal(result.error, 'Worker cancelled');
   assert.ok(Date.now() - started < 1000);
 });
+
+test('取消结束继承管道且忽略 SIGTERM 的后代进程', { skip: process.platform === 'win32' }, async () => {
+  const controller = new AbortController();
+  const descendant = `process.on('SIGTERM',()=>{}); console.log(JSON.stringify({type:'result',subtype:'success',result:'ready'}));setTimeout(()=>process.exit(0),1500)`;
+  const source = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{stdio:['ignore','inherit','inherit']});setInterval(()=>{},1000)`;
+  const started = Date.now();
+  const result = await runCommand(process.execPath, ['-e', source], process.cwd(), 3000,
+    { streamJson: true, signal: controller.signal, terminationGraceMs: 30, onProgress: () => controller.abort() });
+  assert.equal(result.error, 'Worker cancelled');
+  assert.ok(Date.now() - started < 700, '子进程管道应随进程组强杀及时关闭');
+});
 import { defaultConfig, saveConfig, loadConfig } from '../dist/config.js';
 import { ClaudeCodeWorker } from '../dist/workers/claude/claude-code-worker.js';
 
@@ -41,6 +52,16 @@ test('profiles 配置 round-trip 与旧缺省兼容', () => {
     saveConfig(config, path);
     assert.deepEqual(loadConfig(path).claude.investigationProfiles, config.claude.investigationProfiles);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Fast 和 Deep 格式错误以及未知 envelope 不进入证据', async () => {
+  const { parseClaudeOutput } = await import('../dist/workers/claude/claude-output-parser.js');
+  const request = { runId: 'run_01' };
+  for (const stdout of [JSON.stringify({type:'result',subtype:'success',result:'PRIVATE_FILE_BODY'}), JSON.stringify({type:'result',subtype:'PRIVATE_FILE_BODY',errors:['PRIVATE_FILE_BODY']})]) {
+    const result = parseClaudeOutput(stdout, request, { omitRawOutput: true });
+    assert.equal(result.status, 'partial');
+    assert.equal(JSON.stringify(result).includes('PRIVATE_FILE_BODY'), false);
+  }
 });
 
 test('Fast 参数使用明确 profile 且旧配置保持兼容', async () => {
@@ -128,6 +149,42 @@ setTimeout(()=>console.log(JSON.stringify({type:'result',subtype:'success',resul
     const bounded = await worker.diagnose(request);
     assert.equal(bounded.result.status, 'partial');
     assert.match(bounded.result.summary, /error_max_turns/);
+    assert.equal(bounded.trace.error, undefined);
+    assert.equal(bounded.trace.exitCode, 0);
     assert.equal(JSON.stringify(bounded).includes('SECRET'), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Worker 进程树取消后释放队列，Fast Deep malformed 不泄漏', { skip: process.platform === 'win32' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'investigation-tree-'));
+  try {
+    const command = join(dir, 'fake-claude');
+    const descendant = `process.on('SIGTERM',()=>{});console.log(JSON.stringify({type:'assistant',message:{content:[{type:'tool_use',id:'s',name:'Grep',input:{}}]}}));setTimeout(()=>process.exit(0),4000)`;
+    writeFileSync(command, `#!/usr/bin/env node
+const payload=process.argv.at(-1);
+if(payload.includes('spawn-descendant')) {
+require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendant)}],{stdio:['ignore','inherit','inherit']});setInterval(()=>{},1000);
+} else console.log(JSON.stringify({type:'result',subtype:payload.includes('unknown-envelope')?'PRIVATE_FILE_BODY':'success',result:'PRIVATE_FILE_BODY'}));
+`);
+    chmodSync(command, 0o755);
+    const config = defaultConfig();
+    Object.assign(config.claude, { enabled: true, command, commandWhitelist: [command], investigationProfiles: { enabled: true, fast: {model:'f',effort:'low',maxTurns:7},deep:{model:'d',effort:'high',timeoutMs:1200000} } });
+    config.workspaces = [{id:'w',rootPath:process.cwd(),mcpToolIds:[]}];
+    const worker = new ClaudeCodeWorker(config);
+    const request = {workspaceId:'w',claudeSessionId:'tree',runId:'run_01',userGoal:'spawn-descendant',unknowns:[],investigation:{requestedMode:'deep',resolvedProfile:'deep',attempt:1,escalationAllowed:false}};
+    const controller = new AbortController();
+    const started = Date.now();
+    const first = worker.diagnose(request,{signal:controller.signal,onProgress:()=>controller.abort()});
+    const next = worker.diagnose({...request,userGoal:'normal'});
+    assert.equal((await first).trace.error,'Worker cancelled');
+    assert.equal(JSON.stringify(await next).includes('PRIVATE_FILE_BODY'),false);
+    assert.ok(Date.now()-started<2500,'释放队列无需等待后代自然退出');
+    for (const resolvedProfile of ['fast','deep']) {
+      for (const userGoal of ['normal','unknown-envelope']) {
+        const result = await worker.diagnose({...request,userGoal,investigation:{...request.investigation,resolvedProfile}});
+        assert.equal(result.result.status,'partial');
+        assert.equal(JSON.stringify(result).includes('PRIVATE_FILE_BODY'),false);
+      }
+    }
+  } finally { rmSync(dir,{recursive:true,force:true}); }
 });

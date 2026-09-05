@@ -2,20 +2,21 @@ import type { ClaudeWorkerResponse, DiagnosticRequest, DiagnosticResult } from '
 import type { CommandExecution } from './claude-cli.js';
 import { normalizeWorkerDiagnosticResult } from './worker-result-normalizer.js';
 
-export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): DiagnosticResult {
+export function parseClaudeOutput(stdout: string, request: DiagnosticRequest, options: { omitRawOutput?: boolean } = {}): DiagnosticResult {
   try {
     const outer = JSON.parse(stdout) as { result?: string; type?: string; subtype?: string; errors?: unknown[] } | DiagnosticResult;
     if ('type' in outer && outer.type === 'result' && outer.subtype && outer.subtype !== 'success') {
+      const subtype = options.omitRawOutput && outer.subtype !== 'error_max_turns' ? 'error_during_execution' : outer.subtype;
       return {
         status: 'partial',
-        summary: `Claude Code returned ${outer.subtype} before producing a DiagnosticResult.`,
+        summary: `Claude Code returned ${subtype} before producing a DiagnosticResult.`,
         missingInfo: [],
         evidence: [
           {
             id: 'ev_worker_result_subtype',
             kind: 'log',
             source: request.runId,
-            summary: stdout.slice(0, 1000),
+            summary: options.omitRawOutput ? 'Worker 未完成结构化诊断。' : stdout.slice(0, 1000),
             confidence: 'low',
           },
         ],
@@ -23,7 +24,7 @@ export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): D
           {
             type: 'unknown',
             role: 'unknown',
-            text: `Claude Code did not complete the requested analysis: ${outer.subtype}.`,
+            text: `Claude Code did not complete the requested analysis: ${subtype}.`,
             evidenceIds: ['ev_worker_result_subtype'],
             answers: [],
           },
@@ -47,7 +48,7 @@ export function parseClaudeOutput(stdout: string, request: DiagnosticRequest): D
           id: 'ev_raw_worker_output',
           kind: 'unknown',
           source: request.runId,
-          summary: stdout.slice(0, 1000),
+          summary: options.omitRawOutput ? 'Worker 返回无效结构化结果，原始输出已丢弃。' : stdout.slice(0, 1000),
           confidence: 'low',
         },
       ],

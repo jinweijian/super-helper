@@ -90,7 +90,8 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
     };
 
     if (mode === 'fast' && !execution.signal && !options.signal?.aborted && isMaxTurns(execution.stdout)) {
-      return { result: parseClaudeOutput('{"type":"result","subtype":"error_max_turns"}', request), trace };
+      return { result: parseClaudeOutput('{"type":"result","subtype":"error_max_turns"}', request, { omitRawOutput: true }),
+        trace: { ...trace, error: undefined, exitCode: 0 } };
     }
     if (execution.exitCode !== 0 || execution.signal || execution.error) {
       return {
@@ -102,7 +103,7 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
       };
     }
 
-    const result = parseClaudeOutput(execution.stdout, request);
+    const result = parseClaudeOutput(execution.stdout, request, { omitRawOutput: Boolean(profile) });
     return {
       result,
       trace,

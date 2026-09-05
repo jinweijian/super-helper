@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { DiagnosticWorkerOptions } from '../diagnostic-worker.js';
 import { ClaudeStream } from './claude-stream.js';
+import { signalProcessTree } from './process-tree.js';
 
 const MAX_OUTPUT_BUFFER = 1024 * 1024 * 5;
 
@@ -19,6 +20,7 @@ export function runCommand(command: string, args: string[], cwd: string, timeout
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
+      detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.setEncoding('utf8');
@@ -30,8 +32,8 @@ export function runCommand(command: string, args: string[], cwd: string, timeout
     let killTimer: ReturnType<typeof setTimeout> | undefined;
     const stream = options.streamJson ? new ClaudeStream(cwd, options.onProgress) : undefined;
     const terminate = () => {
-      child.kill('SIGTERM');
-      killTimer ??= setTimeout(() => child.kill('SIGKILL'), options.terminationGraceMs ?? 1000);
+      signalProcessTree(child, 'SIGTERM');
+      killTimer ??= setTimeout(() => signalProcessTree(child, 'SIGKILL'), options.terminationGraceMs ?? 1000);
     };
     const abort = () => { cancelled = true; terminate(); };
     options.signal?.addEventListener('abort', abort, { once: true });
@@ -60,6 +62,7 @@ export function runCommand(command: string, args: string[], cwd: string, timeout
       resolve({ stdout, stderr, error: error.message });
     });
     child.on('close', (code, signal) => {
+      if (cancelled || timedOut) signalProcessTree(child, 'SIGKILL');
       options.signal?.removeEventListener('abort', abort);
       if (killTimer) clearTimeout(killTimer);
       stream?.finish();
