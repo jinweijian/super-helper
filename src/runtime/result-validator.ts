@@ -140,13 +140,24 @@ export function freezeReviewedDiagnosticResult(input: {
     ...input.structural.globalBlockers,
     ...(input.upstreamBlockers ?? []),
   ];
+  // The authority adapter is the source of semantic diagnosis. When an
+  // optional coverage reviewer is disabled (the normal CC path), preserve
+  // structurally valid primary answers instead of downgrading a concluded
+  // diagnosis to a generic "证据不足" response.
   const acceptedPrimaryAnswerClaimIds = input.coverageReview
     ? selectFrozenPrimaryClaimIds({
         claims: input.structural.result.claims,
         answerGoal: input.answerGoal,
         review: input.coverageReview,
       })
-    : [];
+    : input.structural.result.claims
+        .filter((claim) => (
+          claim.role === 'primary_answer' &&
+          (claim.type === 'fact' || claim.type === 'inference') &&
+          claim.answers.length > 0 &&
+          claim.evidenceIds.length > 0
+        ))
+        .map((claim) => claim.id!);
   const coverageComplete = acceptedPrimaryAnswerClaimIds.length > 0;
   const result = input.structural.result;
   if (

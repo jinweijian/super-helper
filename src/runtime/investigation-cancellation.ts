@@ -6,6 +6,10 @@ export class InvestigationCancelled extends Error {
   constructor() { super('investigation_cancelled'); }
 }
 
+export function throwIfInvestigationCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new InvestigationCancelled();
+}
+
 export function completeCancelledInvestigation(
   store: CaseRepository, caseSession: StoredCase, userMessageId: string,
 ): RuntimeTurnResponse {

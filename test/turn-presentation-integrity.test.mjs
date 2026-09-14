@@ -183,9 +183,9 @@ test('review freezes case status without publishing it before presentation', asy
     const review = await reviewer.reviewAndFormat(caseSession, concludedWorkerResult().result, run);
 
     assert.equal(caseSession.status, 'diagnosing');
-    assert.equal(review.caseStatus, 'partial');
-    assert.equal(run.status, 'partial');
-    assert.equal(run.result.status, 'partial');
+    assert.equal(review.caseStatus, 'concluded');
+    assert.equal(run.status, 'concluded');
+    assert.equal(run.result.status, 'concluded');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -981,7 +981,7 @@ test('Q2 keyword in result does not trigger a fixed Q2 template', async () => {
   const { agent } = createAgent(dir, worker);
   const response = await agent.handleUserMessage({ persona: 'operations', message: 'Q2 事件入口在哪里？' });
   assert.doesNotMatch(response.assistantMessage, /# Q2 分析结果|## 接口入口|## 一句话结论/, 'Q2 keyword must not trigger a fixed template');
-  assert.match(response.assistantMessage, /Q2 事件入口/, 'accepted claim text must appear');
+  assert.doesNotMatch(response.assistantMessage, /Q2 事件入口在哪里？/, '用户原话不应被重复回显');
 });
 
 test('process_note claim never enters the visible reply projection', async () => {

@@ -113,6 +113,39 @@ function usableResponse(request, full = false) {
   return value;
 }
 
+test('presentation cancellation preserves accepted facts without accepting late model output', async t => {
+  const {config,store}=fixture(t);
+  config.agent.modelProvider='fixture';
+  const runtime=new DiagnosticRuntime(config,store,{diagnose:async()=>response()});
+  const {caseSession}=runtime.startUserTurn({message:'检查当前项目入口代码'});
+  const request=buildDiagnosticRequest({caseSession,userMessage:'检查当前项目入口代码',unknowns:[],config});
+  const value=usableResponse(request,true);
+  const run={id:request.runId,caseId:caseSession.id,status:'running',request};
+  const controller=new AbortController();
+  let calls=0;
+  let signalSeen;
+  const model={async complete(messages,options){
+    calls++;
+    const input=JSON.parse(messages[1].content);
+    if(input.projection){
+      signalSeen=options.signal;
+      controller.abort();
+      return '{"reply":"未经审核的迟到结果"}';
+    }
+    return JSON.stringify({status:'accepted',bindings:input.claimSegments.map(c=>({claimId:c.id,answerItemIds:c.candidateAnswerItemIds,evidenceIds:c.evidenceIds})),fullQuestion:'full',fullQuestionClaimIds:['claim_entry'],missingElements:[]});
+  }};
+  const reviewer=new ReviewPresentationService(config,model,new CaseRuntimeEventRecorder(store),'','','','COVERAGE_SPEC');
+  const result=await reviewer.reviewAndFormat(caseSession,value.result,run,{
+    signal:controller.signal,
+    coverageEvidenceEnvelopes:value.coverageEvidence.map(ev=>({...ev,freshness:'current_worker_run'})),
+  });
+  assert.equal(signalSeen,controller.signal);
+  assert.equal(calls,2);
+  assert.equal(result.hasReviewedAnswer,true);
+  assert.match(result.reply,/请求经过入口校验/);
+  assert.doesNotMatch(result.reply,/未经审核的迟到结果/);
+});
+
 test('真实 parser 的失败 process_note 在取消后不能阻止一键重试',async t=>{
   const {config,store}=fixture(t);
   let runtime;
@@ -130,7 +163,7 @@ test('真实 parser 的失败 process_note 在取消后不能阻止一键重试'
   assert.equal(result.caseSession.messages.filter(m=>m.role==='helper').length,1);
 });
 
-for (const scenario of ['parser_failure','parser_cancel','empty_cancel']) test(`Fast 已审核初步在 Deep ${scenario} 后保留`,async t=>{
+for (const scenario of ['parser_failure','parser_cancel','empty_cancel','before_review_cancel']) test(`Fast 已审核初步在 Deep ${scenario} 后保留`,async t=>{
   const cancel=scenario!=='parser_failure';
   const {config,store}=fixture(t);
   const runtime=new DiagnosticRuntime(config,store,{diagnose:async()=>response()});
@@ -152,6 +185,10 @@ for (const scenario of ['parser_failure','parser_cancel','empty_cancel']) test(`
   const worker={async diagnose(input){
     calls++;
     if(calls===1)return usableResponse(input);
+    if(scenario==='before_review_cancel') {
+      control.cancel(session.id,turn.userMessageId);
+      return usableResponse(input,true);
+    }
     if(scenario==='empty_cancel')return response();
     const failed=response(failedExecutionDiagnosticResult(input,{stdout:'',stderr:'',exitCode:1,error:'failed'}));
     failed.trace.error='failed';
@@ -167,6 +204,7 @@ for (const scenario of ['parser_failure','parser_cancel','empty_cancel']) test(`
 
 for (const route of ['knowledgeTurn','caseInvestigation']) test(`${route} 审核期间取消统一降为初步并同步唯一 helper 与持久化状态`,async t=>{
   const {config,store}=fixture(t);
+  if (route === 'knowledgeTurn') config.knowledge.onlineDiagnosisEnabled = true;
   const runtime=new DiagnosticRuntime(config,store,{diagnose:async()=>{throw new Error('不应派发');}});
   if(route==='caseInvestigation') runtime.hasHistoricalCaseSource=()=>true;
   runtime.services.experienceTurn.answer=async()=>undefined;

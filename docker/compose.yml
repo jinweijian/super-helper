@@ -1,0 +1,29 @@
+services:
+  super-helper:
+    image: ${SUPER_HELPER_IMAGE:?SUPER_HELPER_IMAGE is required}
+    container_name: ${CONTAINER_NAME:?CONTAINER_NAME is required}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${EXPOSE_PORT:?EXPOSE_PORT is required}:4317"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      HOME: /home/superhelper
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+    volumes:
+      - ./config.json:/data/super-helper/config.json:ro
+      - ./data:/data/super-helper/data
+      - ./knowledge:/data/knowledge
+      - ./claude-home:/home/superhelper/.claude
+      - ${PROJECT_ROOT:?PROJECT_ROOT is required}:/workspace/project:ro
+    secrets:
+      - anthropic_api_key
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4317/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+secrets:
+  anthropic_api_key:
+    file: ${ANTHROPIC_API_KEY_FILE:?ANTHROPIC_API_KEY_FILE is required}

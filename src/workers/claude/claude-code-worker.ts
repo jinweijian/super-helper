@@ -34,8 +34,9 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
     }
 
     const profiles = this.config.claude.investigationProfiles;
-    const mode = profiles?.enabled ? request.investigation?.resolvedProfile : undefined;
-    const profile = mode ? profiles?.[mode] : undefined;
+    const mode = request.investigation?.resolvedProfile;
+    const profile = mode === 'fast' ? profiles?.fast : mode === 'deep' ? profiles?.deep : undefined;
+    const effort = profile?.effort ?? (mode === 'deep' ? 'high' : 'low');
     const systemPrompt = buildClaudeSystemPrompt(mode);
     const userPrompt = buildClaudeUserPrompt(request);
     const allowedTools = readOnlyTools(this.config.claude.allowedTools ?? this.config.claude.tools);
@@ -46,8 +47,7 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
       '-p',
       '--output-format',
       mode === 'deep' ? 'stream-json' : 'json',
-      ...(profile ? ['--model', profile.model, '--effort', profile.effort, '--prompt-suggestions', 'false'] : []),
-      ...(mode === 'fast' ? ['--max-turns', String(profiles!.fast.maxTurns)] : []),
+      ...(mode ? [...(profile?.model ? ['--model', profile.model] : []), '--effort', effort, '--prompt-suggestions', 'false'] : []),
       ...(mode === 'deep' ? ['--verbose'] : []),
       '--permission-mode',
       this.config.claude.permissionMode,
@@ -68,23 +68,26 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
     }
     const command = shellCommand(this.config.claude.command, args);
 
+    // 有明确排查模式时，不以时间截断权威方；模式边界由 prompt/max-turns 控制，
+    // 用户停止仍通过 AbortSignal 终止进程。未带模式的旧调用保留原超时兼容行为。
+    const timeoutMs = mode ? 0 : this.config.claude.timeoutMs;
     const execution = await runCommandWithSessionBusyRetry(
       this.config.claude.command,
       args,
       workspace.rootPath,
-      mode === 'deep' ? profiles!.deep.timeoutMs : this.config.claude.timeoutMs,
+      timeoutMs,
       this.config.claude.sessionBusyMaxRetries ?? 3,
       this.config.claude.sessionBusyRetryDelayMs ?? 3_000,
       { ...options, streamJson: mode === 'deep' },
     );
     const trace: WorkerTrace = {
-      command: profile ? shellCommand('claude', args.slice(0, args.indexOf('--system-prompt'))) : command,
-      cwd: profile ? '' : workspace.rootPath,
-      stdout: profile ? '' : execution.stdout,
-      stderr: profile ? '' : execution.stderr,
+      command: mode ? shellCommand('claude', args.slice(0, args.indexOf('--system-prompt'))) : command,
+      cwd: mode ? '' : workspace.rootPath,
+      stdout: mode ? '' : execution.stdout,
+      stderr: mode ? '' : execution.stderr,
       exitCode: execution.exitCode,
       signal: execution.signal,
-      error: profile && execution.error ? (options.signal?.aborted ? 'Worker cancelled' : 'Claude Code execution failed') : execution.error,
+      error: mode && execution.error ? (options.signal?.aborted ? 'Worker cancelled' : 'Claude Code execution failed') : execution.error,
       startedAt,
       finishedAt: new Date().toISOString(),
     };
@@ -95,7 +98,7 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
     }
     if (execution.exitCode !== 0 || execution.signal || execution.error) {
       return {
-        result: failedExecutionDiagnosticResult(request, profile ? {
+        result: failedExecutionDiagnosticResult(request, mode ? {
           ...execution, stdout: '', stderr: '',
           error: options.signal?.aborted ? 'Worker cancelled' : 'Claude Code execution failed',
         } : execution),
@@ -103,7 +106,7 @@ export class ClaudeCodeWorker implements DiagnosticWorker {
       };
     }
 
-    const result = parseClaudeOutput(execution.stdout, request, { omitRawOutput: Boolean(profile) });
+    const result = parseClaudeOutput(execution.stdout, request, { omitRawOutput: Boolean(mode) });
     return {
       result,
       trace,

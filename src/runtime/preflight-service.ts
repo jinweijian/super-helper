@@ -12,6 +12,7 @@ import { reconcileResolvedTurnContext } from './resolved-turn.js';
 import { turnMessages } from '../sessions/turn-context-snapshot.js';
 import { AnswerGoalCompletenessReviewService } from './answer-goal-completeness-review-service.js';
 import { reconcileMustAnswerItems } from './answer-goal-reconciliation.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 
 export class PreflightService {
   constructor(
@@ -25,7 +26,8 @@ export class PreflightService {
     private readonly answerGoalCompletenessAgentSpec: string,
   ) {}
 
-  async decide(caseSession: StoredCase, userMessage: string): Promise<PreflightDecision> {
+  async decide(caseSession: StoredCase, userMessage: string, signal?: AbortSignal): Promise<PreflightDecision> {
+    throwIfInvestigationCancelled(signal);
     this.events.preflightStarted(caseSession, {
       useModelForPreflight: this.config.agent.useModelForPreflight,
       modelProvider: this.config.agent.modelProvider,
@@ -39,11 +41,12 @@ export class PreflightService {
 
     if (this.config.agent.useModelForPreflight && this.config.agent.modelProvider) {
       try {
-        const modelDecision = await this.modelDrivenPreflight(caseSession, userMessage, localDecision);
+        const modelDecision = await this.modelDrivenPreflight(caseSession, userMessage, localDecision, signal);
         if (modelDecision) {
           return this.reconcileDecisions(caseSession, modelDecision, localDecision);
         }
       } catch (error) {
+        throwIfInvestigationCancelled(signal);
         const message = error instanceof Error ? error.message : String(error);
         this.store.appendDailyMemory(`- ${new Date().toISOString()} model preflight failed: ${message}`);
         this.events.modelPreflightFailed(caseSession, message);
@@ -58,6 +61,7 @@ export class PreflightService {
     caseSession: StoredCase,
     userMessage: string,
     localDecision: PreflightDecision,
+    signal?: AbortSignal,
   ): Promise<PreflightDecision | undefined> {
     const workspace = this.config.workspaces.find((item) => item.id === caseSession.workspaceId);
     const response = await this.model.complete([
@@ -78,6 +82,7 @@ or
 Workspace-aware Preflight Rules:
 - The current workspace is already selected. Do not ask the user to prove which product, system, project, workspace, documentation, or codebase they mean when a current workspace exists.
 - A selected workspace and a non-empty user message are enough to begin bounded read-only inspection; do not require vocabulary matches.
+- Never return ask_user before that first inspection pass. Missing browser, log, configuration, or reproduction details are evidence gaps; let Experience, Knowledge, MCP, and Worker inspect the workspace first.
 - Ask the user only when the missing information blocks every safe read-only action.
 - For operations, customer, sales, and product users, do not ask for code paths before trying read-only workspace inspection.
 
@@ -105,7 +110,8 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
           2,
         ),
       },
-    ], { json: true });
+    ], { json: true, signal });
+    throwIfInvestigationCancelled(signal);
 
     const parsed = parseAgentModelJson<{
       action?: 'ask_user' | 'dispatch';
@@ -154,7 +160,7 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
             ).review({
               resolvedQuestion: answerGoal.resolvedQuestion,
               proposedItems: scoped.items,
-            })
+            }, signal)
           : undefined;
         const mustAnswerItems = reconcileMustAnswerItems({
           resolvedQuestion: answerGoal.resolvedQuestion,

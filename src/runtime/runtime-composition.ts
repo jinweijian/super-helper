@@ -4,7 +4,7 @@ import { HistoricalCaseEvidenceService } from '../mcp/historical-case-evidence-s
 import { McpEvidenceService, type McpEvidenceServiceOptions } from '../mcp/evidence-service.js';
 import { createModelClient, type AgentModelClient } from '../providers/model/adapter.js';
 import type { CaseRepository } from '../sessions/case-repository.js';
-import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
+import type { AuthorityDiagnosticAdapter } from '../contracts/authority-diagnostic.js';
 import { resolveAgentConfig } from './agent-configs.js';
 import { CandidateRerankerService } from './case-investigation/candidate-reranker-service.js';
 import { CaseInvestigationTurnService } from './case-investigation/case-investigation-turn-service.js';
@@ -34,7 +34,7 @@ export interface RuntimeCompositionOptions {
 export function createRuntimeServices(input: {
   config: SuperHelperConfig;
   store: CaseRepository;
-  worker: DiagnosticWorker;
+  worker: AuthorityDiagnosticAdapter;
   options?: RuntimeCompositionOptions;
   investigationControl?: InvestigationControl;
 }) {
@@ -77,7 +77,12 @@ export function createRuntimeServices(input: {
     store,
     events,
     reviewer,
-    collector: new ParallelSourceCollector({ knowledge: knowledgeTurn, experience: experienceTurn, redmine: redmineBranch, events }),
+    collector: new ParallelSourceCollector({
+      knowledge: config.knowledge.onlineDiagnosisEnabled === false ? undefined : knowledgeTurn,
+      experience: experienceTurn,
+      redmine: redmineBranch,
+      events,
+    }),
     workerVerification: new WorkerVerification(workerDiagnosis),
     verifier: new HistoricalCaseVerifierService(model, spec('historical_case_verifier')),
   });

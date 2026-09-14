@@ -1,6 +1,7 @@
 import type { KnowledgeEvidenceResult } from '../knowledge/index.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { parseAgentModelJson } from './agent-model-review.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 
 // Deprecated: use RagAnswerabilityService for new RAG quality gates. This class
 // remains for compatibility until the runtime migration is complete.
@@ -28,7 +29,8 @@ export class EvidenceCoverageService {
   async evaluate(input: {
     question: string;
     evidence: KnowledgeEvidenceResult[];
-  }): Promise<CoverageResult> {
+  }, signal?: AbortSignal): Promise<CoverageResult> {
+    throwIfInvestigationCancelled(signal);
     const topEvidence = input.evidence.slice(0, this.topN);
     const evidencePayload = topEvidence.map((item) => ({
       title: item.title,
@@ -57,7 +59,8 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
       const response = await this.model.complete([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
-      ], { json: true });
+      ], { json: true, ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
 
       const parsed = parseAgentModelJson<ParsedCoverageResponse>(response);
       const coverage = normalizeCoverage(parsed.coverage);
@@ -69,6 +72,7 @@ Do not include <think>, markdown, comments, explanations, or text outside the JS
         reason: typeof parsed.reason === 'string' ? parsed.reason : '',
       };
     } catch (error) {
+      throwIfInvestigationCancelled(signal);
       const message = error instanceof Error ? error.message : String(error);
       return {
         coverage: 'unknown',

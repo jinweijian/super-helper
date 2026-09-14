@@ -119,6 +119,8 @@ Onboarding 草稿、运行记录和可恢复进度位于：
 
 Setup Dashboard 是默认流程；下面命令保留给维护、排障和 CI 使用。
 
+离线工单经验萃取的首次试用、验收与回滚步骤见[工单经验萃取试用部署](docs/operations/experience-refinement-pilot.md)。
+
 知识库维护：
 
 ```bash

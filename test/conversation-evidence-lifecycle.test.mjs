@@ -1017,7 +1017,7 @@ test('sync first turn and async unknown follow-up share one resolved query acros
 
     const phase = (name) => second.caseSession.logs.find((event) => event.phase === name && event.createdAt >= accepted.caseSession.updatedAt);
     assert.equal(phase('experience_started').detail.message, originalQuestion);
-    assert.equal(phase('knowledge_router_started').detail.message, originalQuestion);
+    assert.equal(phase('knowledge_router_started'), undefined);
     assert.equal(phase('diagnostic_request').detail.userGoal, originalQuestion);
     assert.ok(second.caseSession.logs.findIndex((event) => event.phase === 'preflight_started') < second.caseSession.logs.findIndex((event) => event.phase === 'experience_started'));
   } finally {

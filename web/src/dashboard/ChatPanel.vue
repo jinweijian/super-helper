@@ -5,15 +5,19 @@ import RichAnswer from './RichAnswer.vue';
 import ChatProgressCard from './ChatProgressCard.vue';
 import type { ChatProgressState } from './chat-progress';
 
-const props = defineProps<{ session?: SessionDto; sending: boolean; progress?: ChatProgressState; error?: string; selectedPersona?: string; acceptedCount?: number; investigationEnabled?: boolean }>();
+const props = defineProps<{ session?: SessionDto; sending: boolean; progress?: ChatProgressState; error?: string; selectedPersona?: string; acceptedCount?: number; autoInvestigationEnabled?: boolean }>();
 const emit = defineEmits<{ send: [message: string, persona: string, investigationPreference: 'auto' | 'fast' | 'deep']; updatePersona: [persona: string]; retry: []; stop: [] }>();
 const message = ref('');
-const investigationPreference = ref<'auto' | 'fast' | 'deep'>('auto');
-watch(() => props.acceptedCount, () => { investigationPreference.value = 'auto'; message.value = ''; });
+const investigationPreference = ref<'auto' | 'fast' | 'deep'>(props.autoInvestigationEnabled ? 'auto' : 'fast');
+watch(() => props.acceptedCount, () => { investigationPreference.value = props.autoInvestigationEnabled ? 'auto' : 'fast'; message.value = ''; });
+watch(() => props.autoInvestigationEnabled, (enabled) => {
+  if (!enabled && investigationPreference.value === 'auto') investigationPreference.value = 'fast';
+});
 const persona = computed({ get: () => props.selectedPersona || props.session?.userPersona || 'operations', set: (value: string) => emit('updatePersona', value) });
 const chat = ref<HTMLElement>();
 const blockedReason = computed(() => props.session?.archivedAt ? '这个会话已归档，只能阅读，不能继续追问。' : props.session?.contextUsage?.available === false ? '上下文窗口已满，请新建诊断后继续。' : '');
 const inlineError = computed(() => props.progress?.state === 'interrupted' ? '' : props.error || '');
+const canStop = computed(() => ['running', 'reconnecting'].includes(props.progress?.state ?? ''));
 const statusLabels: Record<string, string> = { queued: '排队中', ready_for_diagnosis: '等待诊断', diagnosing: '诊断中', collecting_input: '新建', need_input: '待补充', partial: '证据不足', concluded: '已有结论' };
 const isEmpty = computed(() => !props.session?.messages.length);
 
@@ -55,7 +59,17 @@ function onKeydown(event: KeyboardEvent): void {
         <h1>{{ session?.title || '新对话' }}</h1>
         <p>{{ session ? `${session.workspaceId || 'current'} · ${statusLabels[session.status] || session.status}` : '选择一个会话，或新建诊断' }}</p>
       </div>
-      <div class="case-header-actions"><slot name="actions" /></div>
+      <div class="case-header-actions">
+        <label class="persona-control">用户视角
+          <select v-model="persona" aria-label="用户视角">
+            <option value="operations">运营人员</option>
+            <option value="support">技术支持</option>
+            <option value="customer">客户</option>
+            <option value="developer">开发人员</option>
+          </select>
+        </label>
+        <slot name="actions" />
+      </div>
     </header>
     <section ref="chat" class="chat" aria-live="polite">
       <div v-if="isEmpty" class="empty-state">
@@ -63,11 +77,11 @@ function onKeydown(event: KeyboardEvent): void {
         <p>helper agent 会先审核上下文，再决定追问或执行只读排查。</p>
       </div>
       <article v-for="item in session?.messages || []" :key="item.id" class="message" :class="item.role">
-        <header><strong>{{ item.role === 'user' ? '你' : 'helper' }}</strong><time v-if="item.createdAt">{{ relativeTime(item.createdAt) }}</time></header>
+        <header><strong v-if="item.role !== 'user'">helper</strong><time v-if="item.createdAt">{{ relativeTime(item.createdAt) }}</time></header>
         <pre v-if="item.role === 'user'">{{ item.body }}</pre>
         <RichAnswer v-else :text="item.body" />
       </article>
-      <ChatProgressCard v-if="progress && ['running', 'interrupted', 'reconnecting'].includes(progress.state)" :progress="progress" @retry="emit('retry')" @stop="emit('stop')" />
+      <ChatProgressCard v-if="progress && ['running', 'interrupted', 'reconnecting'].includes(progress.state)" :progress="progress" @retry="emit('retry')" />
     </section>
     <form class="composer" @submit.prevent="submit">
       <label class="sr-only" for="chat-input">输入问题</label>
@@ -76,23 +90,15 @@ function onKeydown(event: KeyboardEvent): void {
       <textarea id="chat-input" v-model="message" :disabled="sending || !!blockedReason" :placeholder="blockedReason || '描述故障、回答追问，或输入：不清楚'" @keydown="onKeydown" />
       <div class="composer-actions">
         <label>排查模式
-          <select v-model="investigationPreference" aria-label="排查模式" :disabled="sending || !investigationEnabled">
-            <option value="auto">自动</option>
+          <select v-model="investigationPreference" aria-label="排查模式" :disabled="sending">
+            <option v-if="autoInvestigationEnabled" value="auto">自动</option>
             <option value="fast">快速</option>
             <option value="deep">深度</option>
           </select>
         </label>
-        <label>用户视角
-          <select v-model="persona">
-            <option value="operations">运营人员</option>
-            <option value="support">技术支持</option>
-            <option value="customer">客户</option>
-            <option value="developer">开发人员</option>
-          </select>
-        </label>
-        <button class="primary" type="submit" :disabled="sending || !!blockedReason || !message.trim()">发送</button>
+        <button v-if="canStop" class="stop-action" type="button" :disabled="progress?.investigation?.stopping" @click="emit('stop')">{{ progress?.investigation?.stopping ? '正在停止…' : '停止排查' }}</button>
+        <button v-else class="primary" type="submit" :disabled="sending || !!blockedReason || !message.trim()">发送</button>
       </div>
-      <p v-if="!investigationEnabled" class="muted">排查模式尚未启用，可在设置中配置。</p>
     </form>
   </main>
 </template>

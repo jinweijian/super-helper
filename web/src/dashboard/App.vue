@@ -7,7 +7,6 @@ import SessionSidebar from './SessionSidebar.vue';
 import SettingsForm from './SettingsForm.vue';
 import LogList from './LogList.vue';
 import { pendingUserMessageId, useChat } from './use-chat';
-import { useKnowledge } from './use-knowledge';
 import { useLogs } from './use-logs';
 import { useSessions } from './use-sessions';
 import { useSettings } from './use-settings';
@@ -15,7 +14,6 @@ import { useSettings } from './use-settings';
 const sessions = useSessions();
 const chat = useChat({trackInvestigation: true});
 const logs = useLogs();
-const knowledge = useKnowledge();
 const settings = useSettings();
 const logsOpen = ref(false);
 const settingsOpen = ref(false);
@@ -33,7 +31,6 @@ onMounted(async () => {
   void settings.load().catch(() => undefined);
   const current = sessions.current.value;
   if (current?.userPersona) selectedPersona.value = current.userPersona;
-  if (current) knowledge.loadLocalHealth(current.workspaceId || 'current').catch(() => undefined);
   const pending = current ? pendingUserMessageId(current) : undefined;
   if (current && pending) {
     chat.poll(current.id, pending, (session) => {
@@ -113,20 +110,10 @@ async function openSettings(event: MouseEvent): Promise<void> {
   try { await settings.load(); } catch { /* visible in drawer */ }
 }
 
-function withCurrentKnowledge(action: 'check' | 'bind' | 'reindex'): void {
-  const current = sessions.current.value;
-  if (!current) return;
-  const query = [...current.messages].reverse().find((item) => item.role === 'user')?.body || current.title;
-  if (action === 'check') knowledge.probe(current.workspaceId || 'current', query).catch(() => undefined);
-  else knowledge[action](current.workspaceId || 'current', query).catch(() => undefined);
-}
-
 async function openSession(id: string): Promise<void> {
   chat.cancel();
   if (auditMode.value) closeAudit();
   await sessions.open(id);
-  const current = sessions.current.value;
-  if (current) await knowledge.loadLocalHealth(current.workspaceId || 'current').catch(() => undefined);
 }
 </script>
 
@@ -136,14 +123,8 @@ async function openSession(id: string): Promise<void> {
     <AuditPage
       v-if="auditMode && sessions.current.value"
       :session="sessions.current.value"
-      :health="knowledge.health.value"
-      :loading="knowledge.loading.value"
-      :error="knowledge.error.value"
       @back="closeAudit"
       @open-logs="openLogs"
-      @check="withCurrentKnowledge('check')"
-      @bind="withCurrentKnowledge('bind')"
-      @reindex="withCurrentKnowledge('reindex')"
     />
     <div v-else class="workspace-grid">
       <SessionSidebar
@@ -154,7 +135,7 @@ async function openSession(id: string): Promise<void> {
         @action="sessions.action"
         @remove="sessions.remove"
       />
-      <ChatPanel :session="sessions.current.value" :sending="chat.sending.value" :progress="chat.progress.value" :error="chat.error.value" :selected-persona="selectedPersona" :accepted-count="chat.acceptedCount?.value" :investigation-enabled="!!settings.value.value.claude?.investigationProfiles?.enabled" @update-persona="selectedPersona = $event" @send="send" @retry="onRetry" @stop="chat.stop()">
+      <ChatPanel :session="sessions.current.value" :sending="chat.sending.value" :progress="chat.progress.value" :error="chat.error.value" :selected-persona="selectedPersona" :accepted-count="chat.acceptedCount?.value" :auto-investigation-enabled="!!settings.value.value.claude?.investigationProfiles?.enabled" @update-persona="selectedPersona = $event" @send="send" @retry="onRetry" @stop="chat.stop()">
         <template #actions>
           <button type="button" :disabled="!sessions.current.value" @click="openAudit">诊断详情</button>
           <button type="button" :disabled="!sessions.current.value" @click="openLogs">日志</button>
@@ -173,12 +154,8 @@ async function openSession(id: string): Promise<void> {
         :settings="settings.value.value"
         :actions="settings.actions"
         @save-model="settings.saveModel"
-        @save-embedding="settings.saveEmbedding"
-        @save-rerank="settings.saveRerank"
         @save-claude="settings.saveClaude"
         @test-model="settings.testModel"
-        @test-embedding="settings.testEmbedding"
-        @test-rerank="settings.testRerank"
       />
     </AccessibleDrawer>
   </div>

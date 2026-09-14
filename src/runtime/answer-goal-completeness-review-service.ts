@@ -1,6 +1,7 @@
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { redactSecretText } from '../redaction.js';
 import { parseAgentModelJson } from './agent-model-review.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 
 const MAX_MISSING_ELEMENTS = 5;
 const MAX_ELEMENT_CODE_POINTS = 80;
@@ -20,7 +21,8 @@ export class AnswerGoalCompletenessReviewService {
   async review(input: {
     resolvedQuestion: string;
     proposedItems: string[];
-  }): Promise<AnswerGoalCompletenessReview> {
+  }, signal?: AbortSignal): Promise<AnswerGoalCompletenessReview> {
+    throwIfInvestigationCancelled(signal);
     try {
       const response = await this.model.complete([
         {
@@ -39,11 +41,13 @@ Only judge whether the proposed items represent every user-visible answer obliga
             proposedItems: input.proposedItems,
           }),
         },
-      ], { json: true });
+      ], { json: true, signal });
+      throwIfInvestigationCancelled(signal);
       return validateCompletenessReview(
         parseAgentModelJson<Partial<AnswerGoalCompletenessReview>>(response),
       );
     } catch (error) {
+      throwIfInvestigationCancelled(signal);
       const reason = error instanceof Error ? error.message : String(error);
       return unknownReview(`completeness_review_failed:${boundedReason(reason)}`);
     }

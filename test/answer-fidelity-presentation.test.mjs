@@ -369,8 +369,8 @@ test('Gate A Presentation: partial answer leads with preliminary judgement and l
     visiblePromptReview: { status: 'accepted', acceptedIds: [] },
   });
   const reply = renderSafeFrozenAnswer({ projection, persona: 'operations' });
-  assert.match(reply, /^\*\*针对你的问题：\*\*.+\n\n\*\*初步判断：\*\*/);
-  assert.match(reply, /\*\*已确认线索：\*\*/);
+  assert.match(reply, /^\*\*初步判断：\*\*/);
+  assert.match(reply, /\*\*我这样判断的依据：\*\*/);
   assert.match(reply, /不能作为最终结论/);
 });
 
@@ -387,7 +387,7 @@ test('Gate A Presentation: generic read-only guidance appears only when no froze
     reviewedBindingClaimIds: ['primary'],
     visiblePromptReview: { status: 'accepted', acceptedIds: [] },
   });
-  assert.match(renderSafeFrozenAnswer({ projection: withoutAction, persona: 'support' }), /通用只读建议/);
+  assert.doesNotMatch(renderSafeFrozenAnswer({ projection: withoutAction, persona: 'support' }), /暂时不用补材料/);
 
   const withAction = buildSafeFrozenAnswerProjection({
     result: result([
@@ -405,7 +405,7 @@ test('Gate A Presentation: generic read-only guidance appears only when no froze
   });
   const reply = renderSafeFrozenAnswer({ projection: withAction, persona: 'support' });
   assert.match(reply, /读取当前配置状态/);
-  assert.doesNotMatch(reply, /通用只读建议/);
+  assert.doesNotMatch(reply, /你暂时不用补材料/);
 });
 
 test('Gate A Presentation: required overflow downgrades while optional overflow is dropped without truncation', async () => {

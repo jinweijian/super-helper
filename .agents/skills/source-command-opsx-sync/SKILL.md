@@ -19,7 +19,7 @@ This is an **agent-driven** operation - you will read delta specs and directly e
 
 1. **If no change name provided, prompt for selection**
 
-   Run `openspec list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
+   Run `openspec list --json` to get available changes. Use the 当前可用的提问方式（无专用工具时直接提问） to let the user select.
 
    Show changes that have delta specs (under `specs/` directory).
 

@@ -319,14 +319,12 @@ Required coverage by change type:
 - Observability changes: log block and drawer behavior tests.
 - Public API changes: compatibility tests and docs updates.
 
-Before claiming completion, run the strongest feasible verification:
+完成声明前，按 `AGENTS.md` 的改动类型运行必要检查，并满足上面的行为覆盖要求。
 
-```bash
-pnpm lint
-pnpm typecheck
-pnpm build
-pnpm test
-```
+- 文档或结构改动运行 `pnpm lint`；TypeScript 改动运行 `pnpm typecheck`；构建相关改动运行 `pnpm build`。
+- runtime、gateway、worker、session、agent 行为改动运行 `pnpm test`。该命令已执行文档检查、typecheck、build 和后端测试，同一未变化版本成功后不重复执行其已覆盖项。
+- 前端专用测试、端到端测试和真实 opt-in 验收根据受影响边界及 change 的验收要求执行；`pnpm test` 不代替这些未包含的检查。
+- 只有出现新改动、失败或未解决风险时才扩大或重复验证。无法运行时记录原因与影响。
 
 ## Documentation Contract
 

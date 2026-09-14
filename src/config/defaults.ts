@@ -23,6 +23,8 @@ export function defaultConfig(): SuperHelperConfig {
       // 默认启用向量索引构建：双路召回（BM25+Embedding）是默认检索路径，
       // 无 API key 时 configured-search 会优雅降级为纯 BM25（embedding strategy 标 skipped）。
       buildVectorIndex: true,
+      // 保持兼容；当前部署可显式关闭，待知识图谱接管在线排查。
+      onlineDiagnosisEnabled: false,
       projectType: 'generic',
       chunking: {
         maxChars: 800,

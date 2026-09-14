@@ -14,7 +14,7 @@ test('Dashboard uses production assets and real Gateway workflows', async ({ pag
   await expect(page.getByRole('status')).toContainText('已耗时');
   await expect(page.getByRole('status')).toContainText('估计');
   await expect(page.getByText('helper', { exact: true })).toBeVisible();
-  await expect(page.getByText('现有安全证据不足，暂不能形成最终结论。').first()).toBeVisible();
+  await expect(page.getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible();
   await expect(page.getByText('项目状态可以继续检查。')).toHaveCount(0);
   await expect(page.getByText('worker-secret-output')).toHaveCount(0);
   expect(requests.filter((request) => request === 'GET /api/knowledge/health')).toHaveLength(1);
@@ -97,7 +97,7 @@ test('Greeting does not trigger false interruption', async ({ page }) => {
   await page.getByRole('button', { name: '发送' }).click();
   const conversation = page.getByRole('main');
   await expect(conversation.getByText('helper', { exact: true })).toBeVisible();
-  await expect(conversation.getByText('针对你的问题：', { exact: true })).toBeVisible();
+  await expect(conversation.getByText('这轮证据不足，我还没有找到可以确认原因的线索。', { exact: true })).toBeVisible();
   await expect(conversation.getByText('你好', { exact: true }).last()).toBeVisible();
   await expect(conversation.getByText('回答已中断')).toBeHidden();
 });
@@ -138,7 +138,7 @@ test('transient terminal snapshot waits for the matching helper reply', async ({
 
   const conversation = page.getByRole('main');
   await expect(conversation.getByText('回答已中断')).toBeHidden();
-  await expect(conversation.getByText('现有安全证据不足，暂不能形成最终结论。').first()).toBeVisible();
+  await expect(conversation.getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible();
   await expect(conversation.getByText('项目状态可以继续检查。')).toHaveCount(0);
   expect(transientSnapshotServed).toBe(true);
 });
@@ -149,7 +149,7 @@ test('Retryable interruption shows retry button and retries original turn', asyn
   await expect(page).toHaveURL(/\/sessions\/case_/);
   await page.getByLabel('输入问题').fill('请检查当前项目状态');
   await page.getByRole('button', { name: '发送' }).click();
-  await expect(page.getByRole('main').getByText('现有安全证据不足，暂不能形成最终结论。').first()).toBeVisible();
+  await expect(page.getByRole('main').getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible();
 
   let retryBody: { caseId?: string; userMessageId?: string } | undefined;
   let originalUserMessageId = '';
@@ -200,5 +200,5 @@ test('Retryable interruption shows retry button and retries original turn', asyn
     caseId: expect.stringMatching(/^case_/),
     userMessageId: originalUserMessageId,
   });
-  await expect(page.getByRole('main').getByText('现有安全证据不足，暂不能形成最终结论。').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('main').getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible({ timeout: 10_000 });
 });

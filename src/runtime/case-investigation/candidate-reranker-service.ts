@@ -1,6 +1,7 @@
 import * as z from 'zod/v4';
 import type { AgentModelClient } from '../../providers/model/adapter.js';
 import { parseAgentModelJson } from '../agent-model-review.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 import type { CandidateRerankInput, CandidateSelection } from './contracts.js';
 import { candidateMatchesOpaqueIdentifier, opaqueSearchIdentifiers } from './search-identifiers.js';
 
@@ -14,7 +15,8 @@ export class CandidateRerankerService {
     private readonly agentSpec: string,
   ) {}
 
-  async select(input: CandidateRerankInput): Promise<CandidateSelection> {
+  async select(input: CandidateRerankInput, signal?: AbortSignal): Promise<CandidateSelection> {
+    throwIfInvestigationCancelled(signal);
     const identifiers = opaqueSearchIdentifiers(input.query);
     const relevantCandidates = input.candidates.filter((candidate) => (
       candidateMatchesOpaqueIdentifier(candidate, identifiers)
@@ -27,7 +29,8 @@ export class CandidateRerankerService {
       const response = await this.model.complete([
         { role: 'system', content: `${this.agentSpec}\n\nReturn JSON only.` },
         { role: 'user', content: JSON.stringify(input) },
-      ], { json: true, thinking: 'disabled' });
+      ], { json: true, thinking: 'disabled', ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
       const parsed = SelectionSchema.parse(parseAgentModelJson<unknown>(response));
       const unique = [...new Set(parsed.issueIds)];
       const allowed = new Set(input.candidates.map((item) => item.issueId));
@@ -36,6 +39,7 @@ export class CandidateRerankerService {
       const selected = unique.filter((id) => relevantIds.has(id));
       return { issueIds: selected, degraded: selected.length !== unique.length };
     } catch {
+      throwIfInvestigationCancelled(signal);
       return fallback();
     }
   }

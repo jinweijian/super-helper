@@ -1,4 +1,4 @@
-import type { DiagnosticRequest, DiagnosticResult } from '../../domain.js';
+import type { DiagnosticClaim, DiagnosticRequest, DiagnosticResult } from '../../domain.js';
 
 export function normalizeWorkerDiagnosticResult(
   result: DiagnosticResult,
@@ -11,7 +11,7 @@ export function normalizeWorkerDiagnosticResult(
     .map((evidence) => evidence?.id)
     .filter((id): id is string => typeof id === 'string' && id.length > 0));
   const exactItems = request.answerGoal?.mustAnswerItems ?? [];
-  const claims = result.claims.flatMap((claim) => {
+  const claims: DiagnosticClaim[] = result.claims.flatMap((claim): DiagnosticClaim[] => {
     if (!claim || typeof claim !== 'object') return [];
     const raw = claim as typeof claim & {
       actionSafety?: unknown;
@@ -20,12 +20,13 @@ export function normalizeWorkerDiagnosticResult(
     const evidenceIds = Array.isArray(claim.evidenceIds)
       ? claim.evidenceIds.filter((id) => validEvidenceIds.has(id))
       : [];
-    const answers = claim.role === 'primary_answer' ||
-      claim.role === 'next_action' ||
-      claim.role === 'supporting_context'
+    const role: DiagnosticClaim['role'] = claim.role;
+    const answers = role === 'primary_answer' ||
+      role === 'next_action' ||
+      role === 'supporting_context'
       ? exactItems.filter((item) => Array.isArray(claim.answers) && claim.answers.includes(item))
       : [];
-    if (claim.role === 'next_action') {
+    if (role === 'next_action') {
       if (
         (raw.actionSafety !== 'read_only' && raw.actionSafety !== 'requires_authorization') ||
         raw.executionStatus !== 'proposed' ||
@@ -37,9 +38,9 @@ export function normalizeWorkerDiagnosticResult(
       const text = raw.actionSafety === 'requires_authorization'
         ? `待人工授权：${claim.text}`
         : claim.text;
-      return [{ ...claim, text, evidenceIds, answers }];
+      return [{ ...claim, role, text, evidenceIds, answers }];
     }
-    return [{ ...claim, evidenceIds, answers }];
+    return [{ ...claim, role, evidenceIds, answers }];
   });
   return {
     ...result,

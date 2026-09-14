@@ -10,6 +10,7 @@ import { runKnowledgeCommand } from './command-knowledge.js';
 import { runProviderCommand } from './command-provider.js';
 import { runRetrievalCommand } from './command-retrieval.js';
 import { runRedmineCommand } from './command-redmine.js';
+import { runExperienceCommand } from './command-experience.js';
 
 export async function main(): Promise<void> {
   const command = process.argv[2] ?? 'dashboard';
@@ -45,6 +46,11 @@ export async function main(): Promise<void> {
 
   if (command === 'knowledge') {
     await runKnowledgeCommand(argv);
+    return;
+  }
+
+  if (command === 'experience') {
+    await runExperienceCommand(argv);
     return;
   }
 
@@ -84,6 +90,10 @@ export async function main(): Promise<void> {
 }
 
 function printUsage(): void {
+  console.error('       super-helper experience profile --file <csv> [--encoding utf-8|gb18030] [--delimiter comma|semicolon|tab]');
+  console.error('       super-helper experience import --file <csv> --store <private-dir> --scope <scope> --source-instance <instance> [--encoding utf-8|gb18030] [--source-project <project>]');
+  console.error('       super-helper experience status --store <private-dir> --scope <scope> --source-instance <instance> --batch <id>');
+  console.error('       super-helper experience refine --store <private-dir> --scope <scope> --source-instance <instance> --job <id> --config <config.json> --max-calls <n> --enable-model true');
   console.error('Usage: super-helper [dashboard|onboard|status|doctor|init|dev|knowledge <init|update|extract|normalize|slice|audit|repair|review|publish|migration-report|redmine import-fixture|vector build>|redmine <secret set|probe|source enable|source disable>|retrieval <search|debug|eval>|embedding test|rerank test|model set|workspace set|mcp add]');
 }
 

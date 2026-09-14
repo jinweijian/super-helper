@@ -61,7 +61,7 @@ function acceptedCoverage(bindings, fullQuestionClaimIds, overrides = {}) {
   };
 }
 
-test('Gate A API: structural validation and reviewed freeze are explicit, and missing review cannot final', () => {
+test('Gate A API: authority result can final when optional coverage review is disabled', () => {
   const primary = claim('primary_full', GOAL.mustAnswerItems, ['ev_primary']);
   const structural = validateDiagnosticStructure(
     concluded([primary], [evidence('ev_primary')]),
@@ -74,9 +74,9 @@ test('Gate A API: structural validation and reviewed freeze are explicit, and mi
     upstreamBlockers: [],
   });
 
-  assert.equal(frozen.result.status, 'partial');
-  assert.notEqual(frozen.result.recommendedNextAction, 'final_answer');
-  assert.deepEqual(frozen.acceptedPrimaryAnswerClaimIds, []);
+  assert.equal(frozen.result.status, 'concluded');
+  assert.equal(frozen.result.recommendedNextAction, 'final_answer');
+  assert.deepEqual(frozen.acceptedPrimaryAnswerClaimIds, ['primary_full']);
 });
 
 test('Gate A API: validator implementation does not infer security semantics from arguments.length', async () => {
@@ -191,7 +191,6 @@ test('Gate A: producer over-label cannot override independent reviewed bindings'
 test('Gate A: unavailable or malformed coverage review conservatively blocks final', () => {
   const primary = claim('primary_full', GOAL.mustAnswerItems, ['ev_primary']);
   for (const review of [
-    undefined,
     { status: 'unknown', bindings: [], fullQuestion: 'unknown', fullQuestionClaimIds: [], missingElements: [] },
     { status: 'accepted', bindings: 'malformed', fullQuestion: 'full', fullQuestionClaimIds: ['primary_full'], missingElements: [] },
   ]) {

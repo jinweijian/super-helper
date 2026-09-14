@@ -1,6 +1,7 @@
 import * as z from 'zod/v4';
 import type { AgentModelClient } from '../../providers/model/adapter.js';
 import { parseAgentModelJson } from '../agent-model-review.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 import type { HistoricalAnalysis, HistoricalAnalysisInput } from './contracts.js';
 
 const ActionSchema = z.enum([
@@ -35,16 +36,19 @@ export class HistoricalCaseAnalyzerService {
     private readonly agentSpec: string,
   ) {}
 
-  async analyze(input: HistoricalAnalysisInput): Promise<HistoricalAnalysis> {
+  async analyze(input: HistoricalAnalysisInput, signal?: AbortSignal): Promise<HistoricalAnalysis> {
+    throwIfInvestigationCancelled(signal);
     try {
       const response = await this.model.complete([
         { role: 'system', content: `${this.agentSpec}\n\nReturn JSON only.` },
         { role: 'user', content: JSON.stringify(modelInput(input)) },
-      ], { json: true, thinking: 'disabled' });
+      ], { json: true, thinking: 'disabled', ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
       const parsed = AnalysisSchema.parse(parseAgentModelJson<unknown>(response));
       if (!validAnalysis(parsed, input)) return { leads: [], degraded: true };
       return { leads: parsed.leads, degraded: false };
     } catch {
+      throwIfInvestigationCancelled(signal);
       return { leads: [], degraded: true };
     }
   }

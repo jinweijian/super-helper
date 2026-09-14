@@ -1,6 +1,7 @@
 import * as z from 'zod/v4';
 import type { AgentModelClient } from '../../providers/model/adapter.js';
 import { parseAgentModelJson } from '../agent-model-review.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 import type { HistoricalSearchPlan, QueryPlannerInput } from './contracts.js';
 import { queryPreservesOpaqueIdentifiers } from './search-identifiers.js';
 
@@ -18,18 +19,21 @@ export class QueryPlannerService {
     private readonly agentSpec: string,
   ) {}
 
-  async plan(input: QueryPlannerInput): Promise<HistoricalSearchPlan> {
+  async plan(input: QueryPlannerInput, signal?: AbortSignal): Promise<HistoricalSearchPlan> {
+    throwIfInvestigationCancelled(signal);
     try {
       const response = await this.model.complete([
         { role: 'system', content: `${this.agentSpec}\n\nReturn JSON only.` },
         { role: 'user', content: JSON.stringify({ answerGoal: input.answerGoal }) },
-      ], { json: true, thinking: 'disabled' });
+      ], { json: true, thinking: 'disabled', ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
       const parsed = PlanSchema.parse(parseAgentModelJson<unknown>(response));
       if (!queryPreservesOpaqueIdentifiers(parsed.query, input.answerGoal.resolvedQuestion)) {
         return fallbackPlan(input);
       }
       return { ...parsed, signals: [...new Set(parsed.signals)], degraded: false };
     } catch {
+      throwIfInvestigationCancelled(signal);
       return fallbackPlan(input);
     }
   }

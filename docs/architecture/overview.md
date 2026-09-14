@@ -90,3 +90,4 @@ Preflight dispatch
 - Product Agent 分工：[产品 Agent 设计](agents.md)
 - Runtime 拆分说明：[Runtime 总览](runtime/README.md)
 - 开发硬规范：[开发标准](../standards/development.md) 与 [模块边界规范](../standards/module-boundaries.md)
+- 离线经验生产的当前实现与边界：[CSV 经验生产](experience-production.md)

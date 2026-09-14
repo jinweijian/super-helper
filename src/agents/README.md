@@ -9,6 +9,8 @@
 - `main.md`: 主 Agent，负责完整用户回合、AnswerGoal 所有权、协同调度和最终回复责任。
 - `input-review.md`: 输入审核与 Preflight Gate Agent。
 - `experience.md`: 历史经验复用 Agent。
+- `experience-refiner.md`: 离线 CSV 经验提炼 Agent，生成来源绑定草稿，不发布。
+- `experience-reviewer.md`: 独立上下文审核脱敏源与草稿，终检和发布由应用与知识仓库负责。
 - `knowledge-router.md`: 知识路由 Agent，负责模块、意图、关键词和升级信号识别。
 - `evidence-judge.md`: 证据充分性 Agent，负责判断知识库证据是否足够或是否需要查代码。
 - `rag-answerability.md`: RAG 可回答性与有效信息萃取 Agent，负责判断知识库结果是否满足 AnswerGoal，并在 partial 时输出可保留 claim 和升级焦点。

@@ -13,6 +13,7 @@ import type { ParallelSourceCollector, ParallelSourceOutcome } from './parallel-
 import { buildCaseInvestigationResult } from './result-builder.js';
 import type { WorkerVerification, WorkerVerificationOutcome } from './worker-verification.js';
 import { recordInvestigationMode } from '../event-recorder/investigation.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 
 export class CaseInvestigationTurnService {
   private readonly store: CaseRepository;
@@ -42,10 +43,13 @@ export class CaseInvestigationTurnService {
     caseSession: StoredCase,
     request: DiagnosticRequest,
     replyToMessageId?: string,
+    signal?: AbortSignal,
   ): Promise<RuntimeTurnResponse> {
-    const sources = await this.collector.collect(caseSession, request);
+    throwIfInvestigationCancelled(signal);
+    const sources = await this.collector.collect(caseSession, request, signal);
+    throwIfInvestigationCancelled(signal);
     const mergedRequest = mergeCollectorRequestPatch(request, sources);
-    const knowledgeResult = 'result' in sources.knowledge ? sources.knowledge.result : undefined;
+  const knowledgeResult = 'result' in sources.knowledge ? sources.knowledge.result : undefined;
     const experienceMatch = 'match' in sources.experience ? sources.experience.match : undefined;
     const needsFallbackWorker = sources.redmine.leads.length === 0 && !knowledgeResult && !experienceMatch;
     const workerInvoked = sources.redmine.leads.length > 0 || needsFallbackWorker;
@@ -58,6 +62,7 @@ export class CaseInvestigationTurnService {
       leads: sources.redmine.leads,
       needsFallbackWorker,
     });
+    throwIfInvestigationCancelled(signal);
     const workerEvidence = worker.status === 'completed' ? worker.response.result.evidence : [];
     this.events.currentProjectVerificationCompleted(caseSession, {
       runId: request.runId, status: worker.status, workerInvoked,
@@ -74,8 +79,9 @@ export class CaseInvestigationTurnService {
           leads: sources.redmine.leads,
           historicalEvidence: sources.redmine.evidence,
           currentEvidence,
-        })
+        }, signal)
       : { verifications: [], degraded: false };
+    throwIfInvestigationCancelled(signal);
     const classifications = verification.verifications.map((item) => item.classification);
     this.events.historicalCrossReviewCompleted(caseSession, {
       runId: request.runId,
@@ -145,6 +151,7 @@ export class CaseInvestigationTurnService {
     this.events.diagnosticRequestCreated(caseSession, persistedRequest);
     this.store.appendDailyMemory(`- ${new Date().toISOString()} ${caseSession.id} case investigation ${run.id}`);
     const review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
+      signal,
       coverageEvidenceEnvelopes,
       upstreamBlockers: gate.blockers.map((code): ReviewGlobalBlocker => ({ code: `historical_case:${code}` })),
     });

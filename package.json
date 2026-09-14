@@ -47,6 +47,8 @@
     "redmine:probe": "pnpm build && node dist/cli.js redmine probe",
     "acceptance:redmine:offline": "pnpm build && node --test test/redmine-case-investigation-offline.test.mjs",
     "acceptance:redmine:real": "pnpm build && node scripts/verify-redmine-case-investigation-real.mjs",
+    "acceptance:experience:local": "pnpm build && node --test test/experience-artifact.test.mjs test/experience-batch.test.mjs test/experience-csv.test.mjs test/experience-import.test.mjs test/experience-lock.test.mjs test/experience-publication.test.mjs test/experience-refine-batch.test.mjs test/experience-refine.test.mjs",
+    "acceptance:experience:release": "pnpm test && pnpm test:web && pnpm test:e2e",
     "typecheck": "tsc --noEmit && vue-tsc --noEmit -p web/tsconfig.json",
     "typecheck:web": "vue-tsc --noEmit -p web/tsconfig.json",
     "lint": "node scripts/verify-docs.mjs",
@@ -71,6 +73,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
+    "csv-parse": "7.0.2",
     "vue": "^3.5.39",
     "vue-router": "^4.6.4",
     "zod": "^4.4.3"

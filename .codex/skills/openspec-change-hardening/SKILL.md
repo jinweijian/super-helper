@@ -13,7 +13,7 @@ description: Use when 需要创建、审查或补强 OpenSpec change、proposal�
 
 ## 必用背景
 
-**REQUIRED SUB-SKILLS:** 如果可用，使用 `superpowers:test-driven-development`、`superpowers:systematic-debugging`、`superpowers:verification-before-completion`。如果不可用，也必须执行等价的红绿验证、根因分析和完工前复核。
+文档阶段明确回归、根因分析和完工验证的验收要求，不调用实现阶段的 TDD 或调试流程。进入代码执行后，按实际风险使用可用技能或等价方法，并保留验证证据。
 
 这个 skill 只用于创建、审查、补强 OpenSpec 文档。真正实现代码时，再进入对应的 apply/implementation skill。
 

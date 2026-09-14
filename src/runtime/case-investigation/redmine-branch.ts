@@ -5,6 +5,7 @@ import type { CandidateRerankerService } from './candidate-reranker-service.js';
 import type { HistoricalLead } from './contracts.js';
 import type { HistoricalCaseAnalyzerService } from './historical-case-analyzer-service.js';
 import type { QueryPlannerService } from './query-planner-service.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 
 export interface RedmineBranchOutcome extends HistoricalCaseEvidenceOutcome {
   leads: HistoricalLead[];
@@ -28,21 +29,26 @@ export class RedmineBranch {
     analyzer: Pick<HistoricalCaseAnalyzerService, 'analyze'>;
   }) {}
 
-  async collect(request: DiagnosticRequest, progress?: RedmineBranchProgress): Promise<RedmineBranchOutcome> {
+  async collect(request: DiagnosticRequest, progress?: RedmineBranchProgress, signal?: AbortSignal): Promise<RedmineBranchOutcome> {
+    throwIfInvestigationCancelled(signal);
     const searchStartedAt = Date.now();
     progress?.searchStarted();
-    const plan = await this.services.planner.plan({ answerGoal: request.answerGoal });
+    const plan = await this.services.planner.plan({ answerGoal: request.answerGoal }, signal);
+    throwIfInvestigationCancelled(signal);
     let rerankDegraded = false;
     const outcome = await this.services.evidence.investigate({
       request,
       query: plan.query,
       signals: plan.signals,
       selectIssueIds: async (candidates) => {
-        const selected = await this.services.reranker.select({ query: plan.query, candidates });
+        throwIfInvestigationCancelled(signal);
+        const selected = await this.services.reranker.select({ query: plan.query, candidates }, signal);
+        throwIfInvestigationCancelled(signal);
         rerankDegraded = selected.degraded;
         return selected.issueIds;
       },
     });
+    throwIfInvestigationCancelled(signal);
     if (outcome.status !== 'completed') {
       const result = { ...outcome, leads: [], planDegraded: plan.degraded, rerankDegraded };
       progress?.searchCompleted(result, Date.now() - searchStartedAt);
@@ -55,7 +61,8 @@ export class RedmineBranch {
     const analysis = await this.services.analyzer.analyze({
       details: outcome.details,
       evidence: outcome.evidence,
-    });
+    }, signal);
+    throwIfInvestigationCancelled(signal);
     const result = {
       ...outcome,
       leads: analysis.leads,

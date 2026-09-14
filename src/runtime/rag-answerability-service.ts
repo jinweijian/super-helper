@@ -2,6 +2,7 @@ import type { AnswerGoal } from '../domain.js';
 import type { KnowledgeEvidenceResult } from '../knowledge/index.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { parseAgentModelJson } from './agent-model-review.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 
 export type RagAnswerability = 'full' | 'partial' | 'none' | 'unknown';
 
@@ -43,7 +44,8 @@ export class RagAnswerabilityService {
   async evaluate(input: {
     answerGoal: AnswerGoal;
     evidence: KnowledgeEvidenceResult[];
-  }): Promise<RagAnswerabilityResult> {
+  }, signal?: AbortSignal): Promise<RagAnswerabilityResult> {
+    throwIfInvestigationCancelled(signal);
     const topEvidence = input.evidence.slice(0, this.topN);
     const evidencePayload = topEvidence.map((item) => ({
       id: item.evidence_id,
@@ -61,10 +63,12 @@ Return JSON only. Do not include markdown, comments, explanations, or text outsi
       const response = await this.model.complete([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: JSON.stringify({ answerGoal: input.answerGoal, evidence: evidencePayload }, null, 2) },
-      ], { json: true });
+      ], { json: true, signal });
+      throwIfInvestigationCancelled(signal);
       const parsed = parseAgentModelJson<ParsedRagAnswerability>(response);
       return validateRagAnswerability(parsed, new Set(topEvidence.map((item) => item.evidence_id)), input.answerGoal);
     } catch (error) {
+      throwIfInvestigationCancelled(signal);
       const message = error instanceof Error ? error.message : String(error);
       return conservativeUnknown(input.answerGoal, `rag answerability evaluation failed: ${message}`);
     }

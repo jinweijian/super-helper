@@ -33,6 +33,8 @@ export interface SuperHelperConfig {
     isolateByWorkspace: boolean;
     sourceDir?: string;
     buildVectorIndex: boolean;
+    /** Whether the legacy document/RAG path participates in online diagnosis. */
+    onlineDiagnosisEnabled?: boolean;
     projectType?: 'generic' | 'symfony' | 'node' | 'vue' | string;
     chunking?: {
       maxChars?: number;

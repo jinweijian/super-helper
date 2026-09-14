@@ -18,38 +18,37 @@ export function renderSafeFrozenAnswer(input: {
   const primary = projection.primary;
   const actions = projection.actions;
   const supporting = orderedSegments(projection.supporting, order);
-  const lines: string[] = [
-    `**针对你的问题：** ${projection.answerTarget}`,
-    '',
-  ];
+  const lines: string[] = [];
 
   if (primary.length > 0) {
     const label = projection.outcome === 'final' ? '**结论：**' : '**初步判断：**';
     lines.push(...labeledLines(label, primary.map(formatClaimType)));
   } else {
-    lines.push('**当前状态：** 现有安全证据不足，暂不能形成最终结论。');
+    lines.push('这轮证据不足，我还没有找到可以确认原因的线索。');
   }
 
   const supportingFacts = supporting.filter((item) => item.type === 'fact');
   const supportingInferences = supporting.filter((item) => item.type === 'inference');
   if (supportingFacts.length > 0) {
-    lines.push('', ...labeledLines('**已确认线索：**', supportingFacts.map((item) => item.text)));
+    lines.push('', ...labeledLines('**我这样判断的依据：**', supportingFacts.map((item) => item.text)));
   }
   if (supportingInferences.length > 0) {
-    lines.push('', ...labeledLines('**推断线索：**', supportingInferences.map((item) => item.text)));
+    lines.push('', ...labeledLines('**目前更像是：**', supportingInferences.map((item) => `（推断）${item.text}`)));
   }
 
   if (actions.length > 0) {
-    lines.push('', ...labeledLines('**下一步：**', actions.map((item) => item.text)));
-  } else {
-    lines.push('', '**通用只读建议：** 在不修改配置或数据的前提下，核对当前状态并保留可复核记录。');
+    lines.push('', ...labeledLines('**我们可以先做这一步：**', actions.map((item) => item.text)));
+  } else if (primary.length === 0) {
+    // A valid authority conclusion is already actionable even when it has no
+    // separate next_action claim. Do not append a stale retrieval fallback.
+    lines.push('', '这轮没有找到与当前问题直接相关的可验证证据；暂时不用补材料。');
   }
 
   if (projection.prompts.length > 0) {
-    lines.push('', ...labeledLines('**仍需确认：**', projection.prompts.map((item) => item.text)));
+    lines.push('', ...labeledLines('**为了继续定位，请帮我确认：**', projection.prompts.map((item) => item.text)));
   }
   if (projection.outcome !== 'final') {
-    lines.push('', '**证据状态：当前判断不能作为最终结论。**');
+    lines.push('', '当前还不能作为最终结论。');
   }
 
   return wholeReplySafetyScan(lines.join('\n'));

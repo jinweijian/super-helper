@@ -1,13 +1,8 @@
-import type { ClaudeWorkerResponse, DiagnosticRequest } from '../domain.js';
-import type { InvestigationProgress } from '../contracts/investigation.js';
+import type { AuthorityDiagnosticAdapter, AuthorityDiagnosticOptions, AuthorityDiagnosticResult } from '../contracts/authority-diagnostic.js';
 
-export interface DiagnosticWorkerOptions {
-  signal?: AbortSignal;
-  onProgress?: (progress: InvestigationProgress) => void;
-}
-
-export type DiagnosticWorkerResponse = ClaudeWorkerResponse;
-
-export interface DiagnosticWorker {
-  diagnose(request: DiagnosticRequest, options?: DiagnosticWorkerOptions): Promise<DiagnosticWorkerResponse>;
-}
+/** @deprecated Use AuthorityDiagnosticAdapter at new module boundaries. */
+export type DiagnosticWorkerOptions = AuthorityDiagnosticOptions;
+/** @deprecated Use AuthorityDiagnosticResult at new module boundaries. */
+export type DiagnosticWorkerResponse = AuthorityDiagnosticResult;
+/** Compatibility port for existing Worker consumers. */
+export interface DiagnosticWorker extends AuthorityDiagnosticAdapter {}

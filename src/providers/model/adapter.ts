@@ -1,5 +1,6 @@
 import type { ModelProviderConfig } from '../../config.js';
 import { resolveSecret } from '../../config.js';
+import { ModelRequestError, safeModelNetworkError } from './errors.js';
 
 export interface AgentModelMessage {
   role: 'system' | 'user' | 'assistant';
@@ -9,7 +10,7 @@ export interface AgentModelMessage {
 export interface AgentModelClient {
   complete(
     messages: AgentModelMessage[],
-    options?: { json?: boolean; thinking?: 'enabled' | 'disabled' },
+    options?: { json?: boolean; thinking?: 'enabled' | 'disabled'; signal?: AbortSignal },
   ): Promise<string>;
 }
 
@@ -24,20 +25,30 @@ export class OpenAICompatibleModelClient implements AgentModelClient {
 
   async complete(
     messages: AgentModelMessage[],
-    options: { json?: boolean; thinking?: 'enabled' | 'disabled' } = {},
+    options: { json?: boolean; thinking?: 'enabled' | 'disabled'; signal?: AbortSignal } = {},
   ): Promise<string> {
+    if (options.signal?.aborted) {
+      throw new ModelRequestError('cancelled', 'Model request cancelled');
+    }
     const apiKey = resolveSecret(this.config.apiKey, this.config.apiKeyEnv);
     if (!apiKey) {
-      throw new Error(`Missing API key for model ${this.config.model}`);
+      throw new ModelRequestError('missing_credentials', 'Missing API key for model');
     }
 
     const timeoutMs = this.config.timeoutMs ?? 60_000;
     const thinking = options.thinking ?? (options.json ? 'disabled' : undefined);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let response: Response;
+    let abortCode: 'timeout' | 'cancelled' | undefined;
+    const abort = (code: 'timeout' | 'cancelled') => {
+      if (abortCode) return;
+      abortCode = code;
+      controller.abort();
+    };
+    const onCancel = () => abort('cancelled');
+    options.signal?.addEventListener('abort', onCancel, { once: true });
+    const timer = setTimeout(() => abort('timeout'), timeoutMs);
     try {
-      response = await fetch(`${this.config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      const response = await fetch(`${this.config.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -55,29 +66,41 @@ export class OpenAICompatibleModelClient implements AgentModelClient {
             : {}),
         }),
       });
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error(`Model request timed out after ${timeoutMs}ms`);
+      if (!response.ok) {
+        // 无需读取错误正文，也不把敏感 provider payload 交给调用方。
+        await response.body?.cancel();
+        throw new ModelRequestError('http_error', `Model request failed: ${response.status}`, response.status);
       }
-      throw new Error(formatFetchError(error));
+
+      let json: unknown;
+      try {
+        json = await response.json();
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        if (error instanceof SyntaxError) {
+          throw new ModelRequestError('malformed_response', 'Model response was not valid JSON');
+        }
+        throw error;
+      }
+      const content = (json as { choices?: Array<{ message?: { content?: unknown } }> } | null)
+        ?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content) {
+        throw new ModelRequestError('malformed_response', 'Model response did not contain message content');
+      }
+      if (controller.signal.aborted) throw new Error('aborted');
+      return content;
+    } catch (error) {
+      if (abortCode) {
+        throw new ModelRequestError(abortCode, abortCode === 'timeout'
+          ? `Model request timed out after ${timeoutMs}ms`
+          : 'Model request cancelled');
+      }
+      if (error instanceof ModelRequestError) throw error;
+      throw safeModelNetworkError(error);
     } finally {
       clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onCancel);
     }
-
-    if (!response.ok) {
-      throw new Error(`Model request failed: ${response.status} ${await response.text()}`);
-    }
-
-    const json = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = json.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error('Model response did not contain message content');
-    }
-
-    return content;
   }
 }
 
@@ -95,17 +118,4 @@ export function createModelClient(config?: ModelProviderConfig): AgentModelClien
   }
 
   return new OpenAICompatibleModelClient(config);
-}
-
-function formatFetchError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  const cause = error instanceof Error && 'cause' in error ? (error as Error & { cause?: unknown }).cause : undefined;
-  if (!cause || typeof cause !== 'object') {
-    return message;
-  }
-
-  const causeCode = 'code' in cause && cause.code ? String(cause.code) : '';
-  const causeMessage = cause instanceof Error ? cause.message : 'message' in cause && cause.message ? String(cause.message) : '';
-  const detail = [causeCode, causeMessage].filter(Boolean).join(' ');
-  return detail ? `${message}: ${detail}` : message;
 }

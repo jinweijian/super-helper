@@ -32,6 +32,7 @@ import { VisiblePromptSafetyService } from './visible-prompt-safety.js';
 import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js';
 import { formatSafeWorkerFailure } from './safe-failure-presentation.js';
 import { workerFailedBeforeUsableResult, workerFailureCategory } from './review-worker-failure.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 
 export class ReviewPresentationService {
   constructor(
@@ -52,8 +53,11 @@ export class ReviewPresentationService {
     context: {
       coverageEvidenceEnvelopes?: CoverageEvidenceEnvelope[];
       upstreamBlockers?: ReviewGlobalBlocker[];
+      signal?: AbortSignal;
     } = {},
   ): Promise<ReviewPresentationResult> {
+    const signal = context.signal;
+    throwIfInvestigationCancelled(signal);
     this.events.evidenceReviewStarted(caseSession, run, result);
     const answerGoal = run.request?.answerGoal;
     const structural = validateDiagnosticStructure(result, answerGoal);
@@ -64,6 +68,7 @@ export class ReviewPresentationService {
           answerGoal,
           run,
           context.coverageEvidenceEnvelopes ?? [],
+          signal,
         )
       : undefined;
     const validation = freezeReviewedDiagnosticResult({
@@ -80,7 +85,7 @@ export class ReviewPresentationService {
       result: validated,
       acceptedClaimIds: validation.acceptedClaimIds,
     });
-    const visiblePromptReview = await this.reviewVisiblePrompts(promptCandidates);
+    const visiblePromptReview = await this.reviewVisiblePrompts(promptCandidates, signal);
     let projection = buildSafeFrozenAnswerProjection({
       result: validated,
       answerGoal: answerGoal ?? fallbackAnswerGoal(validated),
@@ -119,9 +124,9 @@ export class ReviewPresentationService {
       };
     }
 
-    if (this.config.agent.modelProvider) {
+    if (this.config.agent.modelProvider && !signal?.aborted) {
       try {
-        const reply = await this.modelDrivenPresentation(caseSession, projection);
+        const reply = await this.modelDrivenPresentation(caseSession, projection, signal);
         if (reply) {
           return {
             reply,
@@ -132,7 +137,7 @@ export class ReviewPresentationService {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.events.modelReviewFailed(caseSession, message);
+        if (!signal?.aborted) this.events.modelReviewFailed(caseSession, message);
       }
     }
 
@@ -146,14 +151,19 @@ export class ReviewPresentationService {
 
   private async reviewVisiblePrompts(
     candidates: ReturnType<typeof collectVisiblePromptCandidates>,
+    signal?: AbortSignal,
   ): Promise<VisiblePromptReview> {
-    if (!this.visiblePromptSafetyAgentSpec) {
+    if (!this.visiblePromptSafetyAgentSpec || signal?.aborted) {
       return { status: 'unknown', acceptedIds: [] };
     }
-    return new VisiblePromptSafetyService(
+    try { return await new VisiblePromptSafetyService(
       this.model,
       this.visiblePromptSafetyAgentSpec,
-    ).review(candidates);
+    ).review(candidates, signal);
+    } catch (error) {
+      if (!signal?.aborted) throw error;
+      return { status: 'unknown', acceptedIds: [] };
+    }
   }
 
   private async reviewCoverage(
@@ -162,6 +172,7 @@ export class ReviewPresentationService {
     answerGoal: AnswerGoal,
     run: DiagnosticRun,
     envelopes: CoverageEvidenceEnvelope[],
+    signal?: AbortSignal,
   ) {
     try {
       const reviewInput = materializeCurrentCoverageReviewInput({
@@ -171,8 +182,9 @@ export class ReviewPresentationService {
         envelopes,
         currentRunId: run.id,
       });
-      return await new AnswerCoverageService(this.model, this.answerCoverageAgentSpec ?? '').review(reviewInput);
+      return await new AnswerCoverageService(this.model, this.answerCoverageAgentSpec ?? '').review(reviewInput, signal);
     } catch (error) {
+      throwIfInvestigationCancelled(signal);
       const reason = error instanceof Error ? error.message : String(error);
       return unknownCoverageReview(`answer coverage unavailable: ${reason}`);
     }
@@ -181,7 +193,9 @@ export class ReviewPresentationService {
   private async modelDrivenPresentation(
     caseSession: StoredCase,
     projection: SafeFrozenAnswerProjection,
+    signal?: AbortSignal,
   ): Promise<string | undefined> {
+    throwIfInvestigationCancelled(signal);
     const response = await this.model.complete([
       {
         role: 'system',
@@ -211,7 +225,8 @@ ${this.presentationAgentSpec}
         role: 'user',
         content: JSON.stringify({ projection }),
       },
-    ], { json: true });
+    ], { json: true, ...(signal ? { signal } : {}) });
+    throwIfInvestigationCancelled(signal);
     const parsed = parseAgentModelJson<SafePresentationPlan>(response);
     const planValidation = validateSafePresentationPlan(parsed, projection);
     this.events.modelReviewResult(caseSession, {

@@ -1,6 +1,7 @@
 import * as z from 'zod/v4';
 import type { AgentModelClient } from '../../providers/model/adapter.js';
 import { parseAgentModelJson } from '../agent-model-review.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 import type {
   HistoricalVerificationInput,
   HistoricalVerificationResult,
@@ -28,16 +29,19 @@ export class HistoricalCaseVerifierService {
     private readonly agentSpec: string,
   ) {}
 
-  async verify(input: HistoricalVerificationInput): Promise<HistoricalVerificationResult> {
+  async verify(input: HistoricalVerificationInput, signal?: AbortSignal): Promise<HistoricalVerificationResult> {
+    throwIfInvestigationCancelled(signal);
     try {
       const response = await this.model.complete([
         { role: 'system', content: `${this.agentSpec}\n\nReturn JSON only.` },
         { role: 'user', content: JSON.stringify(input) },
-      ], { json: true, thinking: 'disabled' });
+      ], { json: true, thinking: 'disabled', ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
       const parsed = VerificationSchema.parse(parseAgentModelJson<unknown>(response));
       if (!validVerification(parsed, input)) return conservative(input);
       return { verifications: parsed.verifications, degraded: false };
     } catch {
+      throwIfInvestigationCancelled(signal);
       return conservative(input);
     }
   }

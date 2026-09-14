@@ -61,7 +61,7 @@ test('cross-gate offline production composition preserves complete reviewed answ
         });
 
         assert.equal(response.decision, 'final');
-        assert.match(response.assistantMessage, /如何开启 search\.provider，以及多久生效/);
+        assert.doesNotMatch(response.assistantMessage, /如何开启 search\.provider，以及多久生效/);
         assert.match(response.assistantMessage, /search\.provider 应设置为 embedding/);
         assert.match(response.assistantMessage, /目标 workspace 的受控配置层/);
         assert.match(response.assistantMessage, /保存并重新加载配置后生效/);

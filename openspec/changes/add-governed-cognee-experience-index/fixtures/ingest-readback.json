@@ -1,0 +1,17 @@
+{
+  "fixture_version": "cognee-v1.5.4/synthetic-ingest-readback-v1",
+  "synthetic_only": true,
+  "request": {
+    "metadata_keys": ["experience_id", "revision", "content_hash"],
+    "dataset_selector": "datasetId"
+  },
+  "observed": {
+    "add_status": 200,
+    "add_response_keys": ["data_ingestion_info", "dataset_id", "dataset_name", "payload", "pipeline_run_id", "status"],
+    "data_response_keys": ["createdAt", "datasetId", "extension", "externalMetadata", "id", "label", "mimeType", "name", "rawDataLocation", "updatedAt"],
+    "metadata_preserved": true,
+    "raw_bytes_match": true,
+    "foreign_raw_status": 403
+  },
+  "not_proven": ["cognify", "search", "graph_source_mapping", "update", "withdraw", "rebuild"]
+}

@@ -11,6 +11,7 @@ export type ProviderErrorCode =
   | 'malformed_response'
   | 'dimension_mismatch'
   | 'network_error'
+  | 'cancelled'
   | 'disabled';
 
 export class ProviderError extends Error {

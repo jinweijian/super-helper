@@ -17,7 +17,7 @@ Archive a completed change in the experimental workflow.
 
 1. **If no change name provided, prompt for selection**
 
-   Run `openspec list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
+   Run `openspec list --json` to get available changes. Use the 当前可用的提问方式（无专用工具时直接提问） to let the user select.
 
    Show only active changes (not already archived).
    Include the schema used for each change if available.
@@ -66,7 +66,9 @@ Archive a completed change in the experimental workflow.
    - If changes needed: "Sync now (recommended)", "Archive without syncing"
    - If already synced: "Archive now", "Sync anyway", "Cancel"
 
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   用户选择 Cancel 时立即停止，不同步、不归档。
+   用户选择同步时，读取当前可用的 openspec-sync-specs 技能并执行已授权的同步；无需固定 Task 或 Skill 工具，也不强制子代理。同步成功并核对结果后继续归档；同步失败或取消时停止并说明原因。
+   用户明确选择不经同步归档，或已同步后选择直接归档时，按该选择继续。
 
 5. **Perform the archive**
 
@@ -160,5 +162,5 @@ Target archive directory already exists.
 - Don't block archive on warnings - just inform and confirm
 - Preserve .openspec.yaml when moving to archive (it moves with the directory)
 - Show clear summary of what happened
-- If sync is requested, use the Skill tool to invoke `openspec-sync-specs` (agent-driven)
+- 请求同步时，读取当前可用的 `openspec-sync-specs` 技能并执行；同步成功后才继续归档。
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting

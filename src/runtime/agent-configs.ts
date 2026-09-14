@@ -7,6 +7,8 @@ export type AgentStage =
   | 'input_review'
   | 'preflight'
   | 'experience'
+  | 'experience_refiner'
+  | 'experience_reviewer'
   | 'knowledge_router'
   | 'evidence_judge'
   | 'rag_answerability'

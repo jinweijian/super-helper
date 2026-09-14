@@ -190,6 +190,26 @@
       "mayProduceUserFacingText": false,
       "executionMode": "model_assisted",
       "summary": "可见追问安全审核 Agent，只按 ID 接受或拒绝已清洗的 unknown/missing-info prompt。"
+    },
+    {
+      "id": "experience-refiner",
+      "role": "offline-experience-refiner",
+      "stage": "experience_refiner",
+      "configPath": "experience-refiner.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "离线工单经验提炼，仅输出来源绑定的候选草稿。"
+    },
+    {
+      "id": "experience-reviewer",
+      "role": "independent-experience-reviewer",
+      "stage": "experience_reviewer",
+      "configPath": "experience-reviewer.md",
+      "required": false,
+      "mayProduceUserFacingText": false,
+      "executionMode": "model_assisted",
+      "summary": "独立审核脱敏源与经验草稿，不拥有发布权限。"
     }
   ]
 }

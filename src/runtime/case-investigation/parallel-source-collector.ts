@@ -5,18 +5,19 @@ import type { KnowledgeCollectionOutcome, KnowledgeTurnService } from '../knowle
 import type { RedmineBranch, RedmineBranchOutcome } from './redmine-branch.js';
 import { failedRedmineBranch } from './redmine-branch.js';
 import type { CaseRuntimeEventRecorder } from '../event-recorder.js';
+import { throwIfInvestigationCancelled } from '../investigation-cancellation.js';
 
 type FailedSource = { status: 'failed'; safeErrorCode: string };
 
 export interface ParallelSourceOutcome {
-  knowledge: KnowledgeCollectionOutcome | (FailedSource & { coverageEvidenceEnvelopes: [] });
+  knowledge: KnowledgeCollectionOutcome | (FailedSource & { coverageEvidenceEnvelopes: [] }) | { status: 'skipped'; coverageEvidenceEnvelopes: [] };
   experience: ExperienceCollectionOutcome | (FailedSource & { rejectedCandidates: [] });
   redmine: RedmineBranchOutcome;
 }
 
 export class ParallelSourceCollector {
   constructor(private readonly sources: {
-    knowledge: Pick<KnowledgeTurnService, 'collect'>;
+    knowledge?: Pick<KnowledgeTurnService, 'collect'>;
     experience: Pick<ExperienceTurnService, 'collect'>;
     redmine: Pick<RedmineBranch, 'collect'>;
     events?: Pick<CaseRuntimeEventRecorder,
@@ -24,9 +25,12 @@ export class ParallelSourceCollector {
       'historicalCaseAnalysisStarted' | 'historicalCaseAnalysisCompleted'>;
   }) {}
 
-  async collect(caseSession: StoredCase, request: DiagnosticRequest): Promise<ParallelSourceOutcome> {
+  async collect(caseSession: StoredCase, request: DiagnosticRequest, signal?: AbortSignal): Promise<ParallelSourceOutcome> {
+    throwIfInvestigationCancelled(signal);
     const [knowledge, experience, redmine] = await Promise.allSettled([
-      this.sources.knowledge.collect(caseSession, request.userGoal, structuredClone(request)),
+      this.sources.knowledge
+        ? this.sources.knowledge.collect(caseSession, request.userGoal, structuredClone(request), signal)
+        : Promise.resolve({ status: 'skipped' as const, coverageEvidenceEnvelopes: [] as [] }),
       this.sources.experience.collect(caseSession, structuredClone(request)),
       this.sources.redmine.collect(structuredClone(request), {
         searchStarted: () => this.sources.events?.historicalCaseSearchStarted(caseSession, { runId: request.runId }),
@@ -41,8 +45,9 @@ export class ParallelSourceCollector {
           leadIds: outcome.leads.map((item) => item.id), evidenceIds: outcome.evidence.map((item) => item.id),
           durationMs, degraded: Boolean(outcome.analysisDegraded),
         }),
-      }),
+      }, signal),
     ]);
+    throwIfInvestigationCancelled(signal);
     return {
       knowledge: knowledge.status === 'fulfilled'
         ? knowledge.value

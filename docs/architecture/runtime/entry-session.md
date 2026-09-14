@@ -55,6 +55,14 @@ sequenceDiagram
 
 ## 代码入口
 
+### 回合取消
+
+`InvestigationControl` 按 Case 和 userMessageId 持有非持久化 AbortController。Runtime 显式向 Preflight、知识可回答性、历史案例模型阶段及审核表达传递 signal；不在共享 service 中保存可变的当前信号。模型请求前、返回后与失败降级路径检查取消，正式 adapter 可中止响应体读取。
+
+尚未完成审核的结果不能因取消被接受。冻结结果之后的表达取消改用确定性安全渲染；Deep 审核取消保留已有 Fast 初步判断。回合统一收尾，只产生一条绑定回复，旧消息不能取消后续回合。
+
+这不是全部外部工作的即时中止保证：当前 MCP/embedding 传输与旧 allSettled 等待屏障仍有独立治理工作；远端是否停止计费不能由本地 abort 推断。浏览器停止、本地 HTTP 及跨 Case 隔离验收见 `propagate-runtime-model-cancellation` 的实施记录。
+
 - `src/gateway/routes/chat-routes.ts`
 - `src/runtime/diagnostic-runtime.ts`
 - `src/runtime/turn-queue.ts`

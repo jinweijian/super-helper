@@ -10,6 +10,7 @@ import type { RuntimeTurnResponse } from './contracts.js';
 import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { RagAnswerabilityService, type RagAnswerabilityResult } from './rag-answerability-service.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 import {
   attachKnowledgeCodeEscalationContext,
   diagnosticResultFromKnowledge,
@@ -45,7 +46,9 @@ export class KnowledgeTurnService {
     caseSession: StoredCase,
     userMessage: string,
     request: DiagnosticRequest,
+    signal?: AbortSignal,
   ): Promise<KnowledgeCollectionOutcome> {
+    throwIfInvestigationCancelled(signal);
     const workspaceRoot = resolveKnowledgeWorkspaceRoot(this.config, caseSession.workspaceId);
     this.events.knowledgeRouterStarted(caseSession, userMessage);
     const diagnosis = await prepareKnowledgeDiagnosis({
@@ -54,6 +57,7 @@ export class KnowledgeTurnService {
       question: userMessage,
       persona: caseSession.userPersona,
     });
+    throwIfInvestigationCancelled(signal);
     if (!diagnosis) return { status: 'no_hit', coverageEvidenceEnvelopes: [] };
 
     const { route, evidencePack, judge, retrievalTrace, glossaryTerms } = diagnosis;
@@ -85,7 +89,8 @@ export class KnowledgeTurnService {
       answerability = await this.ragAnswerabilityService.evaluate({
         answerGoal,
         evidence: evidencePack.results,
-      });
+      }, signal);
+      throwIfInvestigationCancelled(signal);
       this.events.ragAnswerabilityResult(caseSession, answerability);
     }
 
@@ -160,8 +165,10 @@ export class KnowledgeTurnService {
     userMessage: string,
     replyToMessageId: string | undefined,
     request: DiagnosticRequest,
+    signal?: AbortSignal,
   ): Promise<RuntimeTurnResponse | undefined> {
-    const collected = await this.collect(caseSession, userMessage, request);
+    const collected = await this.collect(caseSession, userMessage, request, signal);
+    throwIfInvestigationCancelled(signal);
     if (collected.requestPatch) applyRequestPatch(request, collected.requestPatch);
     if (!collected.result) return undefined;
     const result = collected.result;
@@ -177,6 +184,7 @@ export class KnowledgeTurnService {
     this.events.preflightKnowledgeAnswer(caseSession, result);
     this.events.knowledgeAnswerSelected(caseSession, result);
     const review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
+      signal,
       coverageEvidenceEnvelopes: collected.coverageEvidenceEnvelopes,
     });
     return completePresentedTurn({

@@ -67,6 +67,7 @@ export class ExperienceTurnService {
     caseSession: StoredCase,
     request: DiagnosticRequest,
     replyToMessageId?: string,
+    signal?: AbortSignal,
   ): Promise<RuntimeTurnResponse | undefined> {
     const collected = await this.collect(caseSession, request);
     const match = collected.match;
@@ -93,6 +94,7 @@ export class ExperienceTurnService {
     caseSession.status = 'diagnosing';
     this.store.addRun(caseSession, run);
     const review = await this.reviewer.reviewAndFormat(caseSession, match.result, run, {
+      signal,
       coverageEvidenceEnvelopes: match.coverageEvidenceEnvelopes,
     });
     return completePresentedTurn({

@@ -23,11 +23,15 @@ describe('完整配置表单', () => {
     await save().trigger('click');
     expect((wrapper.emitted('saveClaude')?.[1]?.[0] as any).investigationProfiles.fast.maxTurns).toBe(15);
     expect(profiles.fast.maxTurns).toBe(12);
+    expect(wrapper.text()).not.toContain('快速模型');
+    expect(wrapper.text()).not.toContain('深度模型');
   });
-  it('保留所有配置分区并使用当前未保存模型值测试', async () => {
+  it('隐藏已下线知识库配置并使用当前未保存模型值测试', async () => {
     const wrapper = mount(SettingsForm, { props: { settings, actions: {} } });
-    expect(wrapper.text()).toContain('Embedding');
-    expect(wrapper.text()).toContain('Rerank');
+    expect(wrapper.text()).not.toContain('Embedding');
+    expect(wrapper.text()).not.toContain('Rerank');
+    expect(wrapper.text()).not.toContain('RAG 可回答性审核');
+    expect(wrapper.text()).toContain('知识库已下线');
     expect(wrapper.text()).toContain('Claude');
     expect(wrapper.text()).toContain('多 Agent');
     await wrapper.get('input[name="model"]').setValue('unsaved-model');

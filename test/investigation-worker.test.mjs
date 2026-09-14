@@ -11,6 +11,18 @@ test('配置拒绝未校准值并剔除额外字段', () => {
   assert.throws(() => validateInvestigationProfiles({ enabled: true, fast: { model: 'f', effort: 'low', maxTurns: 0 }, deep: { model: 'd', effort: 'high', timeoutMs: 12 } }), /正整数/);
 });
 
+test('排查模型覆盖留空时继承 Claude 默认模型', () => {
+  assert.deepEqual(validateInvestigationProfiles({
+    enabled: true,
+    fast: { model: '', effort: 'low', maxTurns: 5 },
+    deep: { effort: 'high', timeoutMs: 1200000 },
+  }), {
+    enabled: true,
+    fast: { effort: 'low', maxTurns: 5 },
+    deep: { effort: 'high', timeoutMs: 1200000 },
+  });
+});
+
 test('忽略 SIGTERM 的子进程在宽限后被 SIGKILL', async () => {
   const controller = new AbortController();
   const result = await runCommand(process.execPath, ['-e', 'process.on("SIGTERM",()=>{}); console.log(JSON.stringify({type:"result",subtype:"success",result:"ready"})); setInterval(()=>{},1000)'], process.cwd(), 3000,
@@ -73,9 +85,36 @@ test('Fast 参数使用明确 profile 且旧配置保持兼容', async () => {
   config.claude.investigationProfiles = { enabled: true, fast: { model: 'test-fast', effort: 'low', maxTurns: 7 }, deep: { model: 'test-deep', effort: 'high', timeoutMs: 1200000 } };
   const request = { workspaceId: 'w', claudeSessionId: 's', runId: 'run_01', unknowns: [], context: {}, investigation: { requestedMode: 'fast', resolvedProfile: 'fast', attempt: 1, escalationAllowed: false } };
   const response = await new ClaudeCodeWorker(config).diagnose(request);
-  assert.match(response.trace.command, /--model test-fast --effort low --prompt-suggestions false --max-turns 7/);
+  assert.match(response.trace.command, /--model test-fast --effort low --prompt-suggestions false/);
+  assert.doesNotMatch(response.trace.command, /--max-turns/);
   delete request.investigation;
   assert.doesNotMatch((await new ClaudeCodeWorker(config).diagnose(request)).trace.command, /--model|--max-turns/);
+});
+
+test('旧配置选择 Fast 只传递推理强度，不限制调查轮数', async () => {
+  const config = defaultConfig();
+  config.claude.enabled = true;
+  config.claude.command = '/bin/echo';
+  config.claude.commandWhitelist = ['/bin/echo'];
+  config.workspaces = [{ id: 'w', rootPath: process.cwd(), mcpToolIds: [] }];
+  const request = { workspaceId: 'w', claudeSessionId: 'legacy-fast', runId: 'run_01', unknowns: [], context: {}, investigation: { requestedMode: 'fast', resolvedProfile: 'fast', attempt: 1, escalationAllowed: false } };
+  const response = await new ClaudeCodeWorker(config).diagnose(request);
+  assert.match(response.trace.command, /--effort low/);
+  assert.match(response.trace.command, /--effort low/);
+  assert.doesNotMatch(response.trace.command, /--max-turns/);
+});
+
+test('未启用自动配置时手动 Deep 继承模型并使用高推理强度', async () => {
+  const config = defaultConfig();
+  config.claude.enabled = true;
+  config.claude.command = '/bin/echo';
+  config.claude.commandWhitelist = ['/bin/echo'];
+  config.workspaces = [{ id: 'w', rootPath: process.cwd(), mcpToolIds: [] }];
+  const request = { workspaceId: 'w', claudeSessionId: 'manual', runId: 'run_01', unknowns: [], context: {}, investigation: { requestedMode: 'deep', resolvedProfile: 'deep', attempt: 1, escalationAllowed: false } };
+  const response = await new ClaudeCodeWorker(config).diagnose(request);
+  assert.match(response.trace.command, /--effort high/);
+  assert.match(response.trace.command, /--output-format stream-json/);
+  assert.doesNotMatch(response.trace.command, /--model/);
 });
 
 test('取消在启动前生效', async () => {
@@ -106,11 +145,9 @@ test('真实 Worker Deep 路径与排队取消保持会话串行', async () => {
   try {
     const command = join(dir, 'fake-claude');
     writeFileSync(command, `#!/usr/bin/env node
-if(process.argv.includes('--max-turns')) {
-  if (!process.argv.some(arg=>arg.includes('Expand the search scope at most once'))) process.exit(2);
-  console.log(JSON.stringify({type:'result',subtype:'error_max_turns',errors:['SECRET']})); process.exit(1);
+if(process.argv.some(arg=>arg.includes('counterevidence'))) {
+  console.log(JSON.stringify({type:'result',subtype:'success',result:JSON.stringify({status:'partial',summary:'安全结果',missingInfo:[],evidence:[],claims:[],recommendedNextAction:'ask_user'})})); process.exit(0);
 }
-if (!process.argv.some(arg=>arg.includes('counterevidence'))) process.exit(2);
 console.log(JSON.stringify({type:'assistant',message:{content:[{type:'tool_use',id:'read',name:'Read',input:{file_path:'package.json',secret:'SECRET'}}]}}));
 setTimeout(()=>console.log(JSON.stringify({type:'result',subtype:'success',result:JSON.stringify({status:'partial',summary:'安全结果',missingInfo:[],evidence:[],claims:[],recommendedNextAction:'ask_user'})})),150);
 `);
@@ -148,7 +185,6 @@ setTimeout(()=>console.log(JSON.stringify({type:'result',subtype:'success',resul
     request.investigation.resolvedProfile = 'fast';
     const bounded = await worker.diagnose(request);
     assert.equal(bounded.result.status, 'partial');
-    assert.match(bounded.result.summary, /error_max_turns/);
     assert.equal(bounded.trace.error, undefined);
     assert.equal(bounded.trace.exitCode, 0);
     assert.equal(JSON.stringify(bounded).includes('SECRET'), false);

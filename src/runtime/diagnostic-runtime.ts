@@ -1,7 +1,7 @@
 import type { SuperHelperConfig } from '../config.js';
 import type { DiagnosticRun, UserPersona, InvestigationPreference } from '../domain.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
-import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
+import type { AuthorityDiagnosticAdapter } from '../contracts/authority-diagnostic.js';
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import type { RuntimeTurnResponse, AcceptedUserTurn } from './contracts.js';
 import { formatPreflightQuestion } from './preflight-presentation.js';
@@ -28,7 +28,7 @@ export class DiagnosticRuntime {
   constructor(
     private readonly config: SuperHelperConfig,
     private readonly store: CaseRepository,
-    worker: DiagnosticWorker,
+    worker: AuthorityDiagnosticAdapter,
     options: DiagnosticRuntimeOptions = {},
   ) {
     this.services = createRuntimeServices({ config, store, worker, options, investigationControl: this.investigationControl });
@@ -166,7 +166,8 @@ export class DiagnosticRuntime {
       return curationResponse;
     }
 
-    const decision = await this.services.preflight.decide(caseSession, userMessage);
+    const decision = await this.services.preflight.decide(caseSession, userMessage,
+      this.investigationControl.options(caseSession.id).signal);
     if (this.investigationControl.options(caseSession.id).signal?.aborted) throw new InvestigationCancelled();
     if (decision.action === 'ask_user') {
       this.services.events.preflightAskUser(caseSession, decision);
@@ -180,22 +181,36 @@ export class DiagnosticRuntime {
     }
 
     if (this.hasHistoricalCaseSource(decision.request.workspaceId)) {
-      return this.services.caseInvestigation.answer(caseSession, decision.request, replyToMessageId);
+      return this.services.caseInvestigation.answer(caseSession, decision.request, replyToMessageId,
+        this.investigationControl.options(caseSession.id).signal);
     }
 
-    const experienceResponse = await this.services.experienceTurn.answer(caseSession, decision.request, replyToMessageId);
+    const experienceResponse = await this.services.experienceTurn.answer(caseSession, decision.request, replyToMessageId,
+      this.investigationControl.options(caseSession.id).signal);
     if (experienceResponse) {
       return experienceResponse;
     }
 
-    const knowledgeResponse = await this.services.knowledgeTurn.answer(
-      caseSession,
-      decision.request.userGoal,
-      replyToMessageId,
-      decision.request,
-    );
-    if (knowledgeResponse) {
-      return knowledgeResponse;
+    if (this.config.knowledge.onlineDiagnosisEnabled !== false) {
+      const knowledgeResponse = await this.services.knowledgeTurn.answer(
+        caseSession,
+        decision.request.userGoal,
+        replyToMessageId,
+        decision.request,
+        this.investigationControl.options(caseSession.id).signal,
+      );
+      if (knowledgeResponse) {
+        return knowledgeResponse;
+      }
+    } else {
+      this.store.addLogEvent(caseSession, {
+        actor: 'system',
+        phase: 'knowledge_online_disabled',
+        label: '旧知识库已跳过',
+        severity: 'info',
+        summary: '在线排查已跳过旧文档/RAG，先执行当前项目证据排查。',
+        detail: { reason: 'knowledge_graph_migration' },
+      });
     }
 
     const mcpResult = await this.services.mcpEvidence.run(decision.request);
@@ -227,6 +242,7 @@ export class DiagnosticRuntime {
       caseSession.status = 'diagnosing';
       this.store.addRun(caseSession, run);
       const review = await this.services.reviewer.reviewAndFormat(caseSession, mcpResult, run, {
+        signal: this.investigationControl.options(caseSession.id).signal,
         coverageEvidenceEnvelopes: this.services.mcpEvidence.currentCoverageEvidence(decision.request)
           .map((item) => ({
             ...item,

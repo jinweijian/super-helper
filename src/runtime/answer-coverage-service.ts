@@ -1,6 +1,7 @@
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { redactSecretText } from '../redaction.js';
 import { parseAgentModelJson } from './agent-model-review.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 import type {
   AnswerCoverageReview,
   CoverageBinding,
@@ -13,7 +14,8 @@ export class AnswerCoverageService {
     private readonly agentSpec: string,
   ) {}
 
-  async review(input: CoverageReviewInput): Promise<AnswerCoverageReview> {
+  async review(input: CoverageReviewInput, signal?: AbortSignal): Promise<AnswerCoverageReview> {
+    throwIfInvestigationCancelled(signal);
     try {
       const response = await this.model.complete([
         {
@@ -26,12 +28,14 @@ Return JSON only:
 Do not return user-visible prose or fields outside this schema.`,
         },
         { role: 'user', content: JSON.stringify(input) },
-      ], { json: true });
+      ], { json: true, ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
       return validateAnswerCoverageReview(
         parseAgentModelJson<Partial<AnswerCoverageReview>>(response),
         input,
       );
     } catch (error) {
+      throwIfInvestigationCancelled(signal);
       const reason = error instanceof Error ? error.message : String(error);
       return unknownCoverageReview(`coverage review failed: ${boundedText(reason, 160)}`);
     }

@@ -1,5 +1,6 @@
 import type { AgentModelClient } from '../providers/model/adapter.js';
 import { parseAgentModelJson } from './agent-model-review.js';
+import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
 import type { SafePromptSegment, VisiblePromptReview } from './safe-answer-projection.js';
 
 export class VisiblePromptSafetyService {
@@ -8,7 +9,8 @@ export class VisiblePromptSafetyService {
     private readonly agentSpec: string,
   ) {}
 
-  async review(candidates: SafePromptSegment[]): Promise<VisiblePromptReview> {
+  async review(candidates: SafePromptSegment[], signal?: AbortSignal): Promise<VisiblePromptReview> {
+    throwIfInvestigationCancelled(signal);
     if (candidates.length === 0) return { status: 'accepted', acceptedIds: [] };
     const bounded = candidates.slice(0, 10);
     try {
@@ -27,7 +29,8 @@ Do not rewrite text and do not return user-visible prose.`,
             candidates: bounded.map((item) => ({ id: item.id, text: item.text, source: item.source })),
           }),
         },
-      ], { json: true });
+      ], { json: true, ...(signal ? { signal } : {}) });
+      throwIfInvestigationCancelled(signal);
       const parsed = parseAgentModelJson<{ status?: unknown; acceptedIds?: unknown }>(response);
       if (
         parsed.status !== 'accepted' ||
@@ -45,6 +48,7 @@ Do not rewrite text and do not return user-visible prose.`,
         acceptedIds: Array.from(new Set(parsed.acceptedIds)),
       };
     } catch {
+      throwIfInvestigationCancelled(signal);
       return { status: 'unknown', acceptedIds: [] };
     }
   }

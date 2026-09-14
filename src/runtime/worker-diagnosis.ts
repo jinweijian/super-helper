@@ -1,6 +1,6 @@
 import type { ClaudeWorkerResponse, DiagnosticRequest } from '../domain.js';
 import type { CaseRepository, StoredCase } from '../sessions/case-repository.js';
-import type { DiagnosticWorker } from '../workers/diagnostic-worker.js';
+import type { AuthorityDiagnosticAdapter } from '../contracts/authority-diagnostic.js';
 import type { ReviewPresentationResult } from './contracts.js';
 import { CaseRuntimeEventRecorder } from './event-recorder.js';
 import { buildFollowUpDiagnosticRequest } from './request-builder.js';
@@ -39,7 +39,7 @@ export type WorkerEvidenceCollectionOutcome =
 export class WorkerDiagnosisService {
   constructor(
     private readonly store: CaseRepository,
-    private readonly worker: DiagnosticWorker,
+    private readonly worker: AuthorityDiagnosticAdapter,
     private readonly events: CaseRuntimeEventRecorder,
     private readonly reviewer: ReviewPresentationService,
     private readonly investigation?: { config: SuperHelperConfig; control?: InvestigationControl },
@@ -96,6 +96,7 @@ export class WorkerDiagnosisService {
     this.events.workerTrace(caseSession, workerResponse.trace);
 
     let review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
+      signal: this.investigation?.control?.options(request.caseId).signal,
       coverageEvidenceEnvelopes: workerCoverageEnvelopes(workerResponse),
     });
     if (this.investigation?.control?.options(request.caseId).signal?.aborted) return this.cancelledReview(review);
@@ -180,9 +181,16 @@ export class WorkerDiagnosisService {
     this.store.saveCase(caseSession);
     this.events.workerTrace(caseSession, followUpResponse.trace);
     const previousReview = review;
-    review = await this.reviewer.reviewAndFormat(caseSession, followUpResponse.result, followUpRun, {
-      coverageEvidenceEnvelopes: workerCoverageEnvelopes(followUpResponse),
-    });
+    try {
+      review = await this.reviewer.reviewAndFormat(caseSession, followUpResponse.result, followUpRun, {
+        signal: this.investigation?.control?.options(request.caseId).signal,
+        coverageEvidenceEnvelopes: workerCoverageEnvelopes(followUpResponse),
+      });
+    } catch (error) {
+      if (!(error instanceof InvestigationCancelled)) throw error;
+      followUpRun.status = 'partial';
+      return this.cancelledReview(previousReview);
+    }
     if (review.decision !== 'final' && !review.hasReviewedAnswer && previousReview.hasReviewedAnswer) {
       review = { ...previousReview, reply: '初步判断（深度排查未补齐证据，不能作为最终结论）：\n\n' + previousReview.reply, decision: 'partial', caseStatus: 'partial' };
     }
@@ -191,13 +199,15 @@ export class WorkerDiagnosisService {
   }
 
   private prepareInvestigation(request: DiagnosticRequest, historical = false): void {
-    if (!this.investigation?.config.claude.investigationProfiles?.enabled) return;
+    const investigation = this.investigation;
+    if (!investigation) return;
     const caseSession = this.store.loadCase(request.caseId);
     const sourceIds = request.answerGoal.sourceMessageIds;
     const original = caseSession?.messages.filter(message => message.role === 'user' && sourceIds.includes(message.id)).at(-1);
-    const preference = this.investigation.control?.preference(request.caseId) ?? original?.investigationPreference ?? 'auto';
+    const preference = investigation.control?.preference(request.caseId) ?? original?.investigationPreference ?? 'auto';
+    if (preference === 'auto' && !investigation.config.claude.investigationProfiles?.enabled) return;
     request.investigation = resolveInvestigation(preference, request, historical).execution;
-    this.investigation.control?.setExecution(request.caseId, request.investigation);
+    investigation.control?.setExecution(request.caseId, request.investigation);
   }
 
   private async execute(request: DiagnosticRequest): Promise<ClaudeWorkerResponse> {
@@ -228,7 +238,7 @@ function validWorkerLeads(leads: HistoricalLead[]): boolean {
 }
 
 function workerCoverageEnvelopes(
-  response: Awaited<ReturnType<DiagnosticWorker['diagnose']>>,
+  response: Awaited<ReturnType<AuthorityDiagnosticAdapter['diagnose']>>,
 ): CoverageEvidenceEnvelope[] {
   return (response.coverageEvidence ?? []).map((item) => ({
     ...item,

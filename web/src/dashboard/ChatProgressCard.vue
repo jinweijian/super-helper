@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { progressView, type ChatProgressState } from './chat-progress';
 const props = defineProps<{ progress: ChatProgressState }>();
-const emit = defineEmits<{ retry: []; stop: [] }>();
+const emit = defineEmits<{ retry: [] }>();
 const stages = {locating: '定位候选', reading: '阅读代码', verifying: '验证假设', summarizing: '整理证据'};
 const modes = {auto: '自动', fast: '快速', deep: '深度'};
 const now = ref(Date.now());
@@ -23,7 +23,6 @@ const isRetryable = computed(() => props.progress.state === 'interrupted' && pro
       {{ modes[progress.investigation.requestedMode] }}<template v-if="progress.investigation.requestedMode === 'auto' && progress.investigation.resolvedProfile"> → {{ modes[progress.investigation.resolvedProfile] }}</template>
       · {{ stages[progress.investigation.stage] }} · 搜索 {{ progress.investigation.searchCount }} 次 · 已读 {{ progress.investigation.filesRead }} 个文件 · {{ view.heartbeatLabel }}
     </span>
-    <button v-if="view.animated" type="button" class="retry-button" :disabled="progress.investigation?.stopping" @click="emit('stop')">{{ progress.investigation?.stopping ? '正在停止…' : '停止排查' }}</button>
     <button v-if="isRetryable" type="button" class="retry-button" @click="emit('retry')">一键重试</button>
   </section>
 </template>

@@ -3,6 +3,23 @@
 本手册用于把 legacy `semantic-section-v1/v2`、`parent-child-v2/v3` 与平面索引迁移为
 `parent-child-v4` immutable generation。迁移不会原地补字段伪装合规，也不会在普通检索请求中自动写入。
 
+## 迁移期间的在线排查策略
+
+知识图谱尚未完成接管前，建议关闭旧文档/RAG 参与在线诊断，避免手册片段抢先形成无关候选。
+在 `config.json` 中设置：
+
+```json
+{
+  "knowledge": {
+    "onlineDiagnosisEnabled": false
+  }
+}
+```
+
+关闭后，在线回合仍保留工单经验、Redmine（如已配置）、MCP 和当前项目只读代码排查；旧知识库
+仍可用于离线迁移、审计、索引重建和显式检索调试。待 Cognee/知识图谱完成并通过独立验收后，
+再将该开关改为 `true`，不要把“索引存在”当作“可以在线直答”。
+
 ## 迁移顺序
 
 1. 运行 `knowledge migration-report`，生成 legacy inventory、模块批次状态和人工 review queue。

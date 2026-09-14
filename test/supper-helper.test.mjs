@@ -222,10 +222,10 @@ test('partial fallback leads with accepted inference instead of generic downgrad
     recommendedNextAction: 'final_answer',
   }, 'operations', '学员pc端手机号快捷登录收不到验证码，这个是什么问题');
 
-  assert.match(reply, /\*\*推断线索：\*\* 短信防御模块可能拦截了该学员的请求/);
+  assert.match(reply, /\*\*目前更像是：\*\* .*短信防御模块可能拦截了该学员的请求/);
   assert.doesNotMatch(reply, /^(\*\*)?结论：诊断结果包含未通过证据校验的内容/m);
-  assert.match(reply, /现有安全证据不足，暂不能形成最终结论/);
-  assert.match(reply, /\*\*仍需确认：\*\*.*短信防御命中日志/);
+  assert.match(reply, /这轮证据不足，我还没有找到可以确认原因的线索/);
+  assert.match(reply, /\*\*为了继续定位，请帮我确认：\*\*.*短信防御命中日志/);
 });
 
 test('final worker result without claim role and answers is downgraded instead of shown as concluded', () => {
@@ -1152,6 +1152,7 @@ process.exit(1);
   const config = baseConfig(dir);
   config.claude.command = workerPath;
   config.claude.commandWhitelist = [workerPath];
+  config.claude.timeoutMs = 5000;
   const worker = new ClaudeCodeWorker(config);
 
   try {
@@ -1235,7 +1236,7 @@ ${JSON.stringify({ ...structured, summary: 'parsed fenced result with earlier br
   assert.match(assertHostCommandAllowed('rm', ['claude']), /not in super helper command whitelist/);
 });
 
-test('model client includes fetch cause codes in connection errors', async () => {
+test('model client preserves allowlisted fetch cause code without raw connection messages', async () => {
   const originalFetch = globalThis.fetch;
   const cause = new Error('Connect Timeout Error');
   cause.code = 'UND_ERR_CONNECT_TIMEOUT';
@@ -1254,7 +1255,15 @@ test('model client includes fetch cause codes in connection errors', async () =>
 
     await assert.rejects(
       () => client.complete([{ role: 'user', content: 'test' }]),
-      /fetch failed: UND_ERR_CONNECT_TIMEOUT Connect Timeout Error/,
+      (error) => {
+        assert.equal(error.code, 'network_error');
+        assert.equal(error.networkCode, 'UND_ERR_CONNECT_TIMEOUT');
+        assert.equal(error.message, 'Model request failed due to a network error (UND_ERR_CONNECT_TIMEOUT)');
+        assert.equal(error.retryable, true);
+        assert.equal(error.cause, undefined);
+        assert.doesNotMatch(error.stack, /Connect Timeout Error|api\.example\.test|test-key/);
+        return true;
+      },
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -1359,7 +1368,7 @@ test('runtime keeps unreviewed knowledge evidence non-final when no coverage mod
     assert.equal(response.decision, 'partial');
     assert.equal(response.caseSession.runs.length, 1);
     assert.equal(response.caseSession.runs[0].result.evidence[0].kind, 'knowledge');
-    assert.match(response.assistantMessage, /AI伴学助手如何制定学习计划/);
+    assert.match(response.assistantMessage, /这轮证据不足/);
     assert.doesNotMatch(response.assistantMessage, /\*\*初步判断：/);
     assert.match(response.assistantMessage, /证据不足|无法形成.*结论|还不能形成.*结论/);
     assert.doesNotMatch(response.assistantMessage, /支撑证据/);
@@ -1414,7 +1423,7 @@ test('runtime retrieves broader whitepaper sources but does not expose facts wit
 
     assert.equal(workerRequests.length, 0);
     assert.equal(response.decision, 'partial');
-    assert.match(response.assistantMessage, /学习日晚上8点/);
+    assert.match(response.assistantMessage, /这轮证据不足/);
     assert.doesNotMatch(response.assistantMessage, /APP通知/);
     assert.match(response.assistantMessage, /证据不足|无法形成.*结论|还不能形成.*结论/);
   } finally {
@@ -1519,7 +1528,7 @@ test('runtime carries partial RAG claims into code escalation instead of discard
     assert.match(workerRequests[0].context.knowledge.answerability.coveredClaims[0].text, /制定学习计划/);
     assert.match(workerRequests[0].context.knowledge.answerability.escalationFocus, /入口和验证方式/);
     assert.match(workerRequests[0].context.deepQuery.anchorTerms.join('\n'), /入口路径|验证或注意事项|入口和验证方式/);
-    assert.match(response.assistantMessage, /制定学习计划/);
+    assert.match(response.assistantMessage, /学习计划入口/);
     assert.match(response.assistantMessage, /学习时间段|每周学习日/);
     assert.match(response.assistantMessage, /验证/);
     assert.doesNotMatch(response.assistantMessage, /配置或使用问题|对业务的影响|你可以怎么处理/);
@@ -3090,7 +3099,7 @@ test('agent blocks unsupported fact-only worker conclusions from final presentat
     });
 
     assert.equal(response.decision, 'partial');
-    assert.match(response.assistantMessage, /当前状态|证据不足/);
+    assert.match(response.assistantMessage, /不能负责任地下最终结论|证据不足/);
     assert.doesNotMatch(response.assistantMessage, /这是没有任何 evidenceIds 的事实判断/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -3680,6 +3689,8 @@ test('agent registry exposes main and configured sub-agent contracts', () => {
     'evidence_coverage',
     'answer_goal_completeness',
     'visible_prompt_safety',
+    'experience_refiner',
+    'experience_reviewer',
   ]);
   assert.match(resolveAgentConfig('main').absolutePath, /src\/agents\/main\.md$/);
   assert.match(resolveAgentConfig('preflight').content, /Input Review Agent/);
