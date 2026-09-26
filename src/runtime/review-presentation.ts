@@ -33,6 +33,7 @@ import type { CoverageEvidenceEnvelope } from './coverage-evidence-provenance.js
 import { formatSafeWorkerFailure } from './safe-failure-presentation.js';
 import { workerFailedBeforeUsableResult, workerFailureCategory } from './review-worker-failure.js';
 import { throwIfInvestigationCancelled } from './investigation-cancellation.js';
+import { reviewedBindingClaimIds } from './reviewed-binding-claims.js';
 
 export class ReviewPresentationService {
   constructor(
@@ -51,6 +52,7 @@ export class ReviewPresentationService {
     result: DiagnosticResult,
     run: DiagnosticRun,
     context: {
+      authorityResult?: boolean;
       coverageEvidenceEnvelopes?: CoverageEvidenceEnvelope[];
       upstreamBlockers?: ReviewGlobalBlocker[];
       signal?: AbortSignal;
@@ -61,7 +63,7 @@ export class ReviewPresentationService {
     this.events.evidenceReviewStarted(caseSession, run, result);
     const answerGoal = run.request?.answerGoal;
     const structural = validateDiagnosticStructure(result, answerGoal);
-    const coverageReview = this.answerCoverageAgentSpec && answerGoal
+    const coverageReview = !context.authorityResult && this.answerCoverageAgentSpec && answerGoal
       ? await this.reviewCoverage(
           structural.result.claims,
           structural.result.evidence,
@@ -75,10 +77,9 @@ export class ReviewPresentationService {
       structural,
       answerGoal: answerGoal ?? fallbackAnswerGoal(structural.result),
       coverageReview,
-      upstreamBlockers: [
-        ...upstreamGlobalBlockers(run),
-        ...(context.upstreamBlockers ?? []),
-      ],
+      upstreamBlockers: context.authorityResult
+        ? []
+        : [...upstreamGlobalBlockers(run), ...(context.upstreamBlockers ?? [])],
     });
     let validated = validation.result;
     const promptCandidates = collectVisiblePromptCandidates({
@@ -91,7 +92,7 @@ export class ReviewPresentationService {
       answerGoal: answerGoal ?? fallbackAnswerGoal(validated),
       frozenPrimaryClaimIds: validation.acceptedPrimaryAnswerClaimIds,
       acceptedClaimIds: validation.acceptedClaimIds,
-      reviewedBindingClaimIds: reviewedBindingClaimIds(coverageReview),
+      reviewedBindingClaimIds: reviewedBindingClaimIds(coverageReview, validation.result.claims, validation.acceptedClaimIds),
       visiblePromptReview,
     });
     validated = applyProjectionOutcome(validated, projection);
@@ -100,7 +101,7 @@ export class ReviewPresentationService {
       answerGoal: answerGoal ?? fallbackAnswerGoal(validated),
       frozenPrimaryClaimIds: validation.acceptedPrimaryAnswerClaimIds,
       acceptedClaimIds: validation.acceptedClaimIds,
-      reviewedBindingClaimIds: reviewedBindingClaimIds(coverageReview),
+      reviewedBindingClaimIds: reviewedBindingClaimIds(coverageReview, validation.result.claims, validation.acceptedClaimIds),
       visiblePromptReview,
     });
     run.result = validated;
@@ -241,11 +242,6 @@ ${this.presentationAgentSpec}
       plan: parsed,
     });
   }
-}
-
-function reviewedBindingClaimIds(review: Awaited<ReturnType<ReviewPresentationService['reviewCoverage']>> | undefined): string[] {
-  if (review?.status !== 'accepted') return [];
-  return Array.from(new Set(review.bindings.map((binding) => binding.claimId)));
 }
 
 function upstreamGlobalBlockers(run: DiagnosticRun): ReviewGlobalBlocker[] {

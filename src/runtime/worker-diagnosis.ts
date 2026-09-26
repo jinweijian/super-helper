@@ -96,6 +96,7 @@ export class WorkerDiagnosisService {
     this.events.workerTrace(caseSession, workerResponse.trace);
 
     let review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
+      authorityResult: true,
       signal: this.investigation?.control?.options(request.caseId).signal,
       coverageEvidenceEnvelopes: workerCoverageEnvelopes(workerResponse),
     });
@@ -183,6 +184,7 @@ export class WorkerDiagnosisService {
     const previousReview = review;
     try {
       review = await this.reviewer.reviewAndFormat(caseSession, followUpResponse.result, followUpRun, {
+        authorityResult: true,
         signal: this.investigation?.control?.options(request.caseId).signal,
         coverageEvidenceEnvelopes: workerCoverageEnvelopes(followUpResponse),
       });

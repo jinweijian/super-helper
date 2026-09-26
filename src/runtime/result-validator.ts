@@ -144,6 +144,7 @@ export function freezeReviewedDiagnosticResult(input: {
   // optional coverage reviewer is disabled (the normal CC path), preserve
   // structurally valid primary answers instead of downgrading a concluded
   // diagnosis to a generic "证据不足" response.
+  const answerItems = new Set(input.answerGoal.mustAnswerItems);
   const acceptedPrimaryAnswerClaimIds = input.coverageReview
     ? selectFrozenPrimaryClaimIds({
         claims: input.structural.result.claims,
@@ -154,11 +155,16 @@ export function freezeReviewedDiagnosticResult(input: {
         .filter((claim) => (
           claim.role === 'primary_answer' &&
           (claim.type === 'fact' || claim.type === 'inference') &&
-          claim.answers.length > 0 &&
+          claim.answers.some((item) => answerItems.has(item)) &&
           claim.evidenceIds.length > 0
         ))
         .map((claim) => claim.id!);
-  const coverageComplete = acceptedPrimaryAnswerClaimIds.length > 0;
+  const acceptedPrimaryIds = new Set(acceptedPrimaryAnswerClaimIds);
+  const coveredAnswerItems = new Set(input.structural.result.claims
+    .filter((claim) => claim.id && acceptedPrimaryIds.has(claim.id))
+    .flatMap((claim) => claim.answers));
+  const coverageComplete = acceptedPrimaryAnswerClaimIds.length > 0 &&
+    input.answerGoal.mustAnswerItems.every((item) => coveredAnswerItems.has(item));
   const result = input.structural.result;
   if (
     (result.status === 'concluded' || result.recommendedNextAction === 'final_answer') &&

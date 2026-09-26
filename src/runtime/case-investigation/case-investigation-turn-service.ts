@@ -151,6 +151,8 @@ export class CaseInvestigationTurnService {
     this.events.diagnosticRequestCreated(caseSession, persistedRequest);
     this.store.appendDailyMemory(`- ${new Date().toISOString()} ${caseSession.id} case investigation ${run.id}`);
     const review = await this.reviewer.reviewAndFormat(caseSession, result, run, {
+      authorityResult: worker.status === 'completed' && fallbackResult === worker.response.result &&
+        gate.decisions.every((decision) => decision.classification === 'irrelevant'),
       signal,
       coverageEvidenceEnvelopes,
       upstreamBlockers: gate.blockers.map((code): ReviewGlobalBlocker => ({ code: `historical_case:${code}` })),

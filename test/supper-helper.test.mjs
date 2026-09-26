@@ -2411,8 +2411,8 @@ test('sync and async chat flows use the same runtime pipeline', async () => {
     const runtimePhases = (caseSession) =>
       caseSession.logs.map((event) => `${event.actor}:${event.phase}`).filter((phase) => phase !== 'system:conversation_started');
 
-    assert.equal(syncResponse.decision, 'partial');
-    assert.equal(asyncResponse.decision, 'partial');
+    assert.equal(syncResponse.decision, 'final');
+    assert.equal(asyncResponse.decision, 'final');
     assert.equal(workerRequests.length, 2);
     assert.deepEqual(workerRequests.map((request) => request.context?.isFollowUp), [false, false]);
     assert.deepEqual(runtimePhases(syncResponse.caseSession), runtimePhases(asyncResponse.caseSession));
@@ -3041,7 +3041,7 @@ test('agent dispatches workspace-aware messages as structured diagnostic request
       message: '请查找视频倍速播放设置在哪个页面路由，需要引用代码文件证据。',
     });
 
-    assert.equal(response.decision, 'partial');
+    assert.equal(response.decision, 'final');
     assert.ok(receivedRequest);
     assert.equal(receivedRequest.caseId, response.caseSession.id);
     assert.equal(receivedRequest.runId, 'run_01');
@@ -3658,7 +3658,7 @@ test('local preflight can dispatch general project questions, not only diagnosti
       message: '请解释这个项目的 package.json 主要做什么，需要引用文件证据。',
     });
 
-    assert.equal(response.decision, 'partial');
+    assert.equal(response.decision, 'final');
     assert.equal(receivedRequest.userGoal.includes('package.json'), true);
   } finally {
     rmSync(dir, { recursive: true, force: true });

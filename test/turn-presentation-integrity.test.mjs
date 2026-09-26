@@ -10,6 +10,7 @@ import { initKnowledgeWorkspace, resolveKnowledgeWorkspaceRoot, updateKnowledgeI
 import { NoopModelClient } from '../dist/providers/model/adapter.js';
 import { CaseRuntimeEventRecorder } from '../dist/runtime/event-recorder.js';
 import { ReviewPresentationService } from '../dist/runtime/review-presentation.js';
+import { createRuntimeServices } from '../dist/runtime/runtime-composition.js';
 import { completePresentedTurn } from '../dist/runtime/turn-completion.js';
 import { FileMemoryStore } from '../dist/storage.js';
 
@@ -186,6 +187,56 @@ test('review freezes case status without publishing it before presentation', asy
     assert.equal(review.caseStatus, 'concluded');
     assert.equal(run.status, 'concluded');
     assert.equal(run.result.status, 'concluded');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('production review preserves a structurally supported authority answer without semantic coverage veto', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'turn-integrity-authority-'));
+  try {
+    const { config, store } = createAgent(dir, { async diagnose() { return concludedWorkerResult(); } });
+    config.agent.modelProvider = 'test';
+    const modelCalls = [];
+    const model = {
+      async complete(messages) {
+        modelCalls.push(messages[0].content);
+        if (messages[0].content.includes('# Evidence Coverage Agent')) {
+          return JSON.stringify({ status: 'unknown', bindings: [], fullQuestion: 'unknown', fullQuestionClaimIds: [], missingElements: [] });
+        }
+        if (messages[0].content.includes('acceptedIds')) return JSON.stringify({ status: 'accepted', acceptedIds: [] });
+        return JSON.stringify({ claimIds: ['claim_1'], directAnswerClaimIds: ['claim_1'], actionClaimIds: [], evidenceIds: ['ev_1'] });
+      },
+    };
+    const caseSession = store.createCase({ tenantId: 'local', userId: 'local-user', workspaceId: 'current', title: 'Authority answer' });
+    caseSession.status = 'diagnosing';
+    const run = {
+      id: 'run_authority', caseId: caseSession.id, status: 'running',
+      request: {
+        context: { knowledge: { judge: { blockers: ['conflicting_knowledge'], conflicts: ['stale retrieval'] } } },
+        answerGoal: {
+          rawUserQuestion: '为什么验证码挡不住换 IP 的短信请求？',
+          resolvedQuestion: '为什么验证码挡不住换 IP 的短信请求？',
+          answerObject: '短信接口保护机制',
+          mustAnswerItems: ['direct_answer'],
+          diagnosticObjective: '只读排查',
+          sourceMessageIds: ['msg_user'],
+        },
+      },
+    };
+    const reviewer = createRuntimeServices({
+      config,
+      store,
+      worker: { async diagnose() { return concludedWorkerResult(); } },
+      options: { model },
+    }).reviewer;
+
+    const review = await reviewer.reviewAndFormat(caseSession, concludedWorkerResult().result, run, { authorityResult: true });
+
+    assert.equal(review.decision, 'final');
+    assert.equal(run.result.status, 'concluded');
+    assert.match(review.reply, /已确认问题原因/);
+    assert.equal(modelCalls.some((system) => system.includes('# Evidence Coverage Agent')), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -543,7 +594,7 @@ const activeUntilFormalReplyScenarios = [
   {
     name: 'Experience path',
     message: '课程任务保存失败是什么原因？',
-    expectedTerminalStatus: 'partial',
+    expectedTerminalStatus: 'concluded',
     setup({ store }) {
       seedReusableExperience(store, this.message);
       return {};
@@ -617,7 +668,7 @@ const activeUntilFormalReplyScenarios = [
   {
     name: 'Worker path',
     message: '请检查项目的运行时拆分是否可诊断。',
-    expectedTerminalStatus: 'partial',
+    expectedTerminalStatus: 'concluded',
     setup() {
       return {};
     },
@@ -758,7 +809,7 @@ test('keeps Worker follow-up active until formal reply', async () => {
     const formalReplies = settled.caseSession.messages.filter((message) => (
       message.role === 'helper' && message.replyToMessageId === turn.userMessageId
     ));
-    assert.equal(settled.caseSession.status, 'partial');
+    assert.equal(settled.caseSession.status, 'concluded');
     assert.equal(formalReplies.length, 1);
     assert.equal(workerRequests.length, 2);
   } finally {
@@ -799,7 +850,7 @@ test('completeUserTurn consumes message ID and binds replyToMessageId', async ()
     const turn = agent.startUserTurn({ message: '请检查项目的运行时拆分是否可诊断。' });
     const response = await agent.completeUserTurn(turn.caseSession.id, turn.userMessageId);
 
-    assert.equal(response.decision, 'partial');
+    assert.equal(response.decision, 'final');
     const helperMessages = response.caseSession.messages.filter((message) => message.role === 'helper' && message.replyToMessageId);
     const reply = helperMessages.at(-1);
     assert.ok(reply, 'a helper reply must be created');

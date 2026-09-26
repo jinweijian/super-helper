@@ -31,16 +31,7 @@ onMounted(async () => {
   void settings.load().catch(() => undefined);
   const current = sessions.current.value;
   if (current?.userPersona) selectedPersona.value = current.userPersona;
-  const pending = current ? pendingUserMessageId(current) : undefined;
-  if (current && pending) {
-    chat.poll(current.id, pending, (session) => {
-      if (!disposed && sessions.current.value?.id === session.id) sessions.current.value = session;
-    }).then((settled) => {
-      if (disposed) return;
-      sessions.current.value = settled;
-      return sessions.list();
-    }).catch(() => undefined);
-  }
+  resumePendingSession();
 });
 onBeforeUnmount(() => {
   disposed = true;
@@ -53,6 +44,21 @@ async function onPopState(): Promise<void> {
   chat.cancel();
   auditMode.value = /\/audit$/.test(location.pathname);
   await sessions.initialize();
+  resumePendingSession();
+}
+
+function resumePendingSession(): void {
+  if (disposed) return;
+  const current = sessions.current.value;
+  const pending = current ? pendingUserMessageId(current) : undefined;
+  if (!current || !pending) return;
+  chat.poll(current.id, pending, (session) => {
+    if (!disposed && sessions.current.value?.id === session.id) sessions.current.value = session;
+  }).then((settled) => {
+    if (disposed || sessions.current.value?.id !== settled.id) return;
+    sessions.current.value = settled;
+    return sessions.list();
+  }).catch(() => undefined);
 }
 
 function openAudit(): void {
@@ -114,6 +120,7 @@ async function openSession(id: string): Promise<void> {
   chat.cancel();
   if (auditMode.value) closeAudit();
   await sessions.open(id);
+  if (sessions.current.value?.id === id) resumePendingSession();
 }
 </script>
 

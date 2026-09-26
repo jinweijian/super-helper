@@ -99,8 +99,8 @@ function makeRun(status) {
 function publish(type) { for (const listener of subscribers) listener({ type, runId: run.id, at: new Date().toISOString(), run }); }
 
 const workerFactory = () => ({
-  async diagnose() {
-    await new Promise((resolve) => setTimeout(resolve, 900));
+  async diagnose(request) {
+    await new Promise((resolve) => setTimeout(resolve, request.userGoal?.includes('切换会话进度测试') ? 2500 : 900));
     const now = new Date().toISOString();
     return {
       result: {

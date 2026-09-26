@@ -8,6 +8,7 @@ const appMocks = vi.hoisted(() => ({
   chatError: '',
   chatProgress: { state: 'idle' } as Record<string, unknown>,
   currentSession: undefined as Record<string, unknown> | undefined,
+  currentRef: undefined as { value: Record<string, unknown> | undefined } | undefined,
   initialize: vi.fn(async (): Promise<void> => undefined),
   open: vi.fn(async () => undefined),
   pendingMessageId: '',
@@ -46,9 +47,12 @@ vi.mock('./use-chat', async () => {
 vi.mock('./use-sessions', async () => {
   const { ref } = await import('vue');
   return {
-    useSessions: () => ({
+    useSessions: () => {
+      const current = ref(appMocks.currentSession);
+      appMocks.currentRef = current;
+      return ({
       sessions: ref(appMocks.sessionSummaries),
-      current: ref(appMocks.currentSession),
+      current,
       loading: ref(false),
       error: ref(appMocks.sessionError),
       initialize: appMocks.initialize,
@@ -58,7 +62,8 @@ vi.mock('./use-sessions', async () => {
       create: vi.fn(),
       action: vi.fn(),
       remove: vi.fn(),
-    }),
+      });
+    },
   };
 });
 
@@ -107,6 +112,7 @@ describe('进度卡', () => {
     appMocks.chatError = '';
     appMocks.chatProgress = { state: 'idle' };
     appMocks.currentSession = undefined;
+    appMocks.currentRef = undefined;
     appMocks.pendingMessageId = '';
     appMocks.progressRef = undefined;
     appMocks.sessionError = '';
@@ -150,9 +156,11 @@ describe('进度卡', () => {
 describe('Dashboard 聊天生命周期', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Element.prototype.scrollIntoView = vi.fn();
     appMocks.chatError = '';
     appMocks.chatProgress = { state: 'idle' };
     appMocks.currentSession = undefined;
+    appMocks.currentRef = undefined;
     appMocks.pendingMessageId = '';
     appMocks.progressRef = undefined;
     appMocks.sessionError = '';
@@ -268,6 +276,38 @@ describe('Dashboard 聊天生命周期', () => {
     expect(appMocks.cancel).toHaveBeenCalledTimes(1);
     expect(appMocks.cancel.mock.invocationCallOrder[0]).toBeLessThan(appMocks.open.mock.invocationCallOrder[0]!);
     expect(wrapper.find('.retry-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('切回仍在诊断的会话时恢复轮询和排查中进度', async () => {
+    const pendingSession = {
+      id: 'case_pending',
+      title: '处理中',
+      status: 'diagnosing',
+      messages: [{ id: 'msg_pending', role: 'user', body: '排查短信发送' }],
+      runs: [],
+    };
+    appMocks.currentSession = {
+      id: 'case_other', title: '其他会话', status: 'concluded', messages: [], runs: [],
+    };
+    appMocks.sessionSummaries = [{ id: pendingSession.id, title: pendingSession.title, status: pendingSession.status }];
+    appMocks.open.mockImplementationOnce(async () => {
+      if (appMocks.currentRef) appMocks.currentRef.value = pendingSession;
+    });
+    appMocks.poll.mockImplementationOnce(() => {
+      if (appMocks.progressRef) appMocks.progressRef.value = {
+        state: 'running', startedAt: Date.now(), lastActivityAt: Date.now(), session: pendingSession,
+      };
+      return new Promise(() => undefined);
+    });
+
+    const wrapper = mountApp();
+    await flushPromises();
+    await wrapper.get('.session-open').trigger('click');
+    await flushPromises();
+
+    expect(appMocks.poll).toHaveBeenCalledWith('case_pending', 'msg_pending', expect.any(Function));
+    expect(wrapper.get('.progress-line').text()).toContain('正在');
     wrapper.unmount();
   });
 

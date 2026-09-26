@@ -77,7 +77,7 @@ test('cross-gate offline production composition preserves complete reviewed answ
     assert.deepEqual(totalCounts, {
       preflight: 2,
       completeness: 2,
-      coverage: 2,
+      coverage: 0,
       promptSafety: 0,
       presentation: 2,
       secretResolver: 0,

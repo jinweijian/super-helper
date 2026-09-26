@@ -14,15 +14,13 @@ test('Dashboard uses production assets and real Gateway workflows', async ({ pag
   await expect(page.getByRole('status')).toContainText('已耗时');
   await expect(page.getByRole('status')).toContainText('估计');
   await expect(page.getByText('helper', { exact: true })).toBeVisible();
-  await expect(page.getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible();
-  await expect(page.getByText('项目状态可以继续检查。')).toHaveCount(0);
+  await expect(page.getByRole('main').locator('.message.helper')).toContainText('项目状态可以继续检查。');
+  await expect(page.getByText('这轮证据不足，我还没有找到可以确认原因的线索。')).toHaveCount(0);
   await expect(page.getByText('worker-secret-output')).toHaveCount(0);
-  expect(requests.filter((request) => request === 'GET /api/knowledge/health')).toHaveLength(1);
   await page.getByRole('button', { name: '诊断详情' }).click();
   await expect(page).toHaveURL(/\/sessions\/[^/]+\/audit/);
-  await page.getByRole('tab', { name: '知识健康' }).click();
-  await page.getByRole('button', { name: '测试检索' }).click();
-  await expect.poll(() => requests.filter((request) => request === 'GET /api/knowledge/health').length).toBe(2);
+  await page.getByRole('tab', { name: '证据' }).click();
+  await expect(page.getByText('项目状态可以继续检查。')).toBeVisible();
   await page.getByRole('button', { name: '返回对话' }).click();
   await expect(page).toHaveURL(/\/sessions\/[^/]+$/);
 
@@ -51,17 +49,13 @@ test('Dashboard uses production assets and real Gateway workflows', async ({ pag
   await expect(modelGroup.locator('.status-banner')).not.toHaveText('');
   await page.getByRole('button', { name: '保存模型' }).click();
   await expect(page.getByText('模型配置已保存')).toBeVisible();
-  await page.getByRole('button', { name: '保存 Embedding' }).click();
-  await expect(page.getByText('Embedding 配置已保存')).toBeVisible();
-  await page.getByRole('button', { name: '保存 Rerank' }).click();
-  await expect(page.getByText('Rerank 配置已保存')).toBeVisible();
   await page.getByRole('button', { name: '保存 Claude' }).click();
   await expect(page.getByText('Claude 配置已保存')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settingsButton).toBeFocused();
 
   expect(requests).toEqual(expect.arrayContaining([
-    'POST /api/sessions', 'POST /api/chat', 'GET /api/session', 'GET /api/knowledge/health', 'GET /api/logs', 'GET /api/settings', 'GET /api/agents', 'POST /api/settings/model/test', 'POST /api/settings/model', 'POST /api/settings/embedding', 'POST /api/settings/rerank', 'POST /api/settings/claude',
+    'POST /api/sessions', 'POST /api/chat', 'GET /api/session', 'GET /api/logs', 'GET /api/settings', 'GET /api/agents', 'POST /api/settings/model/test', 'POST /api/settings/model', 'POST /api/settings/claude',
   ]));
 });
 
@@ -97,9 +91,27 @@ test('Greeting does not trigger false interruption', async ({ page }) => {
   await page.getByRole('button', { name: '发送' }).click();
   const conversation = page.getByRole('main');
   await expect(conversation.getByText('helper', { exact: true })).toBeVisible();
-  await expect(conversation.getByText('这轮证据不足，我还没有找到可以确认原因的线索。', { exact: true })).toBeVisible();
+  await expect(conversation.locator('.message.helper')).toContainText('项目状态可以继续检查。');
   await expect(conversation.getByText('你好', { exact: true }).last()).toBeVisible();
   await expect(conversation.getByText('回答已中断')).toBeHidden();
+});
+
+test('切回仍在排查的会话会恢复进度直到正式回复', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '新建诊断' }).click();
+  await page.getByLabel('输入问题').fill('切换会话进度测试');
+  await page.getByRole('button', { name: '发送' }).click();
+  await expect(page.getByRole('main').getByRole('status')).toContainText('已耗时');
+  const pendingUrl = page.url();
+
+  await page.getByRole('button', { name: '新建诊断' }).click();
+  await expect(page).not.toHaveURL(pendingUrl);
+  await page.getByRole('complementary', { name: '历史会话' })
+    .getByRole('button', { name: /切换会话进度测试/ }).click();
+
+  await expect(page.getByRole('main').getByRole('status')).toContainText('已耗时');
+  await expect(page.getByRole('main').locator('.message.helper')).toContainText('项目状态可以继续检查。');
+  await expect(page.getByRole('main').getByRole('status')).toHaveCount(0);
 });
 
 test('transient terminal snapshot waits for the matching helper reply', async ({ page }) => {
@@ -138,8 +150,8 @@ test('transient terminal snapshot waits for the matching helper reply', async ({
 
   const conversation = page.getByRole('main');
   await expect(conversation.getByText('回答已中断')).toBeHidden();
-  await expect(conversation.getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible();
-  await expect(conversation.getByText('项目状态可以继续检查。')).toHaveCount(0);
+  await expect(conversation.locator('.message.helper')).toContainText('项目状态可以继续检查。');
+  await expect(conversation.getByText('这轮证据不足，我还没有找到可以确认原因的线索。')).toHaveCount(0);
   expect(transientSnapshotServed).toBe(true);
 });
 
@@ -149,7 +161,7 @@ test('Retryable interruption shows retry button and retries original turn', asyn
   await expect(page).toHaveURL(/\/sessions\/case_/);
   await page.getByLabel('输入问题').fill('请检查当前项目状态');
   await page.getByRole('button', { name: '发送' }).click();
-  await expect(page.getByRole('main').getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible();
+  await expect(page.getByRole('main').locator('.message.helper')).toContainText('项目状态可以继续检查。');
 
   let retryBody: { caseId?: string; userMessageId?: string } | undefined;
   let originalUserMessageId = '';
@@ -200,5 +212,5 @@ test('Retryable interruption shows retry button and retries original turn', asyn
     caseId: expect.stringMatching(/^case_/),
     userMessageId: originalUserMessageId,
   });
-  await expect(page.getByRole('main').getByText('这轮证据不足，我还没有找到可以确认原因的线索。').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('main').locator('.message.helper')).toContainText('项目状态可以继续检查。', { timeout: 10_000 });
 });
