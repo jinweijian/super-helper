@@ -10,6 +10,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$SITE_DIR" && -n "$VERSION" && -f "$SITE_DIR/.env" ]] || { echo "缺少参数或部署目录无效" >&2; exit 1; }
+"$(dirname "$0")/check-deployment.sh" "$SITE_DIR"
 tmp_env="$(mktemp)"
 backup_env="$(mktemp)"
 cp "$SITE_DIR/.env" "$backup_env"

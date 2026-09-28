@@ -27,10 +27,10 @@ ANTHROPIC_API_KEY_FILE=/etc/super-helper/secrets/$NAME-anthropic-api-key
 ANTHROPIC_BASE_URL=
 TZ=Asia/Shanghai
 EOF
-cat > "$SITE_DIR/config.json" <<EOF
+cat > "$SITE_DIR/data/config.json" <<EOF
 {
   "server": { "host": "0.0.0.0", "port": 4317, "bindMode": "lan" },
-  "storage": { "rootDir": "/data/super-helper/data", "isolateByWorkspace": true },
+  "storage": { "rootDir": "/data/super-helper", "isolateByWorkspace": true },
   "knowledge": { "rootDir": "/data/knowledge", "isolateByWorkspace": true },
   "workspaces": [{ "id": "$NAME", "name": "$NAME", "rootPath": "/workspace/project", "mcpToolIds": [] }]
 }

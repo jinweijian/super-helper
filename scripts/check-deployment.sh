@@ -2,7 +2,21 @@
 set -euo pipefail
 SITE_DIR="${1:-}"
 [[ -n "$SITE_DIR" ]] || { echo "用法: $0 <部署目录>" >&2; exit 1; }
-[[ -f "$SITE_DIR/compose.yml" && -f "$SITE_DIR/.env" && -f "$SITE_DIR/config.json" ]] || { echo "错误: 部署目录缺少 compose.yml、.env 或 config.json" >&2; exit 1; }
+[[ -f "$SITE_DIR/compose.yml" && -f "$SITE_DIR/.env" && -f "$SITE_DIR/data/config.json" ]] || { echo "错误: 部署目录缺少 compose.yml、.env 或 data/config.json；旧版站点须先迁移" >&2; exit 1; }
+awk '
+  /"storage"[[:space:]]*:/ {
+    in_storage = 1
+    sub(/^.*"storage"[[:space:]]*:[[:space:]]*/, "")
+  }
+  in_storage {
+    closing_brace = index($0, "}")
+    section = closing_brace ? substr($0, 1, closing_brace - 1) : $0
+    if (section ~ /"rootDir"[[:space:]]*:[[:space:]]*"\/data\/super-helper"/) valid = 1
+    if (closing_brace) exit
+  }
+  END { exit !valid }
+' "$SITE_DIR/data/config.json" || { echo "错误: storage.rootDir 须为 /data/super-helper；旧版站点须先迁移" >&2; exit 1; }
+grep -Eq '^[[:space:]]*-[[:space:]]*\./data:/data/super-helper[[:space:]]*$' "$SITE_DIR/compose.yml" || { echo "错误: compose.yml 须将 ./data 挂载到 /data/super-helper；旧版站点须先迁移" >&2; exit 1; }
 for dir in data knowledge claude-home; do
   [[ -d "$SITE_DIR/$dir" ]] || { echo "错误: 缺少目录 $SITE_DIR/$dir" >&2; exit 1; }
 done

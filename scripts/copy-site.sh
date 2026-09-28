@@ -15,21 +15,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$SOURCE" && -n "$TARGET" && -n "$PROJECT_ROOT" && -n "$PORT" ]] || { usage >&2; exit 1; }
-[[ -f "$SOURCE/compose.yml" && -f "$SOURCE/config.json" ]] || { echo "错误: 源部署目录不完整" >&2; exit 1; }
-[[ ! -e "$TARGET" ]] || { echo "错误: 目标目录已存在: $TARGET" >&2; exit 1; }
-[[ -d "$PROJECT_ROOT" ]] || { echo "错误: 代码目录不存在: $PROJECT_ROOT" >&2; exit 1; }
-NAME="${NAME:-$(basename "$TARGET")}"; mkdir -p "$TARGET"/{data,knowledge,claude-home}
-cp "$SOURCE/compose.yml" "$TARGET/compose.yml"
+[[ -f "$SOURCE/compose.yml" && -f "$SOURCE/.env" && -f "$SOURCE/data/config.json" ]] || { echo "错误: 源部署目录不完整" >&2; exit 1; }
+NAME="${NAME:-$(basename "$TARGET")}"
 IMAGE="${IMAGE:-$(sed -n 's/^SUPER_HELPER_IMAGE=//p' "$SOURCE/.env" | head -1)}"
-cat > "$TARGET/.env" <<EOF
-SUPER_HELPER_IMAGE=$IMAGE
-CONTAINER_NAME=super-helper-$NAME
-EXPOSE_PORT=$PORT
-PROJECT_ROOT=$PROJECT_ROOT
-ANTHROPIC_API_KEY_FILE=/etc/super-helper/secrets/$NAME-anthropic-api-key
-ANTHROPIC_BASE_URL=
-TZ=Asia/Shanghai
-EOF
-sed "s/\"id\": \"[^\"]*\"/\"id\": \"$NAME\"/; s/\"name\": \"[^\"]*\"/\"name\": \"$NAME\"/" "$SOURCE/config.json" > "$TARGET/config.json"
+[[ -n "$IMAGE" ]] || { echo "错误: 镜像地址缺失" >&2; exit 1; }
+"$(dirname "$0")/init-site.sh" --site-dir "$TARGET" --project-root "$PROJECT_ROOT" --port "$PORT" --name "$NAME" --image "$IMAGE"
 echo "已复制部署目录: $SOURCE -> $TARGET"
-echo "未复制 data、knowledge、claude-home 和 Secret。"
+echo "未复制配置、data、knowledge、claude-home 和 Secret；目标站点需独立配置。"
