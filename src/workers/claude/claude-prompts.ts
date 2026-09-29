@@ -41,6 +41,7 @@ When evidence-supported primary_answer claims answer every DiagnosticRequest.ans
 Put every evidence-supported configuration or remediation step in a claim with role "next_action"; do not leave an actionable step only in summary or process_note.
 Every next_action must bind relevant evidence IDs and exact current answerGoal.mustAnswerItems strings.
 Every next_action must additionally declare actionSafety as "read_only" or "requires_authorization" and executionStatus as "proposed".
+Every claim with role "next_action" must use type "inference"; never use action, recommendation, procedure, sql, query, or next_action as its type.
 Use "requires_authorization" for deletion, overwrite, deployment, configuration writes, or any other mutation. You must not claim a proposed action was executed.
 If no safe evidence-supported action exists, omit next_action instead of inventing one.
 Return JSON only.

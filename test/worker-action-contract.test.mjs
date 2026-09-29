@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildClaudeSystemPrompt } from '../dist/workers/claude/claude-prompts.js';
 import { parseClaudeOutput } from '../dist/workers/claude/claude-output-parser.js';
+import { validateDiagnosticResult } from '../dist/runtime/result-validator.js';
 
 const request = {
   caseId: 'case_gate_b',
@@ -29,6 +30,7 @@ test('Gate B worker prompt requires evidence-bound actionable claims and explici
   assert.match(prompt, /executionStatus/);
   assert.match(prompt, /requires_authorization/);
   assert.match(prompt, /must not claim.*executed/i);
+  assert.match(prompt, /next_action.*type.*inference/i);
   assert.match(prompt, /Read, Glob, Grep/);
   assert.match(
     prompt,
@@ -110,4 +112,81 @@ test('Gate B worker parser rejects unstructured actions and marks authorized act
   assert.deepEqual(result.claims.map((claim) => claim.id), ['authorized']);
   assert.match(result.claims[0].text, /^待人工授权：/);
   assert.deepEqual(result.claims[0].answers, ['如何开启 X']);
+});
+
+test('Gate B worker parser repairs a next_action type only when the action contract is complete', () => {
+  const result = parseClaudeOutput(JSON.stringify({
+    status: 'concluded',
+    summary: '已生成只读 SQL。',
+    missingInfo: [],
+    evidence: [{ id: 'ev_sql', kind: 'workspace', source: 'src/UserDao.php:1-20', summary: '学员查询字段证据。', confidence: 'high' }],
+    claims: [
+      {
+        id: 'sql_action',
+        type: 'sql',
+        role: 'next_action',
+        text: 'SELECT id, nickname FROM user WHERE id = :id;',
+        evidenceIds: ['ev_sql'],
+        answers: ['如何开启 X'],
+        actionSafety: 'read_only',
+        executionStatus: 'proposed',
+      },
+      {
+        id: 'unsafe_sql_action',
+        type: 'sql',
+        role: 'next_action',
+        text: 'UPDATE user SET locked = 0;',
+        evidenceIds: ['ev_sql'],
+        answers: ['如何开启 X'],
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  }), request);
+
+  assert.deepEqual(result.claims.map((claim) => claim.id), ['sql_action']);
+  assert.equal(result.claims[0].type, 'inference');
+  assert.equal(result.claims[0].role, 'next_action');
+});
+
+test('Gate B preserves answer-bearing SQL as an inference instead of finalizing only its summary', () => {
+  const sqlRequest = {
+    ...request,
+    answerGoal: {
+      ...request.answerGoal,
+      rawUserQuestion: '继续给我这个 SQL',
+      resolvedQuestion: '继续给我后续的只读 SQL',
+      mustAnswerItems: ['继续给我这个 SQL'],
+    },
+    userGoal: '继续给我后续的只读 SQL',
+  };
+  const result = parseClaudeOutput(JSON.stringify({
+    status: 'concluded',
+    summary: '继续提供后续 SQL。',
+    missingInfo: [],
+    evidence: [{ id: 'ev_sql', kind: 'workspace', source: 'src/UserDao.php:1-20', summary: '学员查询字段证据。', confidence: 'high' }],
+    claims: [
+      {
+        id: 'summary',
+        type: 'fact',
+        role: 'primary_answer',
+        text: '可以继续提供 SQL。',
+        evidenceIds: ['ev_sql'],
+        answers: ['继续给我这个 SQL'],
+      },
+      {
+        id: 'sql_body',
+        type: 'sql',
+        role: 'primary_answer',
+        text: 'SELECT id, nickname FROM user WHERE id = :id;',
+        evidenceIds: ['ev_sql'],
+        answers: ['继续给我这个 SQL'],
+      },
+    ],
+    recommendedNextAction: 'final_answer',
+  }), sqlRequest);
+  const validation = validateDiagnosticResult(result, sqlRequest.answerGoal);
+
+  assert.equal(result.claims.find((claim) => claim.id === 'sql_body').type, 'inference');
+  assert.equal(validation.result.status, 'concluded');
+  assert.deepEqual(validation.acceptedPrimaryAnswerClaimIds, ['summary', 'sql_body']);
 });

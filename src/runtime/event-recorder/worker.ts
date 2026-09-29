@@ -32,7 +32,7 @@ export function createWorkerEvents(sink: EventRecorderSink) {
       phase: 'raw_output',
       label: '调用 CC',
       severity: rawOutputSeverity(safeTrace),
-      summary: 'Claude Code 返回的原始数据',
+      summary: workerOutputSummary(safeTrace),
       detail: {
         stdout: safeTrace.stdout,
         stderr: safeTrace.stderr,
@@ -43,6 +43,13 @@ export function createWorkerEvents(sink: EventRecorderSink) {
     });
   },
   };
+}
+
+function workerOutputSummary(trace: WorkerTrace): string {
+  const hiddenOrUnrecorded = !trace.stdout && !trace.stderr && trace.exitCode === 0 && !trace.signal && !trace.error;
+  return hiddenOrUnrecorded
+    ? 'Claude Code 原始输出已隐藏或未记录'
+    : 'Claude Code 返回的原始数据';
 }
 
 export type WorkerEvents = ReturnType<typeof createWorkerEvents>;

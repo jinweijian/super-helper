@@ -21,6 +21,7 @@ export function normalizeWorkerDiagnosticResult(
       ? claim.evidenceIds.filter((id) => validEvidenceIds.has(id))
       : [];
     const role: DiagnosticClaim['role'] = claim.role;
+    const normalizedType = normalizeClaimType(claim.type, role);
     const answers = role === 'primary_answer' ||
       role === 'next_action' ||
       role === 'supporting_context'
@@ -38,9 +39,10 @@ export function normalizeWorkerDiagnosticResult(
       const text = raw.actionSafety === 'requires_authorization'
         ? `待人工授权：${claim.text}`
         : claim.text;
-      return [{ ...claim, role, text, evidenceIds, answers }];
+      const type: DiagnosticClaim['type'] = isClaimType(normalizedType) ? normalizedType : 'inference';
+      return [{ ...claim, type, role, text, evidenceIds, answers }];
     }
-    return [{ ...claim, role, evidenceIds, answers }];
+    return [{ ...claim, type: normalizedType, role, evidenceIds, answers }];
   });
   return {
     ...result,
@@ -48,4 +50,19 @@ export function normalizeWorkerDiagnosticResult(
     evidence: [...result.evidence],
     claims,
   };
+}
+
+function isClaimType(value: unknown): value is DiagnosticClaim['type'] {
+  return value === 'fact' || value === 'inference' || value === 'assumption' || value === 'unknown';
+}
+
+function normalizeClaimType(
+  value: DiagnosticClaim['type'],
+  role: DiagnosticClaim['role'],
+): DiagnosticClaim['type'] {
+  if (isClaimType(value)) return value;
+  if ((role === 'primary_answer' || role === 'supporting_context') && (value === 'sql' || value === 'query')) {
+    return 'inference';
+  }
+  return value;
 }

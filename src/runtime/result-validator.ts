@@ -49,13 +49,18 @@ export function validateDiagnosticStructure(
   const evidenceById = new Map(evidence.map((item) => [item.id, item]));
   const claims: DiagnosticClaim[] = [];
   const rejectedClaimIds: string[] = [];
+  const rejectedAnswerClaimIds = new Set<string>();
   const seenClaimIds = new Set<string>();
+  const rejectClaim = (id: string, claim: DiagnosticClaim): void => {
+    rejectedClaimIds.push(id);
+    if (answersCurrentGoal(claim, answerGoal)) rejectedAnswerClaimIds.add(id);
+  };
 
   result.claims.forEach((claim, index) => {
     const id = claim.id ?? `claim_${index + 1}`;
     if (seenClaimIds.has(id)) {
       issues.push({ code: 'duplicate_claim_id', claimId: id, message: `Duplicate claim id ${id}.` });
-      rejectedClaimIds.push(id);
+      rejectClaim(id, claim);
       globalBlockers.push({ code: 'duplicate_claim_id', claimIds: [id] });
       return;
     }
@@ -63,25 +68,25 @@ export function validateDiagnosticStructure(
     if (!['fact', 'inference', 'assumption', 'unknown'].includes(claim.type)) {
       issues.push({ code: 'invalid_claim_type', claimId: id, message: `Claim ${id} has an invalid claim type.` });
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
-      rejectedClaimIds.push(id);
+      rejectClaim(id, claim);
       return;
     }
     if (!validClaimRole(claim.role)) {
       issues.push({ code: 'missing_claim_role', claimId: id, message: `Claim ${id} must declare a valid role.` });
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
-      rejectedClaimIds.push(id);
+      rejectClaim(id, claim);
       return;
     }
     if (!Array.isArray(claim.answers)) {
       issues.push({ code: 'missing_claim_answers', claimId: id, message: `Claim ${id} must declare answers.` });
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
-      rejectedClaimIds.push(id);
+      rejectClaim(id, claim);
       return;
     }
     if (claim.role === 'primary_answer' && claim.answers.length === 0) {
       issues.push({ code: 'incomplete_primary_answer', claimId: id, message: `Primary answer claim ${id} must cover answerGoal.mustAnswerItems.` });
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
-      rejectedClaimIds.push(id);
+      rejectClaim(id, claim);
       return;
     }
     const missing = claim.evidenceIds.filter((evidenceId) => !evidenceById.has(evidenceId));
@@ -106,11 +111,17 @@ export function validateDiagnosticStructure(
     }
     if (!supported || !factHasAuthority) {
       issues.push({ code: 'unsupported_claim', claimId: id, message: `Claim ${id} was rejected by deterministic validation.` });
-      rejectedClaimIds.push(id);
+      rejectClaim(id, claim);
       return;
     }
     claims.push({ ...claim, id, evidenceIds: validEvidenceIds });
   });
+  if (rejectedAnswerClaimIds.size > 0) {
+    globalBlockers.push({
+      code: 'rejected_answer_content',
+      claimIds: [...rejectedAnswerClaimIds],
+    });
+  }
 
   const validated: DiagnosticResult = {
     ...result,
@@ -127,6 +138,12 @@ export function validateDiagnosticStructure(
     globalBlockers,
     outcomeReasonCode: 'structural_validation_complete',
   };
+}
+
+function answersCurrentGoal(claim: DiagnosticClaim, answerGoal?: AnswerGoal): boolean {
+  if (!answerGoal || !Array.isArray(claim.answers)) return false;
+  const required = new Set(answerGoal.mustAnswerItems);
+  return claim.answers.some((item) => required.has(item));
 }
 
 export function freezeReviewedDiagnosticResult(input: {

@@ -106,6 +106,29 @@ test('Gate A: invalid supporting claim is local rejection when reviewed primary 
   assert.deepEqual(validation.acceptedPrimaryAnswerClaimIds, ['primary_full']);
 });
 
+test('Gate A: rejected answer-bearing content prevents a summary-only final answer', () => {
+  const summaryOnly = claim('primary_summary', GOAL.mustAnswerItems, ['ev_primary'], {
+    text: '继续提供后续 SQL。',
+  });
+  const rejectedSql = claim('sql_body', ['如何开启 X'], ['ev_primary'], {
+    type: 'sql',
+    role: 'next_action',
+    text: 'SELECT id FROM user;',
+  });
+  const validation = validateDiagnosticResult(
+    concluded([summaryOnly, rejectedSql], [evidence('ev_primary')]),
+    GOAL,
+  );
+
+  assert.equal(validation.result.status, 'partial');
+  assert.equal(validation.result.recommendedNextAction, 'continue_diagnosis');
+  assert.deepEqual(validation.acceptedPrimaryAnswerClaimIds, ['primary_summary']);
+  assert.equal(
+    validation.globalBlockers.some((blocker) => blocker.code === 'rejected_answer_content'),
+    true,
+  );
+});
+
 test('Gate A: rejected primary remains a global coverage blocker', () => {
   const invalidPrimary = claim('primary_invalid', GOAL.mustAnswerItems, ['ev_missing']);
   const validation = validateDiagnosticResult(

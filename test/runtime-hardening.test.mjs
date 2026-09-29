@@ -62,6 +62,25 @@ test('worker raw output stdout is redacted before persistence', () => {
   assert.match(rawOutput.detail.stdout, /\[REDACTED\]/);
 });
 
+test('hidden worker output is labelled as hidden instead of looking like an empty response', () => {
+  const { recorder, caseSession } = recorderFixture();
+
+  recorder.workerTrace(caseSession, {
+    command: 'claude --print',
+    cwd: '',
+    stdout: '',
+    stderr: '',
+    exitCode: 0,
+    startedAt: new Date(0).toISOString(),
+    finishedAt: new Date(0).toISOString(),
+  });
+
+  const rawOutput = caseSession.logs.find((event) => event.phase === 'raw_output');
+  assert.ok(rawOutput);
+  assert.match(rawOutput.summary, /已隐藏|未记录/);
+  assert.doesNotMatch(rawOutput.summary, /返回的原始数据/);
+});
+
 test('knowledge answer and review log events reference evidence ids instead of duplicating evidence objects', () => {
   const { recorder, caseSession } = recorderFixture();
   const result = {
