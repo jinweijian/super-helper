@@ -16,6 +16,7 @@ const appMocks = vi.hoisted(() => ({
   progressRef: undefined as { value: Record<string, unknown> } | undefined,
   sessionError: '',
   sessionSummaries: [] as Array<Record<string, unknown>>,
+  send: vi.fn(),
 }));
 
 vi.mock('./use-chat', async () => {
@@ -32,7 +33,7 @@ vi.mock('./use-chat', async () => {
         stop: vi.fn(),
         error: ref(appMocks.chatError),
         progress,
-        send: vi.fn(),
+        send: appMocks.send,
         poll: appMocks.poll,
         retry: vi.fn(),
         cancel: () => {
@@ -165,6 +166,7 @@ describe('Dashboard 聊天生命周期', () => {
     appMocks.progressRef = undefined;
     appMocks.sessionError = '';
     appMocks.sessionSummaries = [];
+    appMocks.send.mockImplementation(() => new Promise(() => undefined));
   });
 
   function mountApp() {
@@ -179,6 +181,25 @@ describe('Dashboard 聊天生命周期', () => {
       },
     });
   }
+
+  it('空白页首次发送时交由后端选择工作区并自动创建会话', async () => {
+    const wrapper = mountApp();
+    await flushPromises();
+
+    await wrapper.get('#chat-input').setValue('直接发起诊断');
+    await wrapper.get('.composer').trigger('submit');
+    await flushPromises();
+
+    expect(appMocks.send).toHaveBeenCalledWith(
+      {
+        message: '直接发起诊断',
+        persona: 'operations',
+        investigationPreference: 'fast',
+      },
+      expect.any(Function),
+    );
+    wrapper.unmount();
+  });
 
   it('普通聊天错误只在 composer 内联显示，不渲染顶端错误横幅', async () => {
     appMocks.chatError = '聊天发送失败';

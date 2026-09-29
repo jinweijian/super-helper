@@ -78,8 +78,8 @@ async function send(message: string, persona: string, investigationPreference: '
   try {
     const current = sessions.current.value;
     const next = await chat.send({
-      caseId: current?.id,
-      workspaceId: current?.workspaceId || 'current',
+      ...(current?.id ? { caseId: current.id } : {}),
+      ...(current?.workspaceId ? { workspaceId: current.workspaceId } : {}),
       message,
       persona,
       investigationPreference,

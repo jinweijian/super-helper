@@ -12,7 +12,7 @@ interface ChatOptions {
 
 interface SendInput {
   caseId?: string;
-  workspaceId: string;
+  workspaceId?: string;
   message: string;
   persona: string;
   investigationPreference?: 'auto' | 'fast' | 'deep';
